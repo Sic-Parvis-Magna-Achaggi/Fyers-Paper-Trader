@@ -13,8 +13,9 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import auth, fyers_link, logbuf, store, symbols
+from . import auth, charges, fyers_link, logbuf, store, symbols
 from .feed import feed
+from .paper import Refused, engine
 
 logbuf.setup()
 log = logging.getLogger("helper")
@@ -29,11 +30,48 @@ STARTED = time.time()
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.mount("/vendor", StaticFiles(directory=ROOT / "web" / "vendor"), name="vendor")
+app.mount("/static", StaticFiles(directory=ROOT / "web"), name="static")
+
+
+_push = {"pending": False, "events": []}
+
+
+def _engine_changed(event):
+    """Engine changed: send the page a fresh snapshot (coalesced), plus the event line if there is one."""
+    if event:
+        _push["events"].append(event)
+    if _push["pending"]:
+        return
+    _push["pending"] = True
+    asyncio.get_running_loop().call_later(0.15, _send_snapshot)
+
+
+def _send_snapshot():
+    _push["pending"] = False
+    ev, _push["events"] = _push["events"], []
+    try:
+        feed.broadcast({"paper": engine.snapshot(), "events": ev})
+    except Exception as e:
+        log.exception("snapshot failed: %s", e)
+
+
+async def _engine_loop():
+    while True:
+        await asyncio.sleep(5)
+        try:
+            engine.housekeeping()
+        except Exception as e:
+            log.exception("paper housekeeping: %s", e)
 
 
 @app.on_event("startup")
 async def _startup():
+    engine.on_change = _engine_changed
+    engine.on_symbols = lambda: feed._resync()
+    feed.extra = engine.watch_symbols
+    feed.on_tick = engine.on_tick
     feed.start(asyncio.get_running_loop())
+    asyncio.get_running_loop().create_task(_engine_loop())
     if not auth.is_set_up():
         code = auth.setup_code()
         store.path("SETUP_CODE.txt").write_text(code + "\n")
@@ -83,7 +121,8 @@ def _err(e: Exception, code: int = 400):
 # ------------------------------------------------------------------ page
 @app.get("/", response_class=HTMLResponse)
 def index():
-    return FileResponse(ROOT / "web" / "index.html", headers={"Cache-Control": "no-store"})
+    html = (ROOT / "web" / "index.html").read_text(encoding="utf-8").replace("__V__", f"{VERSION}-{COMMIT}")
+    return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/state")
@@ -235,6 +274,183 @@ def logs(request: Request):
     return {"ok": True, "lines": logbuf.recent(300)}
 
 
+# ------------------------------------------------------------------ paper trading
+def _ok(extra=None):
+    out = {"ok": True, "paper": engine.snapshot()}
+    if extra:
+        out.update(extra)
+    return out
+
+
+async def _paper(request: Request, fn):
+    _same_origin(request)
+    _need(request)
+    b = await _body(request)
+    try:
+        res = fn(b)
+    except Refused as e:
+        return _err(e)
+    except (KeyError, TypeError, ValueError) as e:
+        return _err(f"bad request: {e}")
+    return _ok(res if isinstance(res, dict) else None)
+
+
+async def _prefetch_margin(b):
+    """Ask Fyers for margin (blocking HTTP) in a worker before the engine, which runs on the event loop, uses it."""
+    try:
+        row = symbols.get(b.get("s", ""))
+        if row:
+            side = 1 if int(b.get("side", 1)) > 0 else -1
+            await asyncio.get_running_loop().run_in_executor(None, engine.fetch_margin, row, side, b.get("product") or "INTRADAY")
+    except Exception:
+        pass
+
+
+@app.get("/api/paper")
+async def paper_state(request: Request):
+    _need(request)
+    return _ok()
+
+
+@app.post("/api/paper/preview")
+async def paper_preview(request: Request):
+    _need(request)
+    b = await _body(request)
+    await _prefetch_margin(b)
+    try:
+        return {"ok": True, "plan": engine.plan(b)}
+    except Refused as e:
+        return _err(e)
+    except (KeyError, TypeError, ValueError) as e:
+        return _err(f"bad request: {e}")
+
+
+@app.post("/api/paper/place")
+async def paper_place(request: Request):
+    _same_origin(request)
+    _need(request)
+    b = await _body(request)
+    await _prefetch_margin(b)
+    try:
+        plan = engine.place(b)
+    except Refused as e:
+        return _err(e)
+    except (KeyError, TypeError, ValueError) as e:
+        return _err(f"bad request: {e}")
+    return _ok({"plan": plan})
+
+
+@app.post("/api/paper/close")
+async def paper_close(request: Request):
+    return await _paper(request, lambda b: engine.close_now(b["id"]))
+
+
+@app.post("/api/paper/close_all")
+async def paper_close_all(request: Request):
+    return await _paper(request, lambda b: engine.close_all())
+
+
+@app.post("/api/paper/cancel")
+async def paper_cancel(request: Request):
+    return await _paper(request, lambda b: engine.cancel(b["id"]))
+
+
+@app.post("/api/paper/modify")
+async def paper_modify(request: Request):
+    def go(b):
+        args = {k: b[k] for k in ("sl", "tp", "price") if k in b}
+        if str(b["id"]).startswith("O"):
+            engine.modify_order(b["id"], **args)
+        else:
+            args.pop("price", None)
+            engine.modify_pos(b["id"], **args)
+    return await _paper(request, go)
+
+
+@app.post("/api/paper/be")
+async def paper_be(request: Request):
+    return await _paper(request, lambda b: engine.be_now(b["id"]))
+
+
+@app.post("/api/paper/be_all")
+async def paper_be_all(request: Request):
+    def go(b):
+        done = []
+        for p in list(engine.positions):
+            try:
+                engine.be_now(p["id"])
+                done.append(p["s"])
+            except Refused:
+                pass
+        if not done:
+            raise Refused("no position has reached break-even + costs yet")
+    return await _paper(request, go)
+
+
+@app.post("/api/paper/trail")
+async def paper_trail(request: Request):
+    return await _paper(request, lambda b: engine.set_trail(b))
+
+
+@app.post("/api/paper/rules")
+async def paper_rules(request: Request):
+    return await _paper(request, lambda b: engine.set_rules(b))
+
+
+@app.post("/api/paper/ticket")
+async def paper_ticket(request: Request):
+    return await _paper(request, lambda b: engine.set_ticket(b))
+
+
+@app.post("/api/paper/reset")
+async def paper_reset(request: Request):
+    def go(b):
+        if b.get("confirm") != "RESET":
+            raise Refused("type RESET to confirm")
+        engine.reset(float(b.get("capital") or engine.rules["size"]))
+    return await _paper(request, go)
+
+
+@app.get("/api/paper/history")
+async def paper_history(request: Request, days: int = 0):
+    _need(request)
+    rows = engine.history
+    if days:
+        cut = time.time() - days * 86400
+        rows = [h for h in rows if h["closed"] >= cut]
+    return {"ok": True, "rows": rows[::-1]}
+
+
+@app.get("/api/paper/history.csv")
+async def paper_csv(request: Request):
+    _need(request)
+    import csv
+    import io
+    f = io.StringIO()
+    w = csv.writer(f)
+    cols = ["id", "symbol", "side", "product", "lots", "qty", "avg_entry", "exit", "opened_ist", "closed_ist", "reason",
+            "first_sl", "sl", "tp", "gross", "brokerage", "exchange", "clearing", "ctt_stt", "stamp", "sebi", "ipft",
+            "gst", "charges_total", "net", "init_risk", "r", "best", "worst", "balance_after"]
+    w.writerow(cols)
+    fmt = lambda ts: time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
+    for h in engine.history:
+        c = h["charges"]
+        w.writerow([h["id"], h["s"], "BUY" if h["side"] > 0 else "SELL", h["product"], h["lots"], h["qty"], h["avg"],
+                    h["exit"], fmt(h["opened"]), fmt(h["closed"]), h["reason"], h["first_sl"], h["sl"], h["tp"],
+                    h["gross"], c["brokerage"], c["exchange"], c["clearing"], c["tax"], c["stamp"], c["sebi"],
+                    c["ipft"], c["gst"], c["total"], h["net"], h["init_risk"], h["r"], h["best"], h["worst"],
+                    h["balance_after"]])
+    from fastapi.responses import Response
+    return Response(f.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": 'attachment; filename="paper_trades.csv"'})
+
+
+@app.get("/api/charges")
+def charge_table(request: Request):
+    _need(request)
+    return {"ok": True, "as_of": charges.AS_OF, "rows": charges.table()}
+
+
 # ------------------------------------------------------------------ live prices
 @app.websocket("/ws")
 async def ws(socket: WebSocket):
@@ -258,8 +474,8 @@ async def ws(socket: WebSocket):
     async def writer():
         while True:
             try:
-                tick = await asyncio.wait_for(client.queue.get(), timeout=20)
-                await socket.send_text(json.dumps({"tick": tick}))
+                msg = await asyncio.wait_for(client.queue.get(), timeout=20)
+                await socket.send_text(json.dumps(msg))
             except asyncio.TimeoutError:
                 await socket.send_text(json.dumps({"ping": int(time.time()), "feed": feed.status()}))
 

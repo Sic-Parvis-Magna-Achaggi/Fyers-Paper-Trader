@@ -47,8 +47,29 @@ def _load_from(text: str) -> None:
     _by_ticker = {r["s"]: r for r in rows}
 
 
+_bg = {"running": False}
+
+
 def refresh(force: bool = False) -> None:
-    """Download today's master (once a day), or fall back to the copy on disk."""
+    """Download today's master (once a day), or fall back to the copy on disk.
+    Once a list is loaded, the daily refresh runs in the background so nothing waits for it."""
+    today = time.strftime("%Y-%m-%d")
+    if _rows and _loaded_day != today and not force:
+        if not _bg["running"]:
+            _bg["running"] = True
+            threading.Thread(target=_refresh_bg, daemon=True).start()
+        return
+    _refresh(force)
+
+
+def _refresh_bg():
+    try:
+        _refresh(True)
+    finally:
+        _bg["running"] = False
+
+
+def _refresh(force: bool = False) -> None:
     global _loaded_day
     today = time.strftime("%Y-%m-%d")
     with _lock:
@@ -66,7 +87,7 @@ def refresh(force: bool = False) -> None:
             log.warning("Symbol master download failed (%s) - using the saved copy", e)
             if cache.exists() and not _rows:
                 _load_from(cache.read_text(encoding="utf-8"))
-                _loaded_day = today
+            _loaded_day = today                            # don't retry on every call; tomorrow tries again
 
 
 def get(ticker: str):
@@ -103,3 +124,12 @@ def expiries(underlying: str) -> list:
     refresh()
     now = time.time()
     return sorted({r["exp"] for r in _rows if r["u"] == underlying and r["f"] == "OPT" and r["exp"] > now - 86400})
+
+
+def underlying_future(row: dict):
+    """The futures contract an option settles into: same underlying, nearest expiry on or after the option's."""
+    refresh()
+    if not row or row.get("f") != "OPT":
+        return None
+    futs = [r for r in _rows if r["u"] == row["u"] and r["f"] == "FUT" and r["exp"] >= row["exp"] - 86400]
+    return min(futs, key=lambda r: r["exp"]) if futs else None

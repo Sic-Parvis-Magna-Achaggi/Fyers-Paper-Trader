@@ -6,22 +6,30 @@ It runs on our own server and serves its own page, so there is nothing to instal
 
 **Address:** https://68-183-245-178.sslip.io
 
+## Version 0.2.0: paper trading
+
+- **Paper trading on the server.** Market, limit and stop orders; draggable entry, SL and TP lines; BE, Trail BE and Trail SL; adds; Close all. It keeps running with the page closed.
+- **Every ₹ figure is net of all charges:** brokerage, exchange, clearing, CTT/STT, stamp duty, SEBI fee and GST. Sizing, BE + costs and R all use the net figures.
+- **Option stops** can follow the option itself or its underlying future.
+- **Rules,** as in LiveTrader: daily and max loss floors, buffer, risk cap, margin use (from Fyers' margin calculator), open risk, trades a day, SL required, intraday square-off and expiry-day exit.
+- **History** with the charge breakdown for each trade, plus a CSV download.
+- **Full-screen chart:** the ⛶ button or the F key. P hides the trade panel.
+
+See `docs/Paper_Trading_Guide.md`.
+
 ## Version 0.1.0: plumbing
 
-- Page password: set once with a setup code from the server, then a login on each new device (it stays logged in for 30 days).
-- Fyers connection: enter the App ID and Secret once in Settings, then **Log in to Fyers** each morning.
-- MCX contract search (futures and options), option chain by expiry, and a watchlist.
-- Candlestick charts (1m / 5m / 15m / 1h / 1D) with live prices from the Fyers data socket. If the socket drops, it falls back to a slow quote poll.
-- Helper log, version and data-request usage in Settings.
+- Page password, the daily Fyers login, MCX search and option chain, watchlist, and live candlestick charts.
+- Auto-update from GitHub.
 
-Next: paper trading, then the journal in the app.
+Next: Pine Script indicators on the chart (PineTS), then the journal in the app with Telegram screenshots.
 
 ## Repo layout
 
 | Folder | What |
 | --- | --- |
-| `helper/` | The Python server (FastAPI). `app.py` has the routes; `fyers_link.py` handles Fyers login and data; `feed.py` handles live prices; `symbols.py` handles the contract list; `auth.py` handles the page password |
-| `web/` | The page (`index.html`) and the bundled chart library |
+| `helper/` | The Python server (FastAPI). `app.py` has the routes; `fyers_link.py` handles Fyers login and data; `feed.py` handles live prices; `symbols.py` handles the contract list; `auth.py` handles the page password; `paper.py` is the paper engine; `charges.py` holds every charge |
+| `web/` | The page (`index.html`), the trade panel (`paper.js`) and the bundled chart library |
 | `server/` | Install and auto-update scripts, the service files and the Caddy config |
 | `docs/` | Project brief, server details, setup guide |
 

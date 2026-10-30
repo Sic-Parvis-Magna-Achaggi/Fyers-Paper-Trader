@@ -50,7 +50,7 @@ header .brand{font-weight:600;margin-right:6px}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
 .dot.ok{background:var(--up)} .dot.bad{background:var(--down)} .dot.warn{background:var(--warn)}
 header .spacer{flex:1}
-main{display:grid;grid-template-columns:300px 1fr;min-height:0}
+main{display:grid;grid-template-columns:260px 1fr 360px;min-height:0}
 aside{border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}
 .tabs{display:flex;border-bottom:1px solid var(--line)}
 .tabs button{flex:1;border:0;border-radius:0;background:transparent;color:var(--muted);padding:9px 0;border-bottom:2px solid transparent}
@@ -105,9 +105,90 @@ section.chartwrap{display:grid;grid-template-rows:auto 1fr;min-width:0;min-heigh
 #logs .W{color:var(--warn)} #logs .E{color:var(--down)}
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);padding:9px 16px;border-radius:8px;z-index:20;font-size:13px}
 
+/* full screen: chart (+ trade panel unless hidden) fills the screen */
+.fsb{padding:3px 8px;font-size:13px}
+body.chartfs header,body.chartfs aside{display:none!important}
+body.chartfs main{grid-template-columns:1fr 360px!important;grid-template-rows:1fr!important}
+body.chartfs #panel{grid-column:auto!important;grid-row:auto!important;border-top:0;border-left:1px solid var(--line)}
+body.chartfs section.chartwrap{grid-row:auto!important}
+body.nopanel #panel{display:none!important}
+body.nopanel main{grid-template-columns:240px 1fr}
+body.chartfs.nopanel main{grid-template-columns:1fr!important}
+@media (max-width:760px){ body.chartfs main{grid-template-columns:1fr!important;grid-template-rows:1fr auto!important} }
+/* trade panel */
+#panel{border-left:1px solid var(--line);background:var(--panel);overflow:auto;min-height:0;padding:10px 12px 20px}
+#panel h4{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 0 6px;font-weight:600}
+#acct{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;font-size:12.5px}
+#acct div{display:flex;flex-direction:column}
+#acct span{color:var(--muted);font-size:11px}
+#acct b{font-family:var(--mono);font-weight:500}
+#acctFoot{font-size:11.5px;color:var(--muted);margin-top:6px}
+.warnc{color:var(--warn)}
+.tkhead{display:flex;align-items:baseline;gap:8px}
+.tkhead .mono{font-weight:500}
+.tkhead .muted{font-size:11.5px;flex:1}
+.sides{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+.sides button{padding:9px 0;font-weight:600;letter-spacing:.04em}
+#bBuy{color:var(--up)} #bSell{color:var(--down)}
+#bBuy.on{background:var(--up);border-color:var(--up);color:#fff} #bSell.on{background:var(--down);border-color:var(--down);color:#fff}
+.f2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.inl{display:grid;grid-template-columns:1fr 64px;gap:4px}
+#tkPv{margin-top:12px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px;background:var(--panel2)}
+#tkPv > div,.breakdown > div{display:flex;justify-content:space-between;gap:10px;padding:2px 0}
+#tkPv > div > span:first-child,.breakdown > div > span:first-child{color:var(--muted)}
+#tkPv > div > span:last-child{font-family:var(--mono);text-align:right}
+.note{font-size:12px;color:var(--warn);display:block!important;padding-top:6px!important}
+.note.down{color:var(--down)}
+.breakdown{margin-top:6px;border-top:1px dashed var(--line);padding-top:6px;font-size:12px;font-family:var(--mono)}
+.breakdown .bdt{color:var(--muted);font-family:var(--sans);display:block!important}
+.breakdown .tot{border-top:1px solid var(--line);margin-top:3px;padding-top:3px;font-weight:600}
+button.place{width:100%;margin-top:10px;padding:10px;font-weight:600;color:#fff}
+button.place.buy{background:var(--up);border-color:var(--up)} button.place.sell{background:var(--down);border-color:var(--down)}
+button.place:disabled{opacity:.45;cursor:not-allowed}
+.status{font-size:12px;min-height:16px;margin-top:6px}
+.trail{display:grid;grid-template-columns:auto 52px auto auto 52px auto;gap:6px;align-items:center;font-size:12px}
+.trail input{padding:4px 6px;font-family:var(--mono)}
+.trail button{padding:4px 8px;font-size:12px}
+.trail button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.acts{display:flex;gap:6px;margin-top:8px}
+.acts button{flex:1;font-size:12px;padding:5px}
+#ptabs{display:flex;margin-top:14px;border-bottom:1px solid var(--line)}
+#ptabs button{flex:1;border:0;border-radius:0;background:transparent;color:var(--muted);padding:7px 0;font-size:12.5px;border-bottom:2px solid transparent}
+#ptabs button.on{color:var(--text);border-bottom-color:var(--accent)}
+.pos,.hrow{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:8px;font-size:12.5px;background:var(--panel2)}
+.hrow{cursor:pointer}
+.ph{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ph .sp{flex:1}
+.ph .side{font-weight:600;font-size:11.5px}
+.ph .psym{color:inherit;text-decoration:none}
+.ph .psym:hover{color:var(--accent)}
+.ph .muted{font-size:12px}
+.ph .x{border:0;background:transparent;color:var(--muted);padding:0 4px}
+.ph .x:hover{color:var(--down)}
+.pn{margin:4px 0 2px}
+.pn .net{font-family:var(--mono);font-size:16px;font-weight:500}
+.pn .muted{font-size:11.5px}
+.pl{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;font-size:12px}
+.pl i{font-style:normal;font-family:var(--mono)}
+.pl .sm{padding:2px 10px;font-size:11.5px;margin-left:auto}
+button.ed{padding:0 6px;border-style:dashed;font-family:var(--mono);font-size:12px;background:transparent}
+input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
+#evList div{font-size:12px;padding:4px 0;border-bottom:1px solid var(--line)}
+.hh{text-align:right;font-size:12px;margin-top:8px}
+.hh a,#tkPv a,.help a{color:var(--accent)}
+.ct{border:1px solid var(--line);border-radius:6px;padding:6px 8px;margin-top:8px;font-size:12px}
+.ct div{display:flex;justify-content:space-between;gap:12px}
+.ct div span:first-child{color:var(--muted)}
+.ct div span:last-child{text-align:right}
+@media (max-width:1180px){
+  main{grid-template-columns:240px 1fr}
+  #panel{grid-column:1 / -1;border-left:0;border-top:1px solid var(--line);max-height:none}
+  main{grid-template-rows:minmax(420px,1fr) auto;overflow:auto}
+}
 @media (max-width:760px){
-  main{grid-template-columns:1fr;grid-template-rows:minmax(220px,40%) 1fr}
-  aside{border-right:0;border-bottom:1px solid var(--line)}
+  main{grid-template-columns:1fr;grid-template-rows:minmax(340px,55vh) auto auto;overflow:auto}
+  section.chartwrap{grid-row:1} #panel{grid-row:2} aside{grid-row:3;min-height:320px}
+  aside{border-right:0;border-top:1px solid var(--line)}
   header{padding:8px 12px}
   #pBudget,#pClock{display:none}
 }
@@ -167,8 +248,46 @@ section.chartwrap{display:grid;grid-template-rows:auto 1fr;min-width:0;min-heigh
         <span class="meta" id="cMeta"></span>
         <span class="spacer" style="flex:1"></span>
         <div class="tf" id="tf"></div>
+        <button class="ghost fsb" id="bPanel" title="Show or hide the trade panel (P)">Panel</button>
+        <button class="ghost fsb" id="bFull" title="Full screen (F)">⛶</button>
       </div>
       <div id="chart"><div id="chartMsg">Pick a contract from Find or Options.</div></div>
+    </section>
+    <section id="panel">
+      <div style="display:flex;align-items:center;gap:8px"><h4 style="margin:4px 0 6px;flex:1">Paper account</h4><span class="tag">SIM</span></div>
+      <div id="acct"></div><div id="acctFoot"></div>
+
+      <h4>New trade</h4>
+      <div class="tkhead"><span class="mono" id="tkSym"></span><span class="muted" id="tkInfo"></span><button class="ghost" id="tkX" title="Clear">✕</button></div>
+      <div class="sides"><button id="bBuy">BUY</button><button id="bSell">SELL</button></div>
+      <p class="help" id="tkHint">Press BUY or SELL to set up a trade on this chart. Drag the SL and TP lines on the chart; every ₹ figure is after all charges.</p>
+      <div id="tkBody" class="hide">
+        <div class="seg" id="tkType"><button data-v="market">Market</button><button data-v="limit">Limit</button><button data-v="stop">Stop</button></div>
+        <div class="f2"><div><label>Entry</label><input id="tkPrice" class="mono" inputmode="decimal"></div>
+          <div><label>Product</label><select id="tkProd"><option value="INTRADAY">Intraday</option><option value="MARGIN">Carry (NRML)</option></select></div></div>
+        <div id="tkBasisRow" class="hide"><label>Stop and target follow</label>
+          <div class="seg" id="tkBasis" style="margin-top:0"><button data-v="self">This option</button><button data-v="underlying">The future</button></div>
+          <div class="help" id="tkBasisNote"></div></div>
+        <div class="f2"><div><label>Stop loss</label><input id="tkSl" class="mono" inputmode="decimal"></div>
+          <div><label>Target · or R</label><div class="inl"><input id="tkTp" class="mono" inputmode="decimal"><input id="tkTpR" class="mono" placeholder="R" inputmode="decimal"></div></div></div>
+        <label>Size</label>
+        <div class="seg" id="tkMode" style="margin-top:0"><button data-v="pct">Risk %</button><button data-v="amt">Risk ₹</button><button data-v="lots">Lots</button></div>
+        <div class="inl" style="grid-template-columns:90px 1fr;margin-top:6px;align-items:center"><input id="tkSize" class="mono" inputmode="decimal"><span class="help" id="tkSizeUnit"></span></div>
+        <div id="tkPv"></div>
+        <button class="place" id="bPlace" disabled>Place</button>
+      </div>
+      <div class="status" id="tkStatus"></div>
+
+      <h4>Manage</h4>
+      <div class="trail"><span>Trail BE</span><input id="trBeR" inputmode="decimal"><button id="trBe">off</button>
+        <span>Trail SL</span><input id="trSlR" inputmode="decimal"><button id="trSl">off</button></div>
+      <div class="acts"><button id="bBeAll">BE all</button><button id="bCloseAll">Close all</button></div>
+
+      <div id="ptabs"><button data-t="pos" class="on" id="tabPos">Positions</button><button data-t="ord" id="tabOrd">Orders</button><button data-t="hist">History</button><button data-t="ev">Log</button></div>
+      <div id="p_pos"><div id="posList"></div></div>
+      <div id="p_ord" class="hide"><div id="ordList"></div></div>
+      <div id="p_hist" class="hide"><div id="histList"></div></div>
+      <div id="p_ev" class="hide"><div id="evList"></div></div>
     </section>
   </main>
 </div>
@@ -186,6 +305,22 @@ section.chartwrap{display:grid;grid-template-rows:auto 1fr;min-width:0;min-heigh
     <div class="ok-msg" id="appMsg"></div>
     <p class="help">Fyers ends the login every morning, so log in once a day before trading.</p>
 
+    <h3>Paper trading rules</h3>
+    <p class="help">Checked before every new order, the same way as LiveTrader: if every stop on the account were hit, equity must stay above each floor plus the buffer. Lots are cut to fit the caps.</p>
+    <div id="rulesForm"></div>
+    <div class="btns"><button class="primary" id="bRules">Save rules</button></div>
+    <div class="ok-msg" id="rulesMsg"></div>
+
+    <h3>Charges used</h3>
+    <div id="chargeTbl"></div>
+
+    <h3>Reset paper account</h3>
+    <p class="help">Closes nothing for real. Clears paper positions and orders and starts again with this balance. Old trades are kept on the server.</p>
+    <div class="f2"><div><label>Starting balance ₹</label><input id="rsCap" class="mono" value="25000" inputmode="decimal"></div>
+      <div><label>Type RESET</label><input id="rsConfirm" class="mono" autocomplete="off"></div></div>
+    <div class="btns"><button id="bReset">Reset</button></div>
+    <div class="ok-msg" id="rsMsg"></div>
+
     <h3>Page password</h3>
     <label>Current password</label><input id="pOld" type="password" autocomplete="current-password">
     <label>New password</label><input id="pNew" type="password" autocomplete="new-password">
@@ -202,6 +337,7 @@ section.chartwrap{display:grid;grid-template-rows:auto 1fr;min-width:0;min-heigh
   </div>
 </div>
 
+<script src="/static/paper.js?v=__V__"></script>
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
@@ -303,6 +439,7 @@ function connectWS(){
     const m = JSON.parse(ev.data);
     if(m.tick) onTick(m.tick);
     if(m.feed) feedPill(m.feed);
+    if(m.paper) paperUpdate(m.paper, m.events);
   };
   ws.onclose = ev => {
     ws = null;
@@ -312,7 +449,7 @@ function connectWS(){
 }
 function sendWant(){
   if(!ws || ws.readyState !== 1) return;
-  const want = [...new Set([...(cur ? [cur.s] : []), ...watch.map(w => w.s)])].slice(0, 20);
+  const want = [...new Set([...(cur ? [cur.s] : []), ...wantSymbols(), ...watch.map(w => w.s)])].slice(0, 20);
   ws.send(JSON.stringify({want}));
 }
 function onTick(t){
@@ -365,6 +502,7 @@ async function openSymbol(row){
   $("#cMeta").textContent = "";
   sendWant();
   loadHistory();
+  paperOnSymbol(row);
 }
 async function loadHistory(){
   if(!cur) return;
@@ -382,6 +520,7 @@ async function loadHistory(){
   msg.classList.toggle("hide", bars.length > 0);
   if(!bars.length) msg.textContent = "No candles for this range yet.";
   chart.timeScale().scrollToRealTime();
+  drawLines();
 }
 function liveBar(t){
   if(!series || !t.ltp) return;
@@ -529,6 +668,28 @@ async function loadLogs(){
 $("#bLogs").onclick = loadLogs;
 
 /* ---------------------------------------------------------------- start */
+/* full screen and panel toggles */
+function setFull(on){
+  document.body.classList.toggle("chartfs", on);
+  const de = document.documentElement;
+  try{
+    if(on && !document.fullscreenElement && de.requestFullscreen) de.requestFullscreen().catch(()=>{});
+    if(!on && document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+  }catch(e){}
+  $("#bFull").textContent = on ? "✕" : "⛶"; $("#bFull").title = on ? "Exit full screen (F or Esc)" : "Full screen (F)";
+}
+function togglePanel(){ document.body.classList.toggle("nopanel"); ls.set("nopanel", document.body.classList.contains("nopanel")); }
+$("#bFull").onclick = () => setFull(!document.body.classList.contains("chartfs"));
+$("#bPanel").onclick = togglePanel;
+document.addEventListener("fullscreenchange", () => { if(!document.fullscreenElement && document.body.classList.contains("chartfs")) setFull(false); });
+document.addEventListener("keydown", e => {
+  if(e.target.closest("input,select,textarea") || e.ctrlKey || e.metaKey || e.altKey) return;
+  if(e.key === "f" || e.key === "F"){ e.preventDefault(); setFull(!document.body.classList.contains("chartfs")); }
+  if(e.key === "p" || e.key === "P"){ e.preventDefault(); togglePanel(); }
+  if(e.key === "Escape" && document.body.classList.contains("chartfs")) setFull(false);
+});
+if(ls.get("nopanel", false)) document.body.classList.add("nopanel");
+
 function clock(){ $("#pClock").textContent = new Date().toLocaleTimeString("en-GB",{timeZone:"Asia/Kolkata"}) + " IST"; }
 async function boot(){
   applyTheme();
@@ -540,7 +701,9 @@ async function boot(){
   if(p.has("fyers")) history.replaceState(null, "", "/");
   if(!(S.fyers||{}).configured) openDrawer();
   buildChart(); tfButtons(); renderWatch();
-  if(cur){ $("#cSym").textContent = cur.s.replace("MCX:", ""); loadHistory(); }
+  await paperInit();
+  if(cur){ $("#cSym").textContent = cur.s.replace("MCX:", ""); loadHistory();
+    api("/api/symbol?s=" + encodeURIComponent(cur.s)).then(j => { if(j.ok){ sym[j.row.s] = j.row; paperOnSymbol(j.row); } }); }
   connectWS();
 }
 clock(); setInterval(clock, 1000);

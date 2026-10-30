@@ -113,7 +113,8 @@ The helper uploads trades the way LiveTrader does (download the pinned `trade_jo
 ## 7. Phases
 
 1. **Server and plumbing** (v0.1.0 built 30 Oct 2026): DigitalOcean droplet, sslip.io + HTTPS, deploy-from-GitHub, first-run setup screen, password login, daily Fyers login (data-only app), symbol master, live MCX prices on the page's chart.
-2. **Paper trading:** paper engine with realistic charges and MPP-like fills; panel, risk tool, sizing, adds, trailing, guards, option chain, history, CSV.
+2. **Paper trading** (v0.2.0, 30 Oct 2026): server-side paper engine; all charges in every ₹ figure; bid/ask fills; panel, draggable lines, sizing, adds, trailing, guards, Fyers margin, option stops on the option or the future, history, CSV, full-screen chart. Paper capital ₹25,000; every rule editable in the app.
+2b. **Pine Script indicators** via PineTS (paste your script), with hand ports where PineTS can't draw.
 3. **Live:** whitelist the server IP, activate the trading app, 1-lot tests of the position SL/TP behaviour, then switch to Live.
 4. **Journal in the app** (paper, then live), Telegram screenshots.
 5. **Indicators and context** in the app (v1 §7), then extras.

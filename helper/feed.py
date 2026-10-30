@@ -31,6 +31,8 @@ class Feed:
         self.last: dict = {}            # symbol -> latest tick
         self.last_tick_at = 0.0
         self._ops = threading.Lock()
+        self.extra = None               # callable -> symbols the paper engine needs, page open or not
+        self.on_tick = None             # callable(tick), run on the event loop
 
     # ------------------------------------------------------------ page side
     def start(self, loop):
@@ -51,24 +53,39 @@ class Feed:
         self._resync()
         for s in c.symbols:                       # send the last known price straight away
             if s in self.last:
-                self._offer(c, self.last[s])
+                self._offer(c, {"tick": self.last[s]})
 
     def wanted(self) -> list:
         u = set()
         for c in self.clients:
             u |= c.symbols
-        return sorted(u)
+        if self.extra:
+            try:
+                u |= set(self.extra())
+            except Exception as e:
+                log.warning("engine symbols: %s", e)
+        return sorted(u)[:95]                     # Standard plan: 100 symbols on the data socket
 
-    def _offer(self, c: Client, tick: dict):
+    def _offer(self, c: Client, msg: dict):
         try:
-            c.queue.put_nowait(tick)
+            c.queue.put_nowait(msg)
         except asyncio.QueueFull:
             pass
 
+    def broadcast(self, msg: dict):
+        """Send a message to every open page (call on the event loop)."""
+        for c in list(self.clients):
+            self._offer(c, msg)
+
     def _fanout(self, tick: dict):
+        if self.on_tick:
+            try:
+                self.on_tick(tick)
+            except Exception as e:
+                log.exception("paper engine tick failed: %s", e)
         for c in list(self.clients):
             if tick["s"] in c.symbols:
-                self._offer(c, tick)
+                self._offer(c, {"tick": tick})
 
     def publish(self, tick: dict):
         """Called from any thread."""

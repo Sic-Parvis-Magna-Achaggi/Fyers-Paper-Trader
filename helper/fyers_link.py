@@ -135,12 +135,22 @@ class Budget:
 
 
 data_budget = Budget()
+order_budget = Budget(per_sec=4, per_min=120, per_day=60000)   # transaction + user-info APIs (10/s, 200/min)
 
 
 def _get(url: str, params: dict) -> dict:
-    if url.startswith(DATA):
-        data_budget.take()
+    (data_budget if url.startswith(DATA) else order_budget).take()
     r = httpx.get(url, params=params, headers=_auth_header(), timeout=20)
+    return _check(r)
+
+
+def _post(url: str, body: dict) -> dict:
+    order_budget.take()
+    r = httpx.post(url, json=body, headers=_auth_header(), timeout=20)
+    return _check(r)
+
+
+def _check(r) -> dict:
     try:
         j = r.json()
     except Exception:
@@ -188,6 +198,15 @@ def history(symbol: str, res: str, days: int) -> list:
     j = _get(f"{DATA}/history", {"symbol": symbol, "resolution": res, "date_format": "1",
                                  "range_from": start.isoformat(), "range_to": end.isoformat(), "cont_flag": "1"})
     return j.get("candles", [])
+
+
+def margin(symbol: str, qty: int, side: int, product: str, price: float = 0.0) -> float:
+    """Fyers' own margin estimate for one order (rupees)."""
+    j = _post(f"{API}/multiorder/margin", {"data": [{
+        "symbol": symbol, "qty": int(qty), "side": int(side), "type": 2 if not price else 1, "productType": product,
+        "limitPrice": float(price or 0), "stopPrice": 0.0, "stopLoss": 0.0, "takeProfit": 0.0}]})
+    d = j.get("data") or {}
+    return float(d.get("margin_total") or d.get("margin_new_order") or 0)
 
 
 def quotes(symbols: list) -> dict:
