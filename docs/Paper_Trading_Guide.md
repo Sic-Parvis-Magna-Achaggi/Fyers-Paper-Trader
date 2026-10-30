@@ -1,4 +1,4 @@
-# Paper trading: how it works (v0.11.0)
+# Paper trading: how it works (v0.12.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -135,7 +135,12 @@ Wherever the app shows money for a stop, a target, risk, P&L, R or break-even, i
 
 **Stocks:** intraday pays STT 0.025% on the sell and stamp 0.003% on the buy, with brokerage ₹20 or 0.03% (lower). Delivery (CNC) pays STT 0.1% on both buy and sell, stamp 0.015% on the buy, brokerage ₹20 or 0.3% (lower), and a DP charge of ₹12.5 + GST on the sell. Exchange charges are NSE 0.0030699% and BSE 0.00375%.
 
-NSE and BSE F&O, BSE Sensex / Bankex options, and currency futures and options all have their own rates. These rates come from Fyers' charges list (27 Oct 2026), with the exchange rates cross-checked against the NSE and BSE schedules. **Account → Charges used** shows every table the app is using.
+NSE and BSE F&O, BSE Sensex / Bankex options, and currency futures and options all have their own rates.
+
+**When a rate changes:**
+- Account → Charges used → **Edit rates** lets you change any rate (and GST). Every figure uses the new rate at once.
+- The server reads Fyers' charges page about once a day. If it changes, a **Charges changed: review** pill appears in the top bar, and the Account page shows the old and new lines.
+- The app never switches a rate by itself. You edit the rate if needed, then click **Mark as reviewed**. These rates come from Fyers' charges list (27 Oct 2026), with the exchange rates cross-checked against the NSE and BSE schedules. **Account → Charges used** shows every table the app is using.
 
 - **Value** = price × quantity × multiplier. For example, CRUDEOILM is 10 barrels a lot, CRUDEOIL 100, and GOLDPETAL 1 gram.
 - **Lot sizing** finds the most lots whose loss at the stop, including both orders' charges, fits your risk.

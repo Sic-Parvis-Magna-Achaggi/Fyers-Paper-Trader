@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import auth, charges, fyers_link, logbuf, store, symbols
 from . import candles as candles_store
+from . import charges_watch
 from .feed import feed
 from .paper import Refused, engine
 
@@ -57,12 +58,26 @@ def _send_snapshot():
 
 
 async def _engine_loop():
+    n = 0
     while True:
         await asyncio.sleep(5)
         try:
             engine.housekeeping()
         except Exception as e:
             log.exception("paper housekeeping: %s", e)
+        n += 1
+        if n % 120 == 1 and charges_watch.due():          # every 10 minutes: is the daily charges check due?
+            asyncio.get_running_loop().run_in_executor(None, _charges_check)
+
+
+def _charges_check():
+    try:
+        before = charges_watch.status().get("changed")
+        st = charges_watch.check()
+        if st.get("changed") and not before:
+            feed.loop.call_soon_threadsafe(feed.broadcast, {"charges": st})
+    except Exception as e:
+        log.warning("charges check: %s", e)
 
 
 @app.on_event("startup")
@@ -555,7 +570,38 @@ async def paper_csv(request: Request):
 @app.get("/api/charges")
 def charge_table(request: Request):
     _need(request)
-    return {"ok": True, "as_of": charges.AS_OF, "rows": charges.table()}
+    return {"ok": True, "as_of": charges.AS_OF, "rows": charges.table(), "edit": charges.editable(), "check": charges_watch.status()}
+
+
+@app.post("/api/charges/save")
+async def charge_save(request: Request):
+    """Your own rate edits: {"rates": {"NSE|EQ_I": {"exchange": 0.0000307}}, "gst": 0.18} (fractions)."""
+    _same_origin(request)
+    _need(request)
+    b = await _body(request)
+    try:
+        charges.save_overrides(b if isinstance(b, dict) else {})
+    except (ValueError, TypeError) as e:
+        return _err(e)
+    log.info("Charge rates edited in the app")
+    _engine_changed(None)
+    return {"ok": True, "edit": charges.editable(), "rows": charges.table()}
+
+
+@app.post("/api/charges/check")
+async def charge_check(request: Request):
+    """Check Fyers' charges page now (it's also checked about once a day)."""
+    _same_origin(request)
+    _need(request)
+    st = await asyncio.get_running_loop().run_in_executor(None, charges_watch.check)
+    return {"ok": True, "check": st}
+
+
+@app.post("/api/charges/reviewed")
+async def charge_reviewed(request: Request):
+    _same_origin(request)
+    _need(request)
+    return {"ok": True, "check": charges_watch.mark_reviewed()}
 
 
 # ------------------------------------------------------------------ live prices

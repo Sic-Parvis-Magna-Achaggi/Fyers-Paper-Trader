@@ -36,7 +36,7 @@ document.addEventListener("DOMContentLoaded", () => {
   addEventListener("hashchange", () => pgShow((location.hash || "").slice(1) || "chart", true));
   document.querySelectorAll("[data-goto]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); pgShow(b.dataset.goto); }));
 });
-function pagesStart(){ const h = (location.hash || "").slice(1); if(PAGES.includes(h) && h !== "chart") pgShow(h, true); }
+function pagesStart(){ const h = (location.hash || "").slice(1); if(PAGES.includes(h) && h !== "chart") pgShow(h, true); chargesBoot(); }
 
 /* the paper account changed (fills, stops, P&L - about once a second while trades are open) */
 function pagesPaper(events){
@@ -394,7 +394,9 @@ function pgAccount(){
         <div class="pg-card"><h3 class="pg-h3" style="margin-top:0">Start again</h3><p class="help">Archives every trade on the server and starts a fresh account.</p>
           <div class="f2"><div><label>Capital (₹)</label><input id="pgRsCap" value="${r.size}" inputmode="decimal"></div><div><label>Type RESET</label><input id="pgRsConfirm" autocomplete="off"></div></div>
           <div class="btns"><button class="danger" id="pgRsGo">Reset paper account</button></div><div id="pgRsMsg"></div></div>
-        <div class="pg-card"><h3 class="pg-h3" style="margin-top:0">Charges used</h3><div id="pgCharges"></div></div>
+        <div class="pg-card" id="pgChargesCard"><div style="display:flex;align-items:center;gap:8px"><h3 class="pg-h3" style="margin:0;flex:1">Charges used</h3>
+          <button class="sm" id="pgChEdit">Edit rates</button><button class="sm ghost" id="pgChCheck" title="Compare with Fyers' charges page now">Check Fyers' page</button></div>
+          <div id="pgChWatch"></div><div id="pgChEditor" class="hide"></div><div id="pgCharges"></div></div>
       </div></div>`;
   pgAcctCards("#pgAcctCards2");
   renderRules("#pgRules");
@@ -409,7 +411,63 @@ function pgAccount(){
     if(j.ok){ PG.hist = null; setTimeout(pgAccount, 600); }
   };
   loadCharges("#pgCharges");
+  pgChargesEdit();
 }
+
+/* ------------------------------------------------------------------ charges: your own edits, and the daily check of Fyers' page */
+const CH_UNIT = {pct: [100, "%"], rs: [1, "₹"], cr: [1e7, "₹ / crore"]};
+async function pgChargesEdit(j){
+  j = j || await api("/api/charges"); if(!j.ok) return;
+  PG.ch = j;
+  pgChargeWatch(j.check);
+  const ed = pgq("#pgChEditor"); if(!ed) return;
+  const E = j.edit;
+  ed.innerHTML = `<p class="help">Rates as fractions of the order value are typed in %, flat ones in ₹. Changes apply to every new calculation at once
+      (charges already paid on open positions stay as they were). Values you've changed from the built-in ones are marked.</p>
+    <div class="chx">${E.segments.map(sg => `<details class="chs"><summary>${esc(sg.label)}${sg.fields.some(f => Math.abs((f.value ?? 0) - (f.default ?? 0)) > 1e-15) ? ' <span class="tag warnc">edited</span>' : ""}</summary>
+      ${sg.fields.map(f => { const [m, u] = CH_UNIT[f.unit]; const v = f.value == null ? "" : +(f.value * m).toPrecision(8), d = f.default == null ? "" : +(f.default * m).toPrecision(8);
+        return `<label class="chr"><span>${esc(f.label)} <span class="muted">(${u})</span></span><input data-k="${esc(sg.key)}" data-f="${f.f}" data-m="${m}" value="${v}" inputmode="decimal" class="mono ${v !== d ? "chg" : ""}" title="Built-in: ${d}"></label>`; }).join("")}</details>`).join("")}</div>
+    <label class="chr" style="margin-top:8px"><span>GST <span class="muted">(%)</span></span><input id="pgChGst" value="${+(E.gst * 100).toFixed(4)}" class="mono" inputmode="decimal"></label>
+    <div class="btns"><button class="primary" id="pgChSave">Save rates</button><button id="pgChDefaults">Back to built-in rates</button></div><div id="pgChMsg"></div>`;
+  pgq("#pgChEdit").onclick = () => { ed.classList.toggle("hide"); pgq("#pgChEdit").textContent = ed.classList.contains("hide") ? "Edit rates" : "Close editor"; };
+  const save = async body => {
+    const r = await api("/api/charges/save", {body});
+    if(r.ok){ loadCharges("#pgCharges"); loadCharges(); const open = !ed.classList.contains("hide"); await pgChargesEdit(); if(open){ ed.classList.remove("hide"); pgq("#pgChEdit").textContent = "Close editor"; } }
+    pgq("#pgChMsg").textContent = r.ok ? "Saved. Every figure now uses these rates." : r.error; pgq("#pgChMsg").className = r.ok ? "ok-msg" : "err";
+  };
+  pgq("#pgChSave").onclick = () => {
+    const rates = {};
+    for(const inp of ed.querySelectorAll("input[data-k]")){ if(inp.value.trim() === "") continue;
+      const v = num(inp.value); if(v == null){ pgq("#pgChMsg").textContent = "Not a number: " + inp.value; pgq("#pgChMsg").className = "err"; return; }
+      (rates[inp.dataset.k] = rates[inp.dataset.k] || {})[inp.dataset.f] = v / +inp.dataset.m; }
+    save({rates, gst: (num(pgq("#pgChGst").value) ?? 18) / 100});
+  };
+  pgq("#pgChDefaults").onclick = () => { if(confirm("Go back to the built-in rates for every segment?")) save({rates: {}, gst: 0.18}); };
+  pgq("#pgChCheck").onclick = async () => { pgq("#pgChCheck").textContent = "Checking…"; const r = await api("/api/charges/check", {body: {}}); pgq("#pgChCheck").textContent = "Check Fyers' page"; if(r.ok) pgChargeWatch(r.check); };
+}
+function pgChargeWatch(c){
+  const el = pgq("#pgChWatch"); chargePill(c);
+  if(!el || !c) return;
+  const when = t => t ? istTime(t) : "never";
+  if(c.changed){
+    el.innerHTML = `<div class="chwarn"><b>Fyers' charges page has changed</b> since you last reviewed it (noticed ${when(c.changed_at)}).
+      Check the lines below; if a rate changed, use <b>Edit rates</b>, then mark it reviewed.
+      <div class="chdiff mono">${(c.diff || []).map(d => `<div class="${d[0] === "+" ? "up" : "down"}">${esc(d)}</div>`).join("") || "(no line-by-line detail)"}</div>
+      <div class="btns"><a class="btnlink" href="${esc(c.url || "https://fyers.in/charges-list")}" target="_blank" rel="noopener">Open Fyers' page</a><button class="primary" id="pgChReviewed">Mark as reviewed</button></div></div>`;
+    pgq("#pgChReviewed").onclick = async () => { const r = await api("/api/charges/reviewed", {body: {}}); if(r.ok) pgChargeWatch(r.check); };
+  } else el.innerHTML = `<p class="help" style="margin:6px 0">Fyers' charges page is checked about once a day; last check ${when(c.checked)}${c.error ? ` <span class="warnc">(couldn't read it: ${esc(c.error)})</span>` : ", no change"}.
+    A change is never applied by itself: you'll see what changed here and decide.</p>`;
+}
+/* a pill in the top bar while a change waits for review */
+function chargePill(c){
+  let p = pgq("#pCharges");
+  if(c && c.changed){
+    if(!p){ p = document.createElement("button"); p.id = "pCharges"; p.className = "pill warnpill"; p.textContent = "Charges changed: review";
+      p.onclick = () => { pgShow("account"); setTimeout(() => { const el = pgq("#pgChargesCard"); el && el.scrollIntoView({behavior: "smooth"}); }, 300); };
+      const ref = pgq("header .spacer"); ref && ref.before(p); }
+  } else if(p) p.remove();
+}
+async function chargesBoot(){ const j = await api("/api/charges"); if(j.ok) chargePill(j.check); }
 
 /* ------------------------------------------------------------------ Log: the paper account's events and the helper's own log */
 async function pgLog(reload){

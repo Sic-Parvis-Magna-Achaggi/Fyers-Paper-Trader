@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.12.0 — 30 Oct 2026 — Charges you can edit, and a daily check of Fyers' charges page
+
+Added
+- Account → Charges used → **Edit rates**: every rate of every segment can be changed in the app (in %,
+  or ₹ for flat ones), plus GST. Saved on the server; every figure uses the new rates at once (charges
+  already paid on open positions stay as they were). Edited segments are marked; **Back to built-in
+  rates** undoes all edits.
+- The server reads Fyers' charges page about once a day (and on **Check Fyers' page**). If its rate
+  lines change, a "Charges changed: review" pill appears in the top bar and the Account page shows the
+  old and new lines. Nothing changes by itself: you edit the rates if needed and click **Mark as
+  reviewed**. The first check just records the page as it is.
+
 ## v0.11.0 — 30 Oct 2026 — Speed: saved candles, Pine scripts update only the live bar
 
 Added

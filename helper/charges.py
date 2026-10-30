@@ -57,6 +57,85 @@ LABEL = {"EQ_I": "stocks, intraday", "EQ_D": "stocks, delivery (CNC)", "FUT": "f
 GST = 0.18
 FIELDS = ("brokerage", "exchange", "clearing", "tax", "stamp", "sebi", "ipft", "gst", "dp")
 
+# ---------------------------------------------------------------- your own edits (Account -> Charges)
+# Rates can be changed in the app (saved in data/charges_override.json) when Fyers, an exchange or SEBI changes
+# one, without waiting for a new version. Edits apply to every calculation straight away; charges already paid
+# on open positions stay as they were.
+import copy  # noqa: E402
+import json  # noqa: E402
+
+DEFAULT_RATES = copy.deepcopy(RATES)
+EDITABLE = {  # field -> (label, unit): "pct" values are shown and typed in %, "rs" in rupees, "cr" in rupees per crore
+    "brk_pct": ("Brokerage", "pct"), "brk_cap": ("Brokerage cap", "rs"), "brk_flat": ("Brokerage per order", "rs"),
+    "exchange": ("Exchange txn", "pct"), "clearing": ("Clearing", "pct"), "tax_sell": ("STT / CTT on sell", "pct"),
+    "tax_buy": ("STT on buy", "pct"), "stamp_buy": ("Stamp duty on buy", "pct"), "sebi": ("SEBI fee", "cr"),
+    "ipft": ("IPFT", "cr"), "dp_sell": ("DP charge per sell (incl. GST)", "rs"),
+}
+OVERRIDE_FILE = "charges_override.json"
+
+
+def _key(ex, kind):
+    return f"{ex}|{kind}"
+
+
+def apply_overrides(o: dict | None = None) -> None:
+    """Rebuild RATES from the defaults plus the saved edits."""
+    global GST
+    if o is None:
+        from . import store
+        o = store.load(OVERRIDE_FILE, {})
+    for k, r in DEFAULT_RATES.items():
+        RATES[k] = dict(r)
+    for key, vals in (o.get("rates") or {}).items():
+        ex, _, kind = key.partition("|")
+        if (ex, kind) in RATES and isinstance(vals, dict):
+            for f, v in vals.items():
+                if f in EDITABLE and isinstance(v, (int, float)) and v >= 0:
+                    RATES[(ex, kind)][f] = float(v)
+    g = o.get("gst")
+    GST = float(g) if isinstance(g, (int, float)) and 0 <= g < 1 else 0.18
+
+
+def save_overrides(edits: dict) -> dict:
+    """edits: {"NSE|EQ_I": {"exchange": 0.0000307, ...}, ...} as fractions (the page converts from %), plus
+    optional "gst". Only values that differ from the built-in ones are kept."""
+    from . import store
+    out = {"rates": {}, "updated": __import__("time").time()}
+    for key, vals in (edits.get("rates") or {}).items():
+        ex, _, kind = key.partition("|")
+        if (ex, kind) not in DEFAULT_RATES or not isinstance(vals, dict):
+            raise ValueError(f"unknown segment {key}")
+        for f, v in vals.items():
+            if f not in EDITABLE:
+                raise ValueError(f"unknown charge {f}")
+            v = float(v)
+            if v < 0 or (EDITABLE[f][1] == "pct" and v > 0.05):
+                raise ValueError(f"{key} {EDITABLE[f][0]}: {v} looks wrong")
+            if abs(v - DEFAULT_RATES[(ex, kind)].get(f, 0.0)) > 1e-12:
+                out["rates"].setdefault(key, {})[f] = v
+    if "gst" in edits and edits["gst"] is not None:
+        g = float(edits["gst"])
+        if not 0 <= g < 1:
+            raise ValueError("GST must be a fraction, e.g. 0.18")
+        if abs(g - 0.18) > 1e-12:
+            out["gst"] = g
+    store.save(OVERRIDE_FILE, out)
+    apply_overrides(out)
+    return out
+
+
+def editable() -> dict:
+    """Everything the Charges editor shows: each segment's current value, the built-in value, and units."""
+    from . import store
+    o = store.load(OVERRIDE_FILE, {})
+    segs = []
+    for (ex, kind), r in RATES.items():
+        d = DEFAULT_RATES[(ex, kind)]
+        segs.append({"key": _key(ex, kind), "label": f"{ex} {LABEL.get(kind, kind)}",
+                     "fields": [{"f": f, "label": EDITABLE[f][0], "unit": EDITABLE[f][1], "value": r.get(f), "default": d.get(f)}
+                                for f in EDITABLE if f in d or f in r]})
+    return {"segments": segs, "gst": GST, "updated": o.get("updated"), "edited": bool(o.get("rates") or "gst" in o)}
+
 
 def kind_of(row: dict) -> tuple:
     ex = row.get("x") or row["s"].split(":", 1)[0]
@@ -194,3 +273,9 @@ def table() -> list:
             "on": "premium" if kind.endswith("OPT") or kind == "OPT_IDX" else "order value",
         })
     return out
+
+
+try:
+    apply_overrides()
+except Exception:  # noqa: BLE001 - the built-in rates still work
+    pass
