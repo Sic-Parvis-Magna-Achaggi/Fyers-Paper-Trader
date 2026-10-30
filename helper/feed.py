@@ -1,0 +1,195 @@
+"""Live prices: one Fyers data socket shared by every open page.
+
+The page tells us which symbols it wants; we keep the union subscribed on the Fyers socket and pass
+each tick to the pages that asked for it. If the socket isn't up, a slow quote poll (every 3 s) keeps
+prices moving so the page never looks frozen.
+"""
+import asyncio
+import logging
+import threading
+import time
+
+from . import fyers_link, store
+
+log = logging.getLogger("feed")
+
+
+class Client:
+    def __init__(self):
+        self.queue: asyncio.Queue = asyncio.Queue(maxsize=500)
+        self.symbols: set = set()
+
+
+class Feed:
+    def __init__(self):
+        self.loop = None
+        self.clients: set = set()
+        self.sock = None
+        self.sock_token = ""
+        self.sock_up = False
+        self.subscribed: list = []
+        self.last: dict = {}            # symbol -> latest tick
+        self.last_tick_at = 0.0
+        self._ops = threading.Lock()
+
+    # ------------------------------------------------------------ page side
+    def start(self, loop):
+        self.loop = loop
+        loop.create_task(self._watchdog())
+
+    def add(self) -> Client:
+        c = Client()
+        self.clients.add(c)
+        return c
+
+    def remove(self, c: Client):
+        self.clients.discard(c)
+        self._resync()
+
+    def want(self, c: Client, symbols: list):
+        c.symbols = set([s for s in symbols if isinstance(s, str) and ":" in s][:20])
+        self._resync()
+        for s in c.symbols:                       # send the last known price straight away
+            if s in self.last:
+                self._offer(c, self.last[s])
+
+    def wanted(self) -> list:
+        u = set()
+        for c in self.clients:
+            u |= c.symbols
+        return sorted(u)
+
+    def _offer(self, c: Client, tick: dict):
+        try:
+            c.queue.put_nowait(tick)
+        except asyncio.QueueFull:
+            pass
+
+    def _fanout(self, tick: dict):
+        for c in list(self.clients):
+            if tick["s"] in c.symbols:
+                self._offer(c, tick)
+
+    def publish(self, tick: dict):
+        """Called from any thread."""
+        self.last[tick["s"]] = tick
+        self.last_tick_at = time.time()
+        if self.loop:
+            self.loop.call_soon_threadsafe(self._fanout, tick)
+
+    # ------------------------------------------------------------ Fyers socket
+    def _on_message(self, m):
+        if not isinstance(m, dict) or "symbol" not in m or "ltp" not in m:
+            return
+        self.sock_up = True                       # the SDK reconnects on its own; ticks prove it's up
+        self.publish({
+            "s": m["symbol"], "ltp": m.get("ltp"), "bid": m.get("bid_price"), "ask": m.get("ask_price"),
+            "t": m.get("exch_feed_time") or m.get("last_traded_time") or int(time.time()),
+            "vol": m.get("vol_traded_today"), "src": "ws",
+        })
+
+    def _on_connect(self):
+        self.sock_up = True
+        log.info("Price feed connected")
+        self.subscribed = []
+        self._resync()
+
+    def _on_close(self, msg):
+        self.sock_up = False
+        log.warning("Price feed closed: %s", msg)
+
+    def _on_error(self, msg):
+        log.warning("Price feed error: %s", msg)
+
+    def _ensure_socket(self):
+        tok = fyers_link.token()
+        if not tok:
+            if self.sock:
+                self._close_socket()
+            return
+        if self.sock and self.sock_token == tok:
+            return
+        self._close_socket()
+        from fyers_apiv3.FyersWebsocket import data_ws
+        app_id = fyers_link.settings().get("app_id")
+        log.info("Opening the price feed")
+        self.sock_token = tok
+        self.sock = data_ws.FyersDataSocket(
+            access_token=f"{app_id}:{tok}", log_path=str(store.path("")), litemode=False, write_to_file=False,
+            reconnect=True, on_connect=self._on_connect, on_close=self._on_close, on_error=self._on_error,
+            on_message=self._on_message)
+        self.sock.connect()
+
+    def _close_socket(self):
+        if self.sock:
+            try:
+                self.sock.close_connection()
+            except Exception:
+                pass
+        self.sock = None
+        self.sock_up = False
+        self.sock_token = ""
+        self.subscribed = []
+
+    def _resync(self):
+        """Safe to call from any thread."""
+        if self.loop:
+            self.loop.call_soon_threadsafe(self.loop.run_in_executor, None, self._resync_blocking)
+
+    def _resync_blocking(self):
+        with self._ops:
+            try:
+                want = self.wanted()
+                if not want:
+                    return
+                self._ensure_socket()
+                if not self.sock or not self.sock_up or want == self.subscribed:
+                    return
+                if self.subscribed:
+                    self.sock.unsubscribe(symbols=self.subscribed, data_type="SymbolUpdate")
+                self.sock.subscribe(symbols=want, data_type="SymbolUpdate")
+                self.subscribed = want
+                log.info("Streaming %s", ", ".join(want))
+            except Exception as e:
+                log.warning("Price feed subscribe failed: %s", e)
+
+    # ------------------------------------------------------------ fallback + housekeeping
+    async def _watchdog(self):
+        """Every 3 s: reopen the socket if needed. Poll quotes (one batched request) only when the socket is
+        down (every 10 s) or has been silent for a minute (every 60 s) - this keeps us far inside the
+        Standard plan's 50 data requests/minute."""
+        last_poll = 0.0
+        while True:
+            await asyncio.sleep(3)
+            want = self.wanted()
+            if not want or not fyers_link.token():
+                continue
+            if not self.sock or not self.sock_up:
+                self._resync()
+            now = time.time()
+            silent = now - self.last_tick_at
+            gap = 10 if not self.sock_up else (60 if silent > 60 else None)
+            if gap is None or now - last_poll < gap:
+                continue
+            last_poll = now
+            try:
+                for t in await self.loop.run_in_executor(None, self._poll, want):
+                    self.publish(t)
+            except Exception as e:
+                log.debug("quote poll failed: %s", e)
+
+    def _poll(self, symbols: list) -> list:
+        out = []
+        for s, v in fyers_link.quotes(symbols).items():
+            if v.get("lp") is not None:
+                out.append({"s": s, "ltp": v.get("lp"), "bid": v.get("bid"), "ask": v.get("ask"),
+                            "t": v.get("tt") or int(time.time()), "vol": v.get("volume"), "src": "poll"})
+        return out
+
+    def status(self) -> dict:
+        return {"socket": self.sock_up, "streaming": self.subscribed, "last_tick_age": (
+            round(time.time() - self.last_tick_at, 1) if self.last_tick_at else None),
+            "data_budget": fyers_link.data_budget.status()}
+
+
+feed = Feed()

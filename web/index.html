@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fyers Trade Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="/vendor/lightweight-charts.standalone.production.js"></script>
+<style>
+:root{
+  --bg:#0f1216; --panel:#161a20; --panel2:#1c2129; --line:#262c35; --text:#e6e9ee; --muted:#8b94a3;
+  --accent:#4f8cff; --up:#22a06b; --down:#e2483d; --warn:#d99a1e; --chip:#222833;
+  --mono:"IBM Plex Mono",ui-monospace,monospace; --sans:"IBM Plex Sans",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){
+  --bg:#f4f5f7; --panel:#ffffff; --panel2:#f7f8fa; --line:#e1e4e9; --text:#15191f; --muted:#626b78;
+  --accent:#2563eb; --up:#118452; --down:#cf3328; --warn:#a86f00; --chip:#eef0f3;}}
+:root[data-theme="light"]{--bg:#f4f5f7; --panel:#ffffff; --panel2:#f7f8fa; --line:#e1e4e9; --text:#15191f; --muted:#626b78;
+  --accent:#2563eb; --up:#118452; --down:#cf3328; --warn:#a86f00; --chip:#eef0f3;}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow-x:hidden;background:var(--bg);color:var(--text);font:14px/1.45 var(--sans)}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--line);background:var(--panel2);border-radius:6px;padding:6px 12px}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.ghost{background:transparent;border-color:transparent;color:var(--muted)}
+button.ghost:hover{color:var(--text)}
+input,select{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:7px 10px;width:100%}
+input:focus,select:focus{outline:none;border-color:var(--accent)}
+label{display:block;font-size:12px;color:var(--muted);margin:12px 0 4px}
+.mono{font-family:var(--mono)}
+.muted{color:var(--muted)}
+.hide{display:none!important}
+.up{color:var(--up)} .down{color:var(--down)}
+
+/* gate screens */
+.gate{min-height:100%;display:flex;align-items:center;justify-content:center;padding:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:24px;width:100%;max-width:380px}
+.card h1{font-size:18px;margin:0 0 4px}
+.card p{margin:0 0 8px;color:var(--muted);font-size:13px}
+.card button.primary{width:100%;margin-top:18px;padding:9px}
+.err{color:var(--down);font-size:13px;min-height:18px;margin-top:10px}
+
+/* app */
+#app{display:grid;grid-template-rows:auto 1fr;height:100%}
+header{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+header .brand{font-weight:600;margin-right:6px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:var(--chip);font-size:12px;color:var(--muted);white-space:nowrap}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.dot.ok{background:var(--up)} .dot.bad{background:var(--down)} .dot.warn{background:var(--warn)}
+header .spacer{flex:1}
+main{display:grid;grid-template-columns:300px 1fr;min-height:0}
+aside{border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}
+.tabs{display:flex;border-bottom:1px solid var(--line)}
+.tabs button{flex:1;border:0;border-radius:0;background:transparent;color:var(--muted);padding:9px 0;border-bottom:2px solid transparent}
+.tabs button.on{color:var(--text);border-bottom-color:var(--accent)}
+.pane{padding:10px;overflow:auto;flex:1;min-height:0}
+.seg{display:flex;gap:4px;margin-top:8px}
+.seg button{flex:1;padding:4px 0;font-size:12px}
+.seg button.on{border-color:var(--accent);color:var(--accent)}
+.row{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:6px;cursor:pointer}
+.row:hover{background:var(--panel2)}
+.row .name{flex:1;min-width:0}
+.row .name div:first-child{font-family:var(--mono);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .sub{font-size:11.5px;color:var(--muted)}
+.row .px{font-family:var(--mono);font-size:12.5px;text-align:right}
+.row .x{opacity:0;padding:0 6px;border:0;background:transparent;color:var(--muted)}
+.row:hover .x{opacity:1}
+.tag{font-size:10.5px;padding:1px 6px;border-radius:4px;background:var(--chip);color:var(--muted)}
+.chain{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px;margin-top:8px}
+.chain th{color:var(--muted);font-weight:500;padding:4px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel)}
+.chain td{padding:5px 4px;text-align:center;border-bottom:1px solid var(--line)}
+.chain td.k{background:var(--panel2);font-weight:500}
+.chain td.c{cursor:pointer;color:var(--muted)}
+.chain td.c:hover{color:var(--accent);background:var(--panel2)}
+.chain tr.atm td.k{color:var(--accent)}
+.empty{color:var(--muted);font-size:13px;padding:14px 4px}
+
+section.chartwrap{display:grid;grid-template-rows:auto 1fr;min-width:0;min-height:0}
+.charthead{display:flex;align-items:center;gap:14px;padding:8px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.charthead .sym{font-family:var(--mono);font-weight:500}
+.charthead .ltp{font-family:var(--mono);font-size:18px}
+.charthead .meta{font-size:12px;color:var(--muted)}
+.tf{display:flex;gap:2px}
+.tf button{padding:3px 8px;font-size:12px;border-color:transparent;background:transparent;color:var(--muted)}
+.tf button.on{color:var(--text);background:var(--chip)}
+#chart{position:relative;min-height:300px}
+#chartMsg{position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;color:var(--muted);text-align:center;padding:20px;pointer-events:none}
+
+/* drawer */
+#drawer{position:fixed;top:0;right:0;bottom:0;width:min(440px,100%);background:var(--panel);border-left:1px solid var(--line);
+  transform:translateX(100%);transition:transform .2s;z-index:10;display:flex;flex-direction:column}
+#drawer.open{transform:none}
+#drawer .dh{display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
+#drawer .dh h2{font-size:15px;margin:0;flex:1}
+#drawer .db{padding:4px 16px 24px;overflow:auto}
+#drawer h3{font-size:13px;margin:22px 0 2px}
+.help{font-size:12.5px;color:var(--muted);margin:4px 0}
+.copy{display:flex;gap:6px}
+.copy input{font-family:var(--mono);font-size:12px}
+.btns{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.ok-msg{color:var(--up);font-size:13px;min-height:18px;margin-top:8px}
+#logs{font-family:var(--mono);font-size:11.5px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:8px;max-height:320px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+#logs .W{color:var(--warn)} #logs .E{color:var(--down)}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);padding:9px 16px;border-radius:8px;z-index:20;font-size:13px}
+
+@media (max-width:760px){
+  main{grid-template-columns:1fr;grid-template-rows:minmax(220px,40%) 1fr}
+  aside{border-right:0;border-bottom:1px solid var(--line)}
+  header{padding:8px 12px}
+  #pBudget,#pClock{display:none}
+}
+</style>
+</head>
+<body>
+
+<!-- first run -->
+<div id="vSetup" class="gate hide"><form class="card" id="fSetup">
+  <h1>Set up your helper</h1>
+  <p>Enter the setup code shown on the server, then choose the password you'll use to open this page from any device.</p>
+  <label>Setup code</label><input id="sCode" class="mono" autocomplete="off" autocapitalize="characters">
+  <label>New password (10+ characters)</label><input id="sPw" type="password" autocomplete="new-password">
+  <label>Repeat password</label><input id="sPw2" type="password" autocomplete="new-password">
+  <button class="primary">Save password</button><div class="err" id="sErr"></div>
+</form></div>
+
+<!-- login -->
+<div id="vLogin" class="gate hide"><form class="card" id="fLogin">
+  <h1>Fyers Trade Manager</h1>
+  <p>Enter your password.</p>
+  <label>Password</label><input id="lPw" type="password" autocomplete="current-password">
+  <button class="primary">Open</button><div class="err" id="lErr"></div>
+</form></div>
+
+<!-- main -->
+<div id="app" class="hide">
+  <header>
+    <span class="brand">Trade Manager</span>
+    <span class="pill" id="pFyers"><span class="dot"></span><span>Fyers</span></span>
+    <button class="primary hide" id="bFyersLogin">Log in to Fyers</button>
+    <span class="pill" id="pFeed" title="Live price feed"><span class="dot"></span><span>Prices</span></span>
+    <span class="pill" id="pBudget" title="Data requests used (free plan: 50/min, 5,000/day)"><span>Data</span></span>
+    <span class="spacer"></span>
+    <span class="pill mono" id="pClock"></span>
+    <button class="ghost" id="bSettings" title="Settings">Settings</button>
+  </header>
+  <main>
+    <aside>
+      <div class="tabs"><button data-tab="watch" class="on">Watchlist</button><button data-tab="find">Find</button><button data-tab="chain">Options</button></div>
+      <div class="pane" id="tWatch"><div id="watchList"></div></div>
+      <div class="pane hide" id="tFind">
+        <input id="q" placeholder="Search MCX: crudeoil, gold nov, natgas 250 ce" autocomplete="off">
+        <div class="seg" id="kind"><button data-k="" class="on">All</button><button data-k="FUT">Futures</button><button data-k="OPT">Options</button></div>
+        <div id="results"></div>
+      </div>
+      <div class="pane hide" id="tChain">
+        <label style="margin-top:0">Underlying</label><input id="cU" placeholder="CRUDEOIL" class="mono" autocomplete="off">
+        <label>Expiry</label><select id="cExp"></select>
+        <div id="chainBox"></div>
+      </div>
+    </aside>
+    <section class="chartwrap">
+      <div class="charthead">
+        <span class="sym" id="cSym">No symbol</span>
+        <span class="ltp" id="cLtp"></span>
+        <span class="meta" id="cMeta"></span>
+        <span class="spacer" style="flex:1"></span>
+        <div class="tf" id="tf"></div>
+      </div>
+      <div id="chart"><div id="chartMsg">Pick a contract from Find or Options.</div></div>
+    </section>
+  </main>
+</div>
+
+<!-- settings drawer -->
+<div id="drawer">
+  <div class="dh"><h2>Settings</h2><button class="ghost" id="bClose">Close</button></div>
+  <div class="db">
+    <h3>Fyers app</h3>
+    <p class="help">Create an app at myapi.fyers.in (Dashboard → Create App). Paste this as its <b>Redirect URL</b>:</p>
+    <div class="copy"><input id="redir" readonly><button id="bCopy">Copy</button></div>
+    <label>App ID</label><input id="appId" class="mono" placeholder="XXXXXXXXXX-100" autocomplete="off">
+    <label>App Secret</label><input id="appSecret" class="mono" type="password" placeholder="" autocomplete="off">
+    <div class="btns"><button class="primary" id="bSaveApp">Save</button><button id="bFyersLogin2">Log in to Fyers</button></div>
+    <div class="ok-msg" id="appMsg"></div>
+    <p class="help">Fyers ends the login every morning, so log in once a day before trading.</p>
+
+    <h3>Page password</h3>
+    <label>Current password</label><input id="pOld" type="password" autocomplete="current-password">
+    <label>New password</label><input id="pNew" type="password" autocomplete="new-password">
+    <div class="btns"><button id="bPw">Change password</button><button id="bLogout">Log out of this page</button></div>
+    <div class="ok-msg" id="pwMsg"></div>
+
+    <h3>Display</h3>
+    <div class="seg" id="theme"><button data-t="">Auto</button><button data-t="dark">Dark</button><button data-t="light">Light</button></div>
+
+    <h3>Helper log</h3>
+    <div id="logs"></div>
+    <div class="btns"><button id="bLogs">Refresh</button></div>
+    <p class="help mono" id="ver"></p>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const IST = 19800;
+const TFS = [["1","1m",3],["5","5m",10],["15","15m",30],["60","1h",60],["D","1D",365]];
+const TF_SEC = {"1":60,"3":180,"5":300,"15":900,"30":1800,"60":3600,"D":86400};
+const ls = {
+  get(k, d){ try{ const v = localStorage.getItem("ftm."+k); return v==null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem("ftm."+k, JSON.stringify(v)); }catch(e){} }
+};
+let S = {};                              // last /api/state
+let watch = ls.get("watch", []);         // [{s, d}]
+let cur = ls.get("cur", null);           // {s, d, tick}
+let tf = ls.get("tf", "5");
+let ws = null, wsTry = 0;
+const last = {};                         // symbol -> tick
+const sym = {};                          // symbol -> master row
+
+async function api(path, opt = {}){
+  const o = {credentials:"same-origin", headers:{}};
+  if(opt.body !== undefined){ o.method = "POST"; o.headers["Content-Type"] = "application/json"; o.body = JSON.stringify(opt.body); }
+  const r = await fetch(path, o);
+  let j = {}; try{ j = await r.json(); }catch(e){}
+  if(r.status === 401 && !path.startsWith("/api/login") && !path.startsWith("/api/setup")){ showGate(); }
+  if(!r.ok && j.ok === undefined) j.ok = false;
+  if(!r.ok && !j.error) j.error = j.detail || ("HTTP " + r.status);
+  return j;
+}
+function toast(msg){ const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.append(t); setTimeout(()=>t.remove(), 4000); }
+function fmt(n, tick){ if(n == null || isNaN(n)) return "–"; const dp = tick && tick < 1 ? Math.max(0, (String(tick).split(".")[1]||"").length) : 0; return Number(n).toLocaleString("en-IN",{minimumFractionDigits:dp, maximumFractionDigits:Math.max(dp,2)}); }
+function expStr(e){ if(!e) return ""; return new Date((e+IST)*1000).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"2-digit",timeZone:"UTC"}); }
+function setDot(el, cls, text){ el.querySelector(".dot").className = "dot " + (cls||""); el.querySelector("span:last-child").textContent = text; }
+
+/* ---------------------------------------------------------------- gates */
+function showGate(){
+  $("#app").classList.add("hide");
+  if(S.setup_done === false){ $("#vSetup").classList.remove("hide"); $("#vLogin").classList.add("hide"); $("#sCode").focus(); }
+  else { $("#vLogin").classList.remove("hide"); $("#vSetup").classList.add("hide"); $("#lPw").focus(); }
+  if(ws){ ws.onclose = null; ws.close(); ws = null; }
+}
+$("#fSetup").onsubmit = async e => {
+  e.preventDefault(); $("#sErr").textContent = "";
+  if($("#sPw").value !== $("#sPw2").value){ $("#sErr").textContent = "The passwords don't match."; return; }
+  const j = await api("/api/setup", {body:{code:$("#sCode").value, password:$("#sPw").value}});
+  if(!j.ok){ $("#sErr").textContent = j.error; return; }
+  boot();
+};
+$("#fLogin").onsubmit = async e => {
+  e.preventDefault(); $("#lErr").textContent = "";
+  const j = await api("/api/login", {body:{password:$("#lPw").value}});
+  if(!j.ok){ $("#lErr").textContent = j.error; return; }
+  $("#lPw").value = ""; boot();
+};
+
+/* ---------------------------------------------------------------- state */
+async function refreshState(){
+  S = await api("/api/state");
+  if(!S.session){ showGate(); return false; }
+  const f = S.fyers || {};
+  const pf = $("#pFyers");
+  if(!f.configured){ setDot(pf, "warn", "Fyers app not set up"); }
+  else if(f.logged_in){ setDot(pf, "ok", (f.name ? f.name.split(" ")[0] : "Fyers") + (f.client_id ? " · " + f.client_id : "")); }
+  else { setDot(pf, "bad", "Not logged in to Fyers"); }
+  $("#bFyersLogin").classList.toggle("hide", !f.configured || f.logged_in);
+  feedPill(S.feed);
+  $("#redir").value = S.redirect_uri || "";
+  const fs = S.fyers_settings || {};
+  if(document.activeElement !== $("#appId")) $("#appId").value = fs.app_id || "";
+  $("#appSecret").placeholder = fs.has_secret ? "saved - leave blank to keep" : "";
+  $("#ver").textContent = `Version ${S.version}${S.commit ? " (" + S.commit + ")" : ""} · up ${Math.round(S.uptime/60)} min`;
+  return true;
+}
+function feedPill(fd){
+  if(!fd) return;
+  const p = $("#pFeed"), age = fd.last_tick_age;
+  if(!(S.fyers||{}).logged_in) setDot(p, "", "Prices off");
+  else if(fd.socket && age != null && age < 30) setDot(p, "ok", "Live");
+  else if(fd.socket) setDot(p, "ok", "Live · quiet");
+  else if(age != null && age < 30) setDot(p, "warn", "Polling");
+  else setDot(p, "warn", "Connecting");
+  const b = fd.data_budget;
+  if(b) $("#pBudget").firstElementChild.textContent = `Data ${b.last_min}/min · ${b.today.toLocaleString("en-IN")} today`;
+}
+
+async function fyersLogin(){
+  const j = await api("/api/fyers/login");
+  if(!j.ok){ toast(j.error); openDrawer(); return; }
+  location.href = j.url;
+}
+$("#bFyersLogin").onclick = fyersLogin;
+$("#bFyersLogin2").onclick = fyersLogin;
+
+/* ---------------------------------------------------------------- live prices */
+function connectWS(){
+  if(ws) return;
+  ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+  ws.onopen = () => { wsTry = 0; sendWant(); };
+  ws.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    if(m.tick) onTick(m.tick);
+    if(m.feed) feedPill(m.feed);
+  };
+  ws.onclose = ev => {
+    ws = null;
+    if(ev.code === 4401){ refreshState(); return; }
+    setTimeout(connectWS, Math.min(15000, 1000 * 2 ** wsTry++));
+  };
+}
+function sendWant(){
+  if(!ws || ws.readyState !== 1) return;
+  const want = [...new Set([...(cur ? [cur.s] : []), ...watch.map(w => w.s)])].slice(0, 20);
+  ws.send(JSON.stringify({want}));
+}
+function onTick(t){
+  last[t.s] = t;
+  setDot($("#pFeed"), t.src === "poll" ? "warn" : "ok", t.src === "poll" ? "Polling" : "Live");
+  document.querySelectorAll(`[data-px="${CSS.escape(t.s)}"]`).forEach(el => {
+    const prev = parseFloat(el.dataset.v);
+    el.textContent = fmt(t.ltp, (sym[t.s]||{}).tick);
+    el.className = "px" + (isNaN(prev) || prev === t.ltp ? "" : prev < t.ltp ? " up" : " down");
+    el.dataset.v = t.ltp;
+  });
+  if(cur && t.s === cur.s){
+    $("#cLtp").textContent = fmt(t.ltp, cur.tick);
+    $("#cMeta").textContent = (t.bid != null ? `Bid ${fmt(t.bid, cur.tick)} · Ask ${fmt(t.ask, cur.tick)} · ` : "") + (t.src === "poll" ? "polled" : "live");
+    liveBar(t);
+  }
+}
+
+/* ---------------------------------------------------------------- chart */
+let chart = null, series = null, lastBar = null, histToken = 0;
+function cssVar(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+function buildChart(){
+  const el = $("#chart");
+  if(chart){ chart.remove(); }
+  chart = LightweightCharts.createChart(el, {
+    autoSize: true,
+    layout:{background:{type:"solid", color:cssVar("--bg")}, textColor:cssVar("--muted"), fontFamily:"IBM Plex Mono"},
+    grid:{vertLines:{visible:false}, horzLines:{color:cssVar("--line")}},
+    rightPriceScale:{borderColor:cssVar("--line")},
+    timeScale:{borderColor:cssVar("--line"), timeVisible:true, secondsVisible:false},
+    crosshair:{mode:0}
+  });
+  series = chart.addCandlestickSeries({upColor:cssVar("--up"), downColor:cssVar("--down"), borderVisible:false,
+    wickUpColor:cssVar("--up"), wickDownColor:cssVar("--down")});
+}
+function tfButtons(){
+  $("#tf").innerHTML = "";
+  for(const [r, label] of TFS){
+    const b = document.createElement("button"); b.textContent = label; b.className = r === tf ? "on" : "";
+    b.onclick = () => { tf = r; ls.set("tf", tf); tfButtons(); loadHistory(); };
+    $("#tf").append(b);
+  }
+}
+async function openSymbol(row){
+  sym[row.s] = row;
+  cur = {s:row.s, d:row.d, tick:row.tick, lot:row.lot, mult:row.mult};
+  ls.set("cur", cur);
+  $("#cSym").textContent = row.s.replace("MCX:", "");
+  $("#cLtp").textContent = last[row.s] ? fmt(last[row.s].ltp, row.tick) : "";
+  $("#cMeta").textContent = "";
+  sendWant();
+  loadHistory();
+}
+async function loadHistory(){
+  if(!cur) return;
+  const my = ++histToken, msg = $("#chartMsg");
+  msg.textContent = "Loading…"; msg.classList.remove("hide");
+  if(!(S.fyers||{}).logged_in){ msg.textContent = "Log in to Fyers to load charts."; series.setData([]); return; }
+  const days = (TFS.find(x => x[0] === tf) || [0,0,5])[2];
+  const j = await api(`/api/history?symbol=${encodeURIComponent(cur.s)}&res=${tf}&days=${days}`);
+  if(my !== histToken) return;
+  if(!j.ok){ msg.textContent = j.error || "Couldn't load the chart."; series.setData([]); return; }
+  const bars = (j.candles || []).map(c => ({time:c[0] + IST, open:c[1], high:c[2], low:c[3], close:c[4]}));
+  series.setData(bars);
+  series.applyOptions({priceFormat:{type:"price", precision:(String(cur.tick).split(".")[1]||"").length, minMove:cur.tick || 0.01}});
+  lastBar = bars.length ? {...bars[bars.length - 1]} : null;
+  msg.classList.toggle("hide", bars.length > 0);
+  if(!bars.length) msg.textContent = "No candles for this range yet.";
+  chart.timeScale().scrollToRealTime();
+}
+function liveBar(t){
+  if(!series || !t.ltp) return;
+  const sec = TF_SEC[tf], tt = Number(t.t) || Math.floor(Date.now()/1000);
+  const b = Math.floor((tt + IST) / sec) * sec;
+  if(lastBar && b < lastBar.time) return;
+  if(!lastBar || b > lastBar.time) lastBar = {time:b, open:t.ltp, high:t.ltp, low:t.ltp, close:t.ltp};
+  else { lastBar.high = Math.max(lastBar.high, t.ltp); lastBar.low = Math.min(lastBar.low, t.ltp); lastBar.close = t.ltp; }
+  series.update({...lastBar});
+  $("#chartMsg").classList.add("hide");
+}
+
+/* ---------------------------------------------------------------- side panel */
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("on", x === b));
+  for(const t of ["watch","find","chain"]) $("#t" + t[0].toUpperCase() + t.slice(1)).classList.toggle("hide", t !== b.dataset.tab);
+  if(b.dataset.tab === "find") $("#q").focus();
+});
+function rowEl(r, {inWatch} = {}){
+  sym[r.s] = r;
+  const el = document.createElement("div"); el.className = "row";
+  const kind = r.f === "FUT" ? "FUT" : r.o || r.f;
+  el.innerHTML = `<div class="name"><div></div><div class="sub"></div></div><span class="px" data-px=""></span>`;
+  el.querySelector(".name div").textContent = r.s.replace("MCX:", "");
+  el.querySelector(".sub").textContent = `${kind}${r.exp ? " · " + expStr(r.exp) : ""} · lot ${r.lot} × ${r.mult}`;
+  const px = el.querySelector(".px"); px.dataset.px = r.s;
+  if(last[r.s]) px.textContent = fmt(last[r.s].ltp, r.tick);
+  el.onclick = () => openSymbol(r);
+  const x = document.createElement("button"); x.className = "x";
+  if(inWatch){ x.textContent = "×"; x.title = "Remove"; x.onclick = e => { e.stopPropagation(); watch = watch.filter(w => w.s !== r.s); ls.set("watch", watch); renderWatch(); sendWant(); }; }
+  else { x.textContent = "+"; x.title = "Add to watchlist"; x.onclick = e => { e.stopPropagation(); addWatch(r); }; }
+  el.append(x);
+  if(r.f === "FUT" && !inWatch){
+    const o = document.createElement("button"); o.className = "x"; o.textContent = "Opt"; o.title = "Option chain";
+    o.onclick = e => { e.stopPropagation(); showChain(r.u); }; el.append(o);
+  }
+  return el;
+}
+function addWatch(r){
+  if(watch.some(w => w.s === r.s)) return toast("Already in the watchlist");
+  if(watch.length >= 15) return toast("Watchlist is full (15)");
+  watch.push(r); ls.set("watch", watch); renderWatch(); sendWant(); toast("Added " + r.s.replace("MCX:", ""));
+}
+function renderWatch(){
+  const box = $("#watchList"); box.innerHTML = "";
+  const now = Date.now()/1000;
+  watch = watch.filter(w => !w.exp || w.exp > now - 86400);
+  if(!watch.length){ box.innerHTML = `<div class="empty">Nothing here yet. Use Find, then + to add contracts.</div>`; return; }
+  for(const w of watch) box.append(rowEl(w, {inWatch:true}));
+}
+let kind = "", qTimer = null;
+document.querySelectorAll("#kind button").forEach(b => b.onclick = () => {
+  kind = b.dataset.k; document.querySelectorAll("#kind button").forEach(x => x.classList.toggle("on", x === b)); search();
+});
+$("#q").oninput = () => { clearTimeout(qTimer); qTimer = setTimeout(search, 200); };
+async function search(){
+  const q = $("#q").value.trim(), box = $("#results");
+  if(q.length < 2){ box.innerHTML = `<div class="empty">Type at least 2 letters.</div>`; return; }
+  const j = await api(`/api/symbols?q=${encodeURIComponent(q)}&kind=${kind}`);
+  box.innerHTML = "";
+  if(!j.ok || !j.rows.length){ box.innerHTML = `<div class="empty">${j.ok ? "No matching contracts." : j.error}</div>`; return; }
+  for(const r of j.rows) box.append(rowEl(r));
+}
+
+/* option chain */
+async function showChain(u, exp){
+  document.querySelector('.tabs button[data-tab="chain"]').click();
+  $("#cU").value = u;
+  const j = await api(`/api/chain?u=${encodeURIComponent(u.toUpperCase())}&exp=${exp||0}`);
+  const sel = $("#cExp"); sel.innerHTML = "";
+  for(const e of j.expiries || []){ const o = document.createElement("option"); o.value = e; o.textContent = expStr(e); sel.append(o); }
+  sel.value = j.exp;
+  const box = $("#chainBox"); box.innerHTML = "";
+  if(!j.rows || !j.rows.length){ box.innerHTML = `<div class="empty">No options found for ${u.toUpperCase()}.</div>`; return; }
+  const strikes = {};
+  for(const r of j.rows){ (strikes[r.k] = strikes[r.k] || {})[r.o] = r; sym[r.s] = r; }
+  const ks = Object.keys(strikes).map(Number).sort((a,b) => a-b);
+  // nearest strike to the future's last price, when we have it
+  const fut = watch.concat(Object.values(sym)).find(r => r.u === u.toUpperCase() && r.f === "FUT" && last[r.s]);
+  const ref = fut ? last[fut.s].ltp : null;
+  const atm = ref ? ks.reduce((a,b) => Math.abs(b-ref) < Math.abs(a-ref) ? b : a) : null;
+  const t = document.createElement("table"); t.className = "chain";
+  t.innerHTML = `<thead><tr><th>Call</th><th>Strike</th><th>Put</th></tr></thead><tbody></tbody>`;
+  for(const k of ks){
+    const tr = document.createElement("tr"); if(k === atm) tr.className = "atm";
+    for(const side of ["CE", null, "PE"]){
+      const td = document.createElement("td");
+      if(!side){ td.className = "k"; td.textContent = k.toLocaleString("en-IN"); }
+      else if(strikes[k][side]){
+        const r = strikes[k][side]; td.className = "c"; td.textContent = side;
+        td.title = "Open chart · right-click to add to watchlist";
+        td.onclick = () => openSymbol(r);
+        td.oncontextmenu = e => { e.preventDefault(); addWatch(r); };
+      }
+      tr.append(td);
+    }
+    t.tBodies[0].append(tr);
+  }
+  box.append(t);
+  if(atm){ const a = t.querySelector("tr.atm"); a && a.scrollIntoView({block:"center"}); }
+}
+$("#cExp").onchange = () => showChain($("#cU").value, $("#cExp").value);
+$("#cU").onkeydown = e => { if(e.key === "Enter") showChain($("#cU").value); };
+
+/* ---------------------------------------------------------------- settings drawer */
+function openDrawer(){ $("#drawer").classList.add("open"); loadLogs(); }
+$("#bSettings").onclick = openDrawer;
+$("#bClose").onclick = () => $("#drawer").classList.remove("open");
+$("#bCopy").onclick = async () => { try{ await navigator.clipboard.writeText($("#redir").value); toast("Copied"); }catch(e){ $("#redir").select(); } };
+$("#bSaveApp").onclick = async () => {
+  $("#appMsg").textContent = "";
+  const j = await api("/api/fyers/settings", {body:{app_id:$("#appId").value, secret:$("#appSecret").value}});
+  if(!j.ok){ $("#appMsg").innerHTML = `<span class="down"></span>`; $("#appMsg").firstChild.textContent = j.error; return; }
+  $("#appSecret").value = ""; $("#appMsg").textContent = "Saved. Now press Log in to Fyers.";
+  refreshState();
+};
+$("#bPw").onclick = async () => {
+  const j = await api("/api/password", {body:{old:$("#pOld").value, new:$("#pNew").value}});
+  $("#pwMsg").textContent = j.ok ? "Password changed. Other devices will need to log in again." : j.error;
+  $("#pwMsg").className = j.ok ? "ok-msg" : "err";
+  if(j.ok){ $("#pOld").value = $("#pNew").value = ""; }
+};
+$("#bLogout").onclick = async () => { await api("/api/logout", {body:{}}); location.reload(); };
+document.querySelectorAll("#theme button").forEach(b => {
+  b.classList.toggle("on", (ls.get("theme","")) === b.dataset.t);
+  b.onclick = () => {
+    ls.set("theme", b.dataset.t); applyTheme();
+    document.querySelectorAll("#theme button").forEach(x => x.classList.toggle("on", x === b));
+  };
+});
+function applyTheme(){
+  const t = ls.get("theme", "");
+  if(t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  if(chart){ buildChart(); loadHistory(); }
+}
+async function loadLogs(){
+  const j = await api("/api/logs"); const box = $("#logs"); box.innerHTML = "";
+  for(const l of (j.lines || []).slice().reverse()){
+    const d = document.createElement("div"); d.className = l.lvl[0];
+    d.textContent = `${new Date(l.t*1000).toLocaleTimeString("en-GB",{timeZone:"Asia/Kolkata"})} ${l.src}: ${l.msg}`;
+    box.append(d);
+  }
+  if(!box.childElementCount) box.textContent = "No log lines yet.";
+}
+$("#bLogs").onclick = loadLogs;
+
+/* ---------------------------------------------------------------- start */
+function clock(){ $("#pClock").textContent = new Date().toLocaleTimeString("en-GB",{timeZone:"Asia/Kolkata"}) + " IST"; }
+async function boot(){
+  applyTheme();
+  if(!await refreshState()) return;
+  $("#vSetup").classList.add("hide"); $("#vLogin").classList.add("hide"); $("#app").classList.remove("hide");
+  const p = new URLSearchParams(location.search);
+  if(p.get("fyers") === "ok") toast("Logged in to Fyers");
+  if(p.get("fyers") === "error") toast("Fyers login failed: " + (p.get("msg") || ""));
+  if(p.has("fyers")) history.replaceState(null, "", "/");
+  if(!(S.fyers||{}).configured) openDrawer();
+  buildChart(); tfButtons(); renderWatch();
+  if(cur){ $("#cSym").textContent = cur.s.replace("MCX:", ""); loadHistory(); }
+  connectWS();
+}
+clock(); setInterval(clock, 1000);
+setInterval(() => { if(!$("#app").classList.contains("hide")) refreshState(); }, 30000);
+boot();
+</script>
+</body>
+</html>
