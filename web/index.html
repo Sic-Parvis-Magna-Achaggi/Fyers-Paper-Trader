@@ -78,7 +78,12 @@ aside{border-right:1px solid var(--line);background:var(--panel);display:flex;fl
 .empty{color:var(--muted);font-size:13px;padding:14px 4px}
 
 section.chartwrap{display:grid;grid-template-rows:auto minmax(0,1fr);min-width:0;min-height:0;position:relative}
-.charthead{display:flex;align-items:center;gap:12px;padding:6px 10px 6px 14px;border-bottom:1px solid var(--line);flex-wrap:nowrap;min-width:0;overflow:hidden}
+.charthead{display:flex;align-items:center;gap:12px;padding:6px 10px 6px 14px;border-bottom:1px solid var(--line);flex-wrap:nowrap;min-width:0;overflow:hidden;overflow:clip}
+.charthead .sym,.charthead .ltp{flex:0 0 auto}
+.charthead .spacer{flex:1 1 0;min-width:0}
+.charthead .tf{flex:0 1 auto;min-width:0;flex-wrap:wrap;height:26px;overflow:hidden;overflow:clip}   /* buttons that don't fit drop out whole; ▾ has them all */
+.charthead .meta{flex:0 1 auto}
+.charthead .fsb,.charthead .tfmore{flex:0 0 auto}
 .charthead .meta{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .charthead .sym{font-family:var(--mono);font-weight:500}
 .charthead .ltp{font-family:var(--mono);font-size:18px}
@@ -100,7 +105,7 @@ section.chartwrap{display:grid;grid-template-rows:auto minmax(0,1fr);min-width:0
 #tfPick .row2 button{padding:4px 10px;font-size:12px;white-space:nowrap}
 /* candle timer: sits on the price scale just under the current price, like TradingView */
 #ctimer{position:absolute;z-index:8;font-family:var(--mono);font-size:12px;font-weight:600;line-height:18px;text-align:center;
-  background:var(--accent);color:#fff;border-radius:3px;pointer-events:none;padding:0 2px;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+  background:var(--accent);color:#fff;border-radius:3px;pointer-events:none;padding:0 2px;box-shadow:0 1px 4px rgba(0,0,0,.35);white-space:nowrap;overflow:hidden}
 #cTimer{flex:0 0 auto;font-family:var(--mono);font-size:12px;padding:2px 8px;border-radius:999px;background:var(--chip);color:var(--text);white-space:nowrap}
 #cTimer:empty{display:none}
 /* order book */
@@ -614,7 +619,8 @@ function cssVar(n){ return getComputedStyle(document.documentElement).getPropert
 const CHART_DEFAULTS = {up:"#22a06b", down:"#e2483d", bg:"", grid:true,
   bidC:"#a3abb8", bidS:0, bidOn:true, askC:"#e2483d", askS:0, askOn:true, lastC:"#e0b341", lastS:2, lastOn:true,
   entryC:"", entryS:2, slC:"#e2483d", slS:0, tpC:"#22a06b", tpS:0, beC:"#4f8cff", beS:1, orderC:"#4f8cff", orderS:2,
-  toolC:"#4f8cff", toolS:0, lossZ:"#e2483d", profitZ:"#22a06b", zoneA:20, volOn:true, timerOn:true};
+  toolC:"#4f8cff", toolS:0, lossZ:"#e2483d", profitZ:"#22a06b", zoneA:20, volOn:true, timerOn:true,
+  btnCorner:"tl", btnX:8, btnY:8};
 function chartCfg(){ return {...CHART_DEFAULTS, ...(prefGet("chart", {}) || {})}; }
 function cfgColor(k){ const c = chartCfg()[k]; return c || cssVar(k === "entryC" ? "--text" : "--bg"); }
 function buildChart(){
@@ -638,6 +644,7 @@ function buildChart(){
   bidLine = mk(); askLine = mk(); lastLine = mk();
   volSeries = null;
   volLayout();
+  setTimeout(positionTools, 60);
   // remember the volume pane's height when you drag the divider
   el.addEventListener("mouseup", () => setTimeout(() => {
     const ps = chart && chart.panes(); if(!ps || ps.length < 2) return;
@@ -687,6 +694,18 @@ function applyChartCfg(){
   chart.applyOptions({layout:{background:{type:"solid", color:C.bg || cssVar("--bg")}}, grid:{horzLines:{visible:!!C.grid, color:cssVar("--line")}}});
   if(lastQuote && cur && lastQuote.s === cur.s) bidAsk(lastQuote);
   if(typeof drawLines === "function") drawLines();
+  positionTools();
+}
+/* the BUY / SELL buttons: any corner of the candle pane, with an X / Y offset (Chart settings) */
+function positionTools(){
+  const el = $("#ctools"), box = $("#chart"); if(!el || !box) return;
+  const C = chartCfg(), x = Math.max(0, +C.btnX || 0), y = Math.max(0, +C.btnY || 0), corner = C.btnCorner || "tl";
+  let aw = 60; try{ aw = chart.priceScale("right").width() || 60; }catch(e){}
+  let paneH = box.clientHeight - 28; try{ paneH = chart.panes()[0].getHeight(); }catch(e){}
+  el.style.left = el.style.right = el.style.top = el.style.bottom = "auto";
+  if(corner[1] === "l") el.style.left = Math.min(x, box.clientWidth - aw - el.offsetWidth) + "px";
+  else el.style.right = Math.min(aw + x, box.clientWidth - el.offsetWidth) + "px";
+  el.style.top = (corner[0] === "t" ? Math.min(y, paneH - el.offsetHeight) : Math.max(0, paneH - el.offsetHeight - y)) + "px";
 }
 /* the settings popover */
 const CFG_LINES = [["bid", "Bid", true], ["ask", "Ask", true], ["last", "Last trade", true], ["entry", "Position entry"], ["sl", "Stop loss"],
@@ -698,7 +717,7 @@ function renderCfg(){
   let h = `<div class="sec">Lines</div><div class="cr muted" style="font-size:11px"><span></span><span>Colour</span><span>Style</span><span>On</span></div>`;
   for(const [k, label, canHide] of CFG_LINES)
     h += `<div class="cr"><span>${label}</span><input type="color" data-k="${k}C" value="${hex(k + "C")}">
-      <select data-k="${k}S">${STYLES.map(([v, n]) => `<option value="${v}" ${+C[k + "S"] === v ? "selected" : ""}>${n}</option>`).join("")}</select>
+      <select data-k="${k}S" data-num="1">${STYLES.map(([v, n]) => `<option value="${v}" ${+C[k + "S"] === v ? "selected" : ""}>${n}</option>`).join("")}</select>
       ${canHide ? `<input type="checkbox" data-k="${k}On" ${C[k + "On"] ? "checked" : ""}>` : "<span></span>"}</div>`;
   h += `<div class="sec">Candles</div>
     <div class="cr"><span>Up</span><input type="color" data-k="up" value="${C.up}"><span></span><span></span></div>
@@ -706,16 +725,23 @@ function renderCfg(){
     <div class="sec">Risk / reward zones</div>
     <div class="cr"><span>Loss zone</span><input type="color" data-k="lossZ" value="${C.lossZ}"><span></span><span></span></div>
     <div class="cr"><span>Profit zone</span><input type="color" data-k="profitZ" value="${C.profitZ}"><span></span><span></span></div>
-    <div class="cr" style="grid-template-columns:1fr 150px"><span>Zone strength</span><input type="range" min="5" max="50" data-k="zoneA" value="${C.zoneA}"></div>
+    <div class="cr" style="grid-template-columns:1fr 150px"><span>Zone strength</span><input type="range" min="5" max="50" data-k="zoneA" data-num="1" value="${C.zoneA}"></div>
     <div class="sec">Chart</div>
     <div class="cr"><span>Background</span><input type="color" data-k="bg" value="${hex("bg")}"><span class="muted" style="font-size:11px">${C.bg ? "" : "theme"}</span><span></span></div>
     <div class="cr"><span>Grid lines</span><span></span><span></span><input type="checkbox" data-k="grid" ${C.grid ? "checked" : ""}></div>
     <div class="cr"><span>Volume pane</span><span></span><span></span><input type="checkbox" data-k="volOn" ${C.volOn ? "checked" : ""}></div>
-    <div class="cr"><span>Candle timer</span><span></span><span></span><input type="checkbox" data-k="timerOn" ${C.timerOn ? "checked" : ""}></div>`;
+    <div class="cr"><span>Candle timer</span><span></span><span></span><input type="checkbox" data-k="timerOn" ${C.timerOn ? "checked" : ""}></div>
+    <div class="sec">BUY / SELL buttons</div>
+    <div class="cr" style="grid-template-columns:1fr 150px"><span>Corner</span><select data-k="btnCorner">
+      ${[["tl", "Top left"], ["tr", "Top right"], ["bl", "Bottom left"], ["br", "Bottom right"]].map(([v, n]) => `<option value="${v}" ${C.btnCorner === v ? "selected" : ""}>${n}</option>`).join("")}</select></div>
+    <div class="cr" style="grid-template-columns:1fr 70px 70px"><span>Offset X / Y (px)</span>
+      <input type="number" data-k="btnX" data-num="1" min="0" max="2000" value="${C.btnX}" style="padding:2px 4px">
+      <input type="number" data-k="btnY" data-num="1" min="0" max="2000" value="${C.btnY}" style="padding:2px 4px"></div>
+    <p class="help" style="margin:2px 0 0">X counts in from the left or right edge, Y down from the top or up from the bottom of the candle pane.</p>`;
   $("#cfgBody").innerHTML = h;
   $("#cfgBody").querySelectorAll("[data-k]").forEach(el => el.addEventListener("input", () => {
     const k = el.dataset.k, cfg = {...(prefGet("chart", {}) || {})};
-    cfg[k] = el.type === "checkbox" ? el.checked : (el.tagName === "SELECT" || el.type === "range") ? +el.value : el.value;
+    cfg[k] = el.type === "checkbox" ? el.checked : el.dataset.num ? (+el.value || 0) : el.value;
     prefSet("chart", cfg); applyChartCfg();
   }));
 }
@@ -1021,6 +1047,7 @@ function candleTimer(){
   }
   if(!chartCfg().timerOn){ el.classList.add("hide"); $("#cTimer").textContent = ""; return; }
   $("#cTimer").textContent = txt === "closed" ? "market closed" : "⏱ " + txt;
+  txt = txt.replace(/^close /, "");                      // the price-scale tag is narrow: just the time
   // under the bid / ask / last labels on the price scale. The chart pushes labels that are close together
   // apart, so allow for the whole stack
   const q = lastQuote && lastQuote.s === cur.s ? lastQuote : null;
@@ -1037,7 +1064,7 @@ function candleTimer(){
   el.style.top = Math.min(paneH, ys[ys.length - 1] + 10 + 18 * Math.ceil((near - 1) / 2)) + "px";
   el.classList.remove("hide");
 }
-setInterval(candleTimer, 1000);
+setInterval(() => { candleTimer(); positionTools(); }, 1000);
 
 function clock(){ $("#pClock").textContent = new Date().toLocaleTimeString("en-GB",{timeZone:"Asia/Kolkata"}) + " IST"; }
 async function boot(){

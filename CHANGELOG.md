@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.6.1 — 30 Oct 2026 — BUY / SELL button position
+
+Added
+- Chart settings (⚙) → BUY / SELL buttons: put them in any corner of the candle pane (top left,
+  top right, bottom left, bottom right) with an X and Y offset in pixels. Right-hand corners stay
+  clear of the price scale; bottom corners sit on the candle pane, above the volume pane. Saved with
+  your preferences
+
+Fixed
+- In a crowded top bar the symbol could scroll out of view and the ⚙ / Panel / ⛶ buttons could be
+  pushed under the panel. They now always stay visible; timeframe buttons that don't fit are hidden
+  (all of them are under ▾)
+- On 1D / 1W / 1M the countdown tag on the price scale wrapped onto two lines
+
 ## v0.6.0 — 30 Oct 2026 — Volume pane (chart library upgrade)
 
 Changed
