@@ -1,4 +1,4 @@
-# Paper trading: how it works (v0.5.1)
+# Paper trading: how it works (v0.5.2)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -123,6 +123,10 @@ An order is refused if, with every stop on the account hit, equity would fall be
 - **Trail SL ON at X R:** after X R, the stop follows the best price X R behind. It never goes below BE + costs and never moves backwards.
 
 Moving a stop yourself makes it your stop again: it drops out of Trail SL until you toggle trailing.
+
+1R is the distance from the **first** entry to the **first** stop, in points, as in LiveTrader. Adds don't change it.
+
+When BE-T has already moved the stop to break-even, a Trail SL of N R behind the best price may still be further away than that BE stop. Trailing never moves a stop backwards, so the stop stays at BE until price makes a new best far enough to beat it. The position's bar shows that price as **"moves past …"**, and then **"next …"** once the trail is running.
 
 ## Records
 

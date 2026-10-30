@@ -610,6 +610,7 @@ function posBars(){
         <button data-a="be" title="Stop to break-even + costs now">BE</button>
         <button class="tg ${t.be_on ? "on" : ""}" data-a="be_on" title="Trail BE: move the stop to BE + costs once the trade reaches this many R">BE-T</button><input class="rr" data-a="be_r" value="${t.be_r}" inputmode="decimal" title="R for trail BE">
         <button class="tg ${t.sl_on ? "on" : ""}" data-a="sl_on" title="Trail SL: follow the best price this many R behind">TRAIL</button><input class="rr" data-a="sl_r" value="${t.sl_r}" inputmode="decimal" title="R for trail SL">
+        <span class="ta muted" data-f="ta"></span>
       </div>`;
     }).join("");
     host.querySelectorAll(".pbar").forEach(el => {
@@ -644,6 +645,12 @@ function posBars(){
       const p = i.p;
       t.innerHTML = `<b class="${p.side > 0 ? "up" : "down"}">${p.side > 0 ? "LONG" : "SHORT"} ${p.lots}</b> <span class="${cls(p.net)}">${rsS(p.net)}</span>`
         + (p.r_now != null ? ` <span class="muted">${p.r_now > 0 ? "+" : ""}${p.r_now}R</span>` : "");
+      const ta = el.querySelector('[data-f="ta"]');
+      if(ta){
+        const tick = (sym[p.basis === "underlying" ? p.ref : p.s] || {}).tick;
+        ta.textContent = p.tr.sl_on && p.trail_at != null ? (p.trail ? "next " : "moves past ") + fmt(p.trail_at, tick) : "";
+        ta.title = p.trail_at != null ? `Trail SL keeps the stop ${p.tr.sl_r}R (${fmt(p.tr.sl_r * p.r_pts, tick)} points) behind the best price. 1R = first entry to first stop = ${fmt(p.r_pts, tick)} points. The stop moves once price passes ${fmt(p.trail_at, tick)}.` : "";
+      }
     } else {
       const o = i.o;
       t.innerHTML = `<b class="${o.side > 0 ? "up" : "down"}">${o.side > 0 ? "BUY" : "SELL"} ${o.type.toUpperCase()} ${o.lots}</b>`;

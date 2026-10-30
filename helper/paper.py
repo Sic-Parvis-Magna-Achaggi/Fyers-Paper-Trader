@@ -872,7 +872,21 @@ class Paper:
             tick = row.get("tick") or 0.05
             ex = charges.order(row, -pos["side"], pos["qty"], stop_px)["total"]
             v.update(at_be=True, be_ticks=round(abs(stop_px - pos["avg"]) / tick), be_covers=round(pos["paid"] + ex, 2))
-        v["tr"] = pos.get("tr") or dict(self.trail)            # figures at an underlying stop use the option's delta
+        v["tr"] = pos.get("tr") or dict(self.trail)
+        # where Trail SL will next move the stop: price must pass this (shown on the position's bar)
+        tr = v["tr"]
+        if tr.get("sl_on") and pos.get("first_sl") is not None and not pos.get("own_stop"):
+            ud = self._udir(pos, row)
+            R = abs(pos["basis_entry"] - pos["first_sl"])
+            if R > 0:
+                start = pos["basis_entry"] + ud * tr["sl_r"] * R            # reached the trail's R
+                cur_sl = pos.get("sl")
+                if cur_sl is not None:                                       # and beats the current stop
+                    beat = cur_sl + ud * (tr["sl_r"] * R + 0.05 * R)
+                    start = max(start, beat) if ud > 0 else min(start, beat)
+                btick = (self.row(pos["ref"]) if pos["basis"] == "underlying" else row).get("tick") or 0.05
+                v["trail_at"] = charges.round_tick(start, btick, ud)
+                v["r_pts"] = round(R, 4)            # figures at an underlying stop use the option's delta
         return v
 
     def order_view(self, o) -> dict:

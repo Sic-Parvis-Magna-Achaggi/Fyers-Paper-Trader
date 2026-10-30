@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.5.2 — 30 Oct 2026 — Trailing made visible
+
+Added
+- Each position's bar now shows where Trail SL will move the stop: "moves past 14,050" before it
+  starts, "next 14,046" while it's trailing. Hover for the working: 1R in points (first entry to first
+  stop), the trail distance, and the price to pass
+
+Notes
+- Trailing wasn't broken: with BE-T already at break-even, a Trail SL 2R behind the best price is
+  further away than the BE stop, so the stop correctly stays at BE until price makes a new best beyond
+  the "moves past" price; then it follows. Switching TRAIL on after BE-T has fired works the same way
+
 ## v0.5.1 — 30 Oct 2026 — Candle timer
 
 Added
