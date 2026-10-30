@@ -1,4 +1,4 @@
-# Paper trading: how it works (v0.5.0)
+# Paper trading: how it works (v0.5.1)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -40,6 +40,15 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
   - Right-click one (or long-press on a phone) to pin or unpin it.
 - Timeframes Fyers doesn't serve directly are built from smaller candles, starting at the session open (09:00 for MCX).
 - **⛶ or F** maximises the chart inside the browser window, so your tabs stay one click away. **Shift+F** gives real full screen. When maximised, **P** (or Panel) slides the trade panel in, its **✕** hides it, and **Esc** goes back to the normal view.
+
+## Candle timer
+
+The time left in the current candle shows on the price scale, just under the bid / ask / last labels, and in the chart's top bar.
+- The day's last candle counts down to the session close.
+- On 1D, 1W and 1M it shows the time to today's close.
+- Outside trading hours it says "market closed".
+
+Turn it on or off in Chart settings (⚙).
 
 ## Volume and the order book
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5.1 — 30 Oct 2026 — Candle timer
+
+Added
+- Candle timer: the time left in the current candle, on the price scale just under the bid / ask /
+  last labels, and in the chart's top bar ("candle closes in 1:40"). Works on every timeframe,
+  including custom ones; the day's last candle counts down to the session close; on 1D / 1W / 1M it
+  shows the time to today's close; outside trading hours it says "market closed".
+  On / off in Chart settings (⚙). Session hours come from Fyers' contract list
+
 ## v0.5.0 — 30 Oct 2026 — Volume and order book
 
 Added

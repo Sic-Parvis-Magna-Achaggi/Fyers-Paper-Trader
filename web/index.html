@@ -98,6 +98,9 @@ section.chartwrap{display:grid;grid-template-rows:auto minmax(0,1fr);min-width:0
 #tfPick .row2{display:flex;gap:6px;margin-top:8px}
 #tfPick .row2 input{padding:4px 8px;font-size:12px}
 #tfPick .row2 button{padding:4px 10px;font-size:12px;white-space:nowrap}
+/* candle timer: sits on the price scale just under the current price, like TradingView */
+#ctimer{position:absolute;z-index:5;font-family:var(--mono);font-size:11px;line-height:16px;text-align:center;
+  background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:3px;pointer-events:none;padding:0 2px}
 /* order book */
 #bookBox{margin-top:8px;font-size:12px}
 .bk-h{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
@@ -313,6 +316,7 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
         <span class="sym" id="cSym">No symbol</span>
         <span class="ltp" id="cLtp"></span>
         <span class="meta" id="cMeta"></span>
+        <span class="meta mono" id="cTimer" title="Time left in the current candle"></span>
         <span class="spacer" style="flex:1"></span>
         <div class="tf" id="tf"></div>
         <button class="tfmore" id="bTf" title="All timeframes and custom">▾</button>
@@ -335,6 +339,7 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
         <div id="ctools"><button id="cBuy" title="Long tool">BUY</button><button id="cSell" title="Short tool">SELL</button></div>
         <div id="tool" class="hide"></div>
         <div id="posbars"></div>
+        <div id="ctimer" class="hide" title="Time left in this candle"></div>
       </div>
     </section>
     <section id="panel">
@@ -606,7 +611,7 @@ function cssVar(n){ return getComputedStyle(document.documentElement).getPropert
 const CHART_DEFAULTS = {up:"#22a06b", down:"#e2483d", bg:"", grid:true,
   bidC:"#a3abb8", bidS:0, bidOn:true, askC:"#e2483d", askS:0, askOn:true, lastC:"#e0b341", lastS:2, lastOn:true,
   entryC:"", entryS:2, slC:"#e2483d", slS:0, tpC:"#22a06b", tpS:0, beC:"#4f8cff", beS:1, orderC:"#4f8cff", orderS:2,
-  toolC:"#4f8cff", toolS:0, lossZ:"#e2483d", profitZ:"#22a06b", zoneA:20, volOn:true};
+  toolC:"#4f8cff", toolS:0, lossZ:"#e2483d", profitZ:"#22a06b", zoneA:20, volOn:true, timerOn:true};
 function chartCfg(){ return {...CHART_DEFAULTS, ...(prefGet("chart", {}) || {})}; }
 function cfgColor(k){ const c = chartCfg()[k]; return c || cssVar(k === "entryC" ? "--text" : "--bg"); }
 function buildChart(){
@@ -687,7 +692,8 @@ function renderCfg(){
     <div class="sec">Chart</div>
     <div class="cr"><span>Background</span><input type="color" data-k="bg" value="${hex("bg")}"><span class="muted" style="font-size:11px">${C.bg ? "" : "theme"}</span><span></span></div>
     <div class="cr"><span>Grid lines</span><span></span><span></span><input type="checkbox" data-k="grid" ${C.grid ? "checked" : ""}></div>
-    <div class="cr"><span>Volume strip</span><span></span><span></span><input type="checkbox" data-k="volOn" ${C.volOn ? "checked" : ""}></div>`;
+    <div class="cr"><span>Volume strip</span><span></span><span></span><input type="checkbox" data-k="volOn" ${C.volOn ? "checked" : ""}></div>
+    <div class="cr"><span>Candle timer</span><span></span><span></span><input type="checkbox" data-k="timerOn" ${C.timerOn ? "checked" : ""}></div>`;
   $("#cfgBody").innerHTML = h;
   $("#cfgBody").querySelectorAll("[data-k]").forEach(el => el.addEventListener("input", () => {
     const k = el.dataset.k, cfg = {...(prefGet("chart", {}) || {})};
@@ -970,6 +976,49 @@ document.addEventListener("keydown", e => {
   if(e.key === "Escape" && document.body.classList.contains("chartfs")) setFull(false);
 });
 if(prefGet("nopanel", false)) document.body.classList.add("nopanel");
+
+/* candle timer: time left until the current candle closes (the session's close for the last candle of the day) */
+function sessRange(){
+  const r = cur && sym[cur.s], m = /^(\d\d)(\d\d)-(\d\d)(\d\d)/.exec((r && r.sess) || (cur && cur.sess) || "");
+  return m ? [(+m[1]) * 60 + (+m[2]), (+m[3]) * 60 + (+m[4])] : [540, 1430];   // MCX default 09:00-23:50
+}
+function candleTimer(){
+  const el = $("#ctimer");
+  if(!el || !chart || !cur || !curPlan || !lastBar){ if(el) el.classList.add("hide"); return; }
+  const ts = Date.now() / 1000 + IST, day = Math.floor(ts / 86400) * 86400;
+  const [s0, s1] = sessRange(), open = day + s0 * 60, close = day + s1 * 60;
+  let txt;
+  if(ts < open || ts >= close) txt = "closed";
+  else {
+    let end;
+    if(curPlan.t.min){
+      let b = bucket(ts, curPlan);
+      if(!curPlan.agg && Math.floor(lastBar.time / 86400) === Math.floor(ts / 86400) && ts >= lastBar.time)
+        b = lastBar.time + Math.floor((ts - lastBar.time) / curPlan.sec) * curPlan.sec;   // Fyers' own alignment
+      end = Math.min(b + curPlan.sec, close);
+    } else end = close;                                   // D / W / M: today's session close
+    const left = Math.max(0, Math.round(end - ts)), h = Math.floor(left / 3600), m = Math.floor(left % 3600 / 60), sec = left % 60;
+    txt = (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(sec).padStart(2, "0");
+    if(!curPlan.t.min) txt = "close " + txt;
+  }
+  if(!chartCfg().timerOn){ el.classList.add("hide"); $("#cTimer").textContent = ""; return; }
+  $("#cTimer").textContent = txt === "closed" ? "market closed" : (curPlan.t.min ? "candle closes in " : "") + txt;
+  // under the bid / ask / last labels on the price scale. The chart pushes labels that are close together
+  // apart, so allow for the whole stack
+  const q = lastQuote && lastQuote.s === cur.s ? lastQuote : null;
+  const ys = [q && q.ask, q && (q.bid || q.ltp), q && q.ltp, lastBar.close]
+    .filter(v => v != null).map(v => series.priceToCoordinate(v)).filter(v => v != null).sort((a, b) => a - b);
+  if(!ys.length){ el.classList.add("hide"); return; }
+  const near = ys.filter(y => ys[ys.length - 1] - y < 18 * ys.length).length;
+  let aw = 60; try{ aw = chart.priceScale("right").width(); }catch(e){}
+  const box = $("#chart");
+  el.textContent = txt;
+  el.style.width = (aw - 4) + "px";
+  el.style.left = (box.clientWidth - aw + 2) + "px";
+  el.style.top = Math.min(box.clientHeight - 40, ys[ys.length - 1] + 10 + 18 * Math.ceil((near - 1) / 2)) + "px";
+  el.classList.remove("hide");
+}
+setInterval(candleTimer, 1000);
 
 function clock(){ $("#pClock").textContent = new Date().toLocaleTimeString("en-GB",{timeZone:"Asia/Kolkata"}) + " IST"; }
 async function boot(){
