@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 
 from . import auth, charges, fyers_link, logbuf, store, symbols
+from . import candles as candles_store
 from .feed import feed
 from .paper import Refused, engine
 
@@ -254,26 +255,24 @@ def option_chain(request: Request, u: str, exp: int = 0, ex: str = ""):
             "spot": sp["s"] if sp else None, "fut": fut["s"] if fut else None}
 
 
-_hist_cache: dict = {}
 _hist_inflight: dict = {}
 
 
 @app.get("/api/history")
-async def history(request: Request, symbol: str, res: str = "5", days: int = 5):
-    """Candles, cached for 45 s. A bigger range already in the cache serves smaller ones, and identical
-    requests that arrive together share one Fyers call."""
+async def history(request: Request, symbol: str, res: str = "5", days: int = 5, since: int = 0):
+    """Candles from the saved store (helper/candles.py): Fyers is asked only for what's new (at most every 45 s)
+    or for older days not saved yet. since: only candles from that time (the page's own saved copy has the rest).
+    Identical requests that arrive together share one call."""
     _need(request)
-    now = time.time()
-    for (s, r, d), (t, candles) in list(_hist_cache.items()):
-        if s == symbol and r == res and d >= days and now - t < 45:
-            return {"ok": True, "candles": candles, "cached": True}
+    if res not in fyers_link.RES:
+        return _err("bad resolution")
     key = (symbol, res, days)
     fut = _hist_inflight.get(key)
     if fut is None:
-        fut = asyncio.get_running_loop().run_in_executor(None, fyers_link.history, symbol, res, days)
+        fut = asyncio.get_running_loop().run_in_executor(None, candles_store.get, symbol, res, days)
         _hist_inflight[key] = fut
     try:
-        candles = await asyncio.shield(fut)
+        rows = await asyncio.shield(fut)
     except PermissionError as e:
         return _err(e, 409)
     except Exception as e:
@@ -281,10 +280,9 @@ async def history(request: Request, symbol: str, res: str = "5", days: int = 5):
         return _err(e, 502)
     finally:
         _hist_inflight.pop(key, None)
-    if len(_hist_cache) > 60:
-        _hist_cache.clear()
-    _hist_cache[key] = (time.time(), candles)
-    return {"ok": True, "candles": candles}
+    if since:
+        rows = [r for r in rows if r[0] >= since]
+    return {"ok": True, "candles": rows}
 
 
 @app.get("/api/prefs")

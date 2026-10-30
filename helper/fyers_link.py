@@ -205,9 +205,15 @@ def history(symbol: str, res: str, days: int) -> list:
     if res not in RES:
         raise ValueError("bad resolution")
     days = max(1, min(int(days), MAX_TOTAL.get(res, 198)))
-    chunk = CHUNK.get(res, 99)
     end = dt.datetime.now(IST).date()
-    start = end - dt.timedelta(days=days)
+    return history_range(symbol, res, end - dt.timedelta(days=days), end)
+
+
+def history_range(symbol: str, res: str, start, end) -> list:
+    """Candles between two dates (inclusive, IST), in chunks Fyers accepts."""
+    if res not in RES:
+        raise ValueError("bad resolution")
+    chunk = CHUNK.get(res, 99)
     out, a = [], start
     while a <= end:
         b = min(end, a + dt.timedelta(days=chunk))

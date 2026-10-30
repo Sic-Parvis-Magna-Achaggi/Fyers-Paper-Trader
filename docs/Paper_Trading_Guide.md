@@ -1,4 +1,4 @@
-# Paper trading: how it works (v0.10.0)
+# Paper trading: how it works (v0.11.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -101,9 +101,19 @@ Turn it on or off in Chart settings (⚙).
 - `overlay=true` scripts draw on the candles; others get their own pane.
 - **Supported:** plots (lines, step, circles, histogram, columns, area), hline, fill, bgcolor, barcolor, plotshape / plotchar / plotarrow, plotcandle, labels, lines, boxes, linefills, polylines, tables, inputs and request.security() for other timeframes.
 - Times are Indian time.
-- Each script sees the latest 1,500 bars and updates with live prices: each new bar, otherwise every 2 seconds (heavy scripts less often, so the page stays smooth).
+- **Bars of history** (⚙, per indicator): how many of the latest candles the script runs on, 500 to 50,000 (default 1,500). The chart loads the extra days it needs.
+- **Live updates** work like TradingView's. The full history runs once, then each price re-runs only the live bar. A new candle triggers one full re-run in the background, so drawings stay exact.
+- **Update** (⚙): *with every price* (the default) or *on candle close*. On candle close means one run per candle, which suits heavy scripts on long histories. The settings box shows the full-run and live-update times.
 - A script stuck in an endless loop is stopped with an error; the page keeps working.
 - Scripts run on PineTS, which covers most of Pine v5 / v6 but not every function. If one of your scripts errors, or draws differently from TradingView, send it over.
+
+## Saved candles
+
+Candles are saved on the server and in your browser.
+- A chart opens at once from your browser's copy, and only newer candles come from the server.
+- The server asks Fyers only for what's new, at most every 45 seconds per chart.
+- Older days are fetched once, the first time a chart or indicator needs them. So history keeps growing past what one Fyers request returns.
+- If you're logged out of Fyers, the saved chart still shows.
 
 ## Saved on the server
 

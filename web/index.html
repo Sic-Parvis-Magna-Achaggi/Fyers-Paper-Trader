@@ -996,12 +996,12 @@ document.addEventListener("DOMContentLoaded", () => $("#chart").addEventListener
   if(act === "src" && r.cfg.type === "pine"){ peOpen(r.cfg.scriptId); return; }
   legendFill(null); legendPlace();
 }));
-function indData(){
+function indData(skipPine){
   if(!series) return;
   setTimeout(() => legendFill(null), 0);
   const bars = series.data();
   for(const r of INDS){
-    if(r.cfg.type === "pine"){ pineRun(r); continue; }
+    if(r.cfg.type === "pine"){ if(!skipPine) pineRun(r); continue; }
     if(r.cfg.type === "volume"){
       const v = bars.map(b => ({time:b.time, value:volData[b.time] || 0, color:volColor(b)}));
       r.hist.setData(v);
@@ -1212,21 +1212,36 @@ async function openSymbol(row){
   loadHistory();
   paperOnSymbol(row);
 }
-async function loadHistory(){
-  if(!cur) return;
-  const my = ++histToken, msg = $("#chartMsg");
-  msg.textContent = "Loading…"; msg.classList.remove("hide");
-  if(!(S.fyers||{}).logged_in){ msg.textContent = "Log in to Fyers to load charts."; series.setData([]); return; }
-  const plan = tfPlan(tf); curPlan = plan;
-  const j = await api(`/api/history?symbol=${encodeURIComponent(cur.s)}&res=${plan.res}&days=${plan.days}`);
-  if(my !== histToken) return;
-  if(!j.ok){
-    msg.textContent = j.error || "Couldn't load the chart."; series.setData([]);
-    if(/busy/.test(j.error || "") && (histRetry = (histRetry || 0) + 1) <= 4){ msg.textContent = "Loading… (waiting for Fyers)"; setTimeout(() => { if(my === histToken) loadHistory(); }, 2500); }
-    return;
-  }
-  histRetry = 0;
-  let bars = (j.candles || []).map(c => ({time:c[0] + IST, open:c[1], high:c[2], low:c[3], close:c[4], vol:c[5] || 0}));
+/* chart history. The browser keeps a copy of every chart's candles (IndexedDB), so a chart opens at once from
+   it and only the candles since then come from the server - which keeps its own copy, so Fyers is asked even less.
+   Indicators that want more bars (Pine "Bars of history") make the chart load more days. */
+const CDB = {
+  p: null,
+  open(){ return this.p || (this.p = new Promise(res => { try{ const r = indexedDB.open("fyers-candles", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("c"); r.onsuccess = () => res(r.result); r.onerror = () => res(null); }catch(e){ res(null); } })); },
+  async get(k){ const db = await this.open(); if(!db) return null;
+    return new Promise(res => { try{ const q = db.transaction("c").objectStore("c").get(k); q.onsuccess = () => res(q.result || null); q.onerror = () => res(null); }catch(e){ res(null); } }); },
+  async put(k, v){ const db = await this.open(); if(!db) return;
+    try{ db.transaction("c", "readwrite").objectStore("c").put(v, k); }catch(e){}
+    // keep the 60 most recently used charts
+    let used = {}; try{ used = JSON.parse(localStorage.getItem("cdbUsed") || "{}"); }catch(e){}
+    used[k] = Date.now(); const ks = Object.keys(used).sort((a, b) => used[b] - used[a]);
+    for(const old of ks.slice(60)){ delete used[old]; try{ db.transaction("c", "readwrite").objectStore("c").delete(old); }catch(e){} }
+    try{ localStorage.setItem("cdbUsed", JSON.stringify(used)); }catch(e){} },
+};
+function sessMinutes(){
+  const r = cur && sym[cur.s], m = /^(\d\d)(\d\d)-(\d\d)(\d\d)/.exec((r && r.sess) || (cur && cur.sess) || "");
+  if(m){ const a = (+m[1]) * 60 + (+m[2]), b = (+m[3]) * 60 + (+m[4]); if(b > a) return b - a; }
+  return cur && /^MCX:/.test(cur.s) ? 900 : 375;
+}
+function histDays(plan){
+  const want = Math.max(0, ...indList().filter(c => c.type === "pine" && !c.hidden).map(c => +c.bars || (typeof PINE_BARS !== "undefined" ? PINE_BARS : 1500)));
+  if(!want || !plan.t.min) return plan.days;
+  const perDay = Math.max(1, sessMinutes() / plan.t.min);
+  return Math.min(400, Math.max(plan.days, Math.ceil(want / perDay * 7 / 5) + 3));    // 7/5: weekends
+}
+function aggBars(rows, plan){
+  let bars = rows.map(c => ({time:c[0] + IST, open:c[1], high:c[2], low:c[3], close:c[4], vol:c[5] || 0}));
   if(plan.agg){
     const out = [];
     for(const b of bars){
@@ -1236,6 +1251,10 @@ async function loadHistory(){
     }
     bars = out;
   }
+  return bars;
+}
+function renderCandles(rows, plan){
+  let bars = aggBars(rows, plan);
   volData = {}; for(const b of bars) volData[b.time] = b.vol;
   volCum = null;
   if(volSeries) volSeries.setData(bars.map(b => ({time:b.time, value:b.vol, color:volColor(b)})));
@@ -1244,11 +1263,59 @@ async function loadHistory(){
   indData();                                   // indicators follow the new candles (timeframe / contract change)
   series.applyOptions({priceFormat:{type:"price", precision:(String(cur.tick).split(".")[1]||"").length, minMove:cur.tick || 0.01}});
   lastBar = bars.length ? {...bars[bars.length - 1]} : null;
+  const msg = $("#chartMsg");
   msg.classList.toggle("hide", bars.length > 0);
   if(!bars.length) msg.textContent = "No candles for this range yet.";
   chart.timeScale().scrollToRealTime();
   if(last[cur.s]) bidAsk(last[cur.s]);
   drawLines();
+}
+/* new candles on top of what's on the chart: the candles are redrawn (quick), but indicators only run on the
+   new part - Pine scripts update their live bar, a new bar re-runs them once */
+function applyNewCandles(rows, plan){
+  const bars = aggBars(rows, plan), old = series.data();
+  if(!old.length || !bars.length || bars[0].time !== old[0].time && bars.length < old.length){ renderCandles(rows, plan); return; }
+  volData = {}; for(const b of bars) volData[b.time] = b.vol;
+  const live = lastBar && lastBar.time > bars[bars.length - 1].time ? {...lastBar} : null;   // a bar the ticks started that the server hasn't got yet
+  series.setData(bars.map(b => ({time:b.time, open:b.open, high:b.high, low:b.low, close:b.close})));
+  if(volSeries) volSeries.setData(bars.map(b => ({time:b.time, value:b.vol, color:volColor(b)})));
+  if(live){ series.update(live); volData[live.time] = volData[live.time] || 0; }
+  const L = live || bars[bars.length - 1];
+  lastBar = {time:L.time, open:L.open, high:L.high, low:L.low, close:L.close};
+  indData(true);                                // built-in indicators (Volume) recompute; Pine scripts:
+  if(INDS.length) indTick(lastBar);             // only the new part
+}
+async function loadHistory(){
+  if(!cur) return;
+  const my = ++histToken, msg = $("#chartMsg");
+  msg.textContent = "Loading…"; msg.classList.remove("hide");
+  const plan = tfPlan(tf); curPlan = plan;
+  const days = histDays(plan), key = cur.s + "|" + plan.res, wantFrom = Math.floor(Date.now() / 1000) - days * 86400;
+  const saved = await CDB.get(key);
+  if(my !== histToken) return;
+  const have = saved && saved.rows && saved.rows.length && saved.from <= wantFrom + 86400;
+  if(have) renderCandles(saved.rows.filter(r => r[0] >= wantFrom - 86400), plan);      // at once, from this browser
+  if(!(S.fyers||{}).logged_in){ if(!have){ msg.textContent = "Log in to Fyers to load charts."; series.setData([]); } return; }
+  const since = have ? saved.rows[saved.rows.length - 1][0] : 0;
+  const j = await api(`/api/history?symbol=${encodeURIComponent(cur.s)}&res=${plan.res}&days=${days}${since ? "&since=" + since : ""}`);
+  if(my !== histToken) return;
+  if(!j.ok){
+    if(have) return;                                                                      // keep showing the saved copy
+    msg.textContent = j.error || "Couldn't load the chart."; series.setData([]);
+    if(/busy/.test(j.error || "") && (histRetry = (histRetry || 0) + 1) <= 4){ msg.textContent = "Loading… (waiting for Fyers)"; setTimeout(() => { if(my === histToken) loadHistory(); }, 2500); }
+    return;
+  }
+  histRetry = 0;
+  const fresh = j.candles || [];
+  if(have){
+    const cut = fresh.length ? fresh[0][0] : Infinity;
+    const merged = saved.rows.filter(r => r[0] < cut).concat(fresh).slice(-120000);
+    CDB.put(key, {from: saved.from, rows: merged});
+    applyNewCandles(merged.filter(r => r[0] >= wantFrom - 86400), plan);
+  } else {
+    CDB.put(key, {from: wantFrom, rows: fresh});
+    renderCandles(fresh, plan);
+  }
 }
 let curPlan = null, histRetry = 0, volData = {};
 function liveBar(t){

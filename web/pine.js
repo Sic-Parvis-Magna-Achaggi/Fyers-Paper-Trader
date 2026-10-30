@@ -137,7 +137,7 @@ function pineBuild(r){
     r.anchor0.attachPrimitive(r.prim0);
   }
   r.tbl = document.createElement("div"); r.tbl.className = "pine-tbls"; pq("#chart").append(r.tbl);
-  r.cleanup = () => { r.tbl && r.tbl.remove(); r.dead = true; };
+  r.cleanup = () => { r.tbl && r.tbl.remove(); r.dead = true; if(r.pine && r.pine.sid) pineDrop(r.pine.sid); clearTimeout(r.pine && r.pine.tickTimer); };
 }
 function pineCleanup(r){ if(r.cleanup) r.cleanup(); }
 /* hlines and drawings count in the pane's price range (otherwise an hline-only pane has no scale) */
@@ -154,6 +154,8 @@ function pineAutoscale(r){
   return lo <= hi ? {priceRange: {minValue: lo, maxValue: hi}} : null;
 }
 
+/* full run: the whole history once (also after a new bar, to rebuild drawings exactly) */
+let pineGen = 0;
 async function pineRun(r){
   const P = r.pine; if(!P || r.dead || !series || !cur || r.cfg.hidden) return;
   if(!PINE.loaded){ await pineLoad(); if(r.dead) return; }
@@ -161,24 +163,59 @@ async function pineRun(r){
   if(!sc){ P.err = "script not found - deleted from your library?"; legendFill(null); return; }
   if(!P.res) P.title = pineTitleOf(sc.source) || sc.name;     // built before the library had loaded
   if(P.running){ P.dirty = true; return; }
-  const {candles, times, off} = pineCandles();
+  const {candles} = pineCandles(+r.cfg.bars || PINE_BARS);
   if(!candles.length) return;
-  P.running = true; P.dirty = false; P.lastRun = Date.now();
-  const res = await pineExec({code: sc.source, inputs: r.cfg.inputs || {}, candles, ticker: cur.s, tf: pineTf(), info: pineInfo()});
-  P.running = false;
-  if(r.dead || r.pine !== P) return;
+  P.running = true; P.dirty = false; P.lastRun = Date.now(); P.calc = true;
+  if(P.sid) pineDrop(P.sid);
+  const sid = P.sid = r.cfg.id + ":" + (++pineGen);
+  const res = await pineExec({op: "run", sid, code: sc.source, inputs: r.cfg.inputs || {}, candles, ticker: cur.s, tf: pineTf(), info: pineInfo()}, 120000);
+  P.running = false; P.calc = false;
+  if(r.dead || r.pine !== P){ pineDrop(sid); return; }
   if(res.inputs && res.inputs.length) P.meta = res.inputs;
-  if(!res.ok){ P.err = res.error + (res.line ? ` (line ${res.line})` : ""); }
-  else { P.err = null; P.ms = res.ms; P.off = off; P.times = times; P.n = times.length; pineApply(r, res, sc); }
+  if(!res.ok){ P.err = res.error + (res.line ? ` (line ${res.line})` : ""); P.sid = null; }
+  else { P.err = null; P.ms = res.ms; pineTimes(P, res); pineApply(r, res, sc); }
   legendFill(null);
   if(P.dirty) setTimeout(() => pineRun(r), 50);
+  else if(P.tickDirty) setTimeout(() => pineTick(r), 0);
 }
-/* live price: re-run on a new bar, otherwise at most every 2 s */
-function pineTick(r, bar){
-  const P = r.pine; if(!P || !P.times) return;
-  // heavy scripts (a few hundred ms per run) re-run less often, so the page stays smooth
-  const gap = Math.max(2000, 4 * (P.ms || 0));
-  if(bar.time > P.times[P.times.length - 1] || Date.now() - (P.lastRun || 0) > gap) pineRun(r);
+function pineDrop(sid){ try{ pineW && pineW.postMessage({op: "drop", sid}); }catch(e){} }
+/* the bars the worker ran on -> chart times and their place on the chart */
+function pineTimes(P, res){
+  P.times = (res.times || []).map(ms => Math.round(ms / 1000) + 19800);
+  P.n = P.times.length;
+  const d = series.data(), t0 = P.times[0];
+  let lo = 0, hi = d.length - 1;
+  while(lo < hi){ const m = (lo + hi) >> 1; if(d[m].time < t0) lo = m + 1; else hi = m; }
+  P.off = d.length && d[lo].time === t0 ? lo : Math.max(0, d.length - P.n);
+}
+/* live price: only the live bar is re-run (TradingView's way), so even long histories update in milliseconds.
+   A heavy last-bar calculation (like an analysis on barstate.islast) sets the pace: at most every 2 x its time. */
+async function pineTick(r){
+  const P = r.pine; if(!P || r.dead || r.cfg.hidden || !series) return;
+  if(!P.sid || !P.res){ if(!P.running) pineRun(r); return; }
+  if(r.cfg.update === "close"){                 // "on candle close": one full run per new bar, nothing in between
+    const d = series.data();
+    if(d.length && d[d.length - 1].time > P.times[P.n - 1] && !P.running) pineRun(r);
+    return;
+  }
+  if(P.running || P.ticking){ P.tickDirty = true; return; }
+  const gap = Math.max(250, 2 * (P.tms || 0)), wait = gap - (Date.now() - (P.lastTick || 0));
+  if(wait > 0){ if(!P.tickTimer) P.tickTimer = setTimeout(() => { P.tickTimer = null; pineTick(r); }, wait); return; }
+  const last = P.times[P.n - 1], d = series.data(), sec = tfPlan(tf).sec, bars = [];
+  for(let i = d.length - 1; i >= 0 && d[i].time >= last; i--){ const b = d[i], ms = (b.time - 19800) * 1000;
+    bars.unshift({open: b.open, high: b.high, low: b.low, close: b.close, volume: volData[b.time] || 0, openTime: ms, closeTime: ms + sec * 1000 - 1}); }
+  if(!bars.length){ pineRun(r); return; }
+  P.ticking = true; P.tickDirty = false; P.lastTick = Date.now();
+  const res = await pineExec({op: "tick", sid: P.sid, bars}, 30000);
+  P.ticking = false;
+  if(r.dead || r.pine !== P) return;
+  if(!res.ok){ if(res.stale){ P.sid = null; pineRun(r); } return; }
+  P.tms = res.ms;
+  const sc = pineScript(r.cfg.scriptId); if(!sc) return;
+  pineTimes(P, res); pineApply(r, res, sc);
+  if(!legendHover) legendFill(null);
+  if(res.newBar) setTimeout(() => pineRun(r), 30);          // rebuild drawings exactly once per new bar
+  else if(P.tickDirty) setTimeout(() => pineTick(r), 0);
 }
 
 const PLOT_KIND = st => /histogram|columns/.test(st) ? "hist" : /area/.test(st) ? "area" : st === "candle" || st === "bar" ? "candle" : "line";
@@ -604,7 +641,7 @@ function pineLegendParts(r, t){
     for(const o of P.order){ const v = P.vals[o.name][i], c = P.cols[o.name][i];
       if(o.kind === "candle" || !o.legend) continue;
       vals += ` <span style="color:${pcol(c || null, o.color)}">${pineFmt(P, v)}</span>`; }
-  } else if(!r.cfg.hidden) vals = ` <span class="lk">…</span>`;
+  } else if(!r.cfg.hidden) vals = ` <span class="lk">calculating…</span>`;
   return [name, vals];
 }
 /* hide / show: series off, drawings and tables off, and the script stops running while hidden */
@@ -631,6 +668,12 @@ function pineInputs(r){
   const opt = (o) => typeof o === "object" && o ? [o.value ?? o.title, o.title ?? o.value] : [o, o];
   const TFS = [["", "Chart"], ["1", "1m"], ["3", "3m"], ["5", "5m"], ["15", "15m"], ["30", "30m"], ["60", "1h"], ["120", "2h"], ["240", "4h"], ["D", "1D"], ["W", "1W"], ["M", "1M"]];
   let html = `<div class="pih"><b>${pesc(P.title)}</b><span class="muted"> · inputs</span><span style="flex:1"></span><button class="ghost" data-x>✕</button></div><div class="pib">`;
+  const bars = +r.cfg.bars || PINE_BARS, BARS = [500, 1000, 1500, 3000, 5000, 10000, 20000, 50000];
+  html += `<label class="pir" title="How many of the latest candles the script runs on. More = longer history, a slower first run; live updates stay fast."><span>Bars of history <span class="muted">(app setting)</span></span>
+    <select data-bars>${(BARS.includes(bars) ? BARS : [...BARS, bars].sort((a, b) => a - b)).map(n => `<option value="${n}" ${n === bars ? "selected" : ""}>${n.toLocaleString("en-IN")}</option>`).join("")}</select></label>
+    <label class="pir" title="Every price: the live bar is re-run on each price (TradingView's way). On candle close: once per new candle - for heavy scripts on long histories."><span>Update <span class="muted">(app setting)</span></span>
+    <select data-upd><option value="tick">With every price</option><option value="close" ${r.cfg.update === "close" ? "selected" : ""}>On candle close</option></select></label>
+    <div class="muted" style="font-size:11.5px;margin-top:4px">${P.n ? `Runs on ${P.n.toLocaleString("en-IN")} bars now${P.n < bars ? " (all the chart has loaded)" : ""} · full run ${P.ms ?? "–"} ms · live update ${P.tms ?? "–"} ms` : ""}</div>`;
   if(!meta.length) html += `<div class="muted" style="padding:8px 0">This script has no inputs${P.err ? " (or it didn't compile)" : ""}.</div>`;
   let grp = null;
   meta.forEach((m, n) => {
@@ -657,6 +700,16 @@ function pineInputs(r){
     if(m.type === "int" || m.type === "float"){ if(m.minval != null && v < m.minval) v = m.minval; if(m.maxval != null && v > m.maxval) v = m.maxval; }
     save(it => { it.inputs = {...(it.inputs || {}), [k]: v}; });
   }));
+  box.querySelector("[data-upd]").onchange = e => {
+    const l = indList(), it = l.find(x => x.id === r.cfg.id); if(!it) return;
+    if(e.target.value === "close") it.update = "close"; else delete it.update;
+    indSave(l); r.cfg.update = it.update;
+  };
+  box.querySelector("[data-bars]").onchange = e => {
+    const l = indList(), it = l.find(x => x.id === r.cfg.id); if(!it) return;
+    it.bars = +e.target.value; indSave(l); r.cfg.bars = it.bars;
+    loadHistory();                                // more bars may need more days of candles; the saved copies make this quick
+  };
   box.querySelector("[data-def]").onclick = () => { save(it => { it.inputs = {}; }); setTimeout(() => pineInputs(INDS.find(x => x.cfg.id === r.cfg.id) || r), 300); };
   box.querySelectorAll("[data-x]").forEach(b => b.onclick = () => box.classList.add("hide"));
 }

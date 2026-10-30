@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.11.0 — 30 Oct 2026 — Speed: saved candles, Pine scripts update only the live bar
+
+Added
+- Saved candles, on the server and in your browser:
+  - The server keeps every candle it fetches (data/candles.db). Fyers is asked only for what's new since
+    last time (at most every 45 s per chart), or for older days not saved yet. Asking for a longer
+    history fetches the older part once, and the history keeps growing past what one Fyers request gives.
+  - Your browser keeps its own copy (IndexedDB, last 60 charts). A chart opens at once from it, then only
+    the newer candles come from the server. If Fyers is logged out, the saved chart still shows.
+  - New candles are drawn without re-running indicators from scratch.
+- Pine scripts run like TradingView's:
+  - The full history runs once. After that each price re-runs only the live bar: about 1 ms for simple
+    scripts, and about 0.3 s for the Regime script on 1,500 bars (it was a full 2.4 s re-run).
+  - A new candle triggers one full re-run in the background, so labels and lines drawn on the old last
+    candle are rebuilt exactly.
+  - "Bars of history" per indicator (⚙): 500 to 50,000. The chart loads the extra days it needs.
+  - "Update" per indicator (⚙): with every price, or on candle close (for heavy scripts on long
+    histories: one run per candle, nothing in between).
+  - The settings box shows how many bars the script ran on and how long a full run and a live update take.
+  - While the first run is working, the read-out says "calculating…".
+
+Measured (Regime script, this test machine; your PC may differ):
+- 1,500 bars: full run 2.4 s, live update 0.3 s.
+- 5,000 bars: full 5.3 s, live 0.7–1.0 s.
+- 20,000 bars: full 18.7 s, live 2.6–3.0 s. Its big analysis runs on the last bar, so each live update
+  repeats it. "On candle close" suits it there.
+
 ## v0.10.0 — 30 Oct 2026 — Full pages; NSE and BSE: stocks, indices, F&O, currency
 
 Added
