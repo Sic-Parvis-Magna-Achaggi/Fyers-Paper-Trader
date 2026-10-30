@@ -82,7 +82,7 @@ section.chartwrap{display:grid;grid-template-rows:auto minmax(0,1fr);min-width:0
 .charthead .sym,.charthead .ltp{flex:0 0 auto}
 .charthead .spacer{flex:1 1 0;min-width:0}
 .charthead .tf{flex:0 1 auto;min-width:0;flex-wrap:wrap;height:26px;overflow:hidden;overflow:clip}   /* buttons that don't fit drop out whole; ▾ has them all */
-.charthead .meta{flex:0 1 auto}
+.charthead .meta{flex:0 100 auto}   /* the bid / ask text gives way first (they're on the price scale anyway) */
 .charthead .fsb,.charthead .tfmore{flex:0 0 auto}
 .charthead .meta{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .charthead .sym{font-family:var(--mono);font-weight:500}
@@ -128,6 +128,19 @@ section.chartwrap{display:grid;grid-template-rows:auto minmax(0,1fr);min-width:0
 .bk-stats div{display:flex;justify-content:space-between}
 .bk-stats span:first-child{color:var(--muted)}
 .bk-stats span:last-child{font-family:var(--mono)}
+/* indicators popover */
+#indPick{position:absolute;right:10px;top:42px;z-index:31;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;width:320px;max-height:calc(100% - 60px);overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.35);font-size:12.5px}
+#indPick .cfgh{display:flex;align-items:center;margin-bottom:6px}
+#indPick .cfgh b{flex:1}
+#indPick .sec{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:10px 0 4px}
+#indPick .ind{border:1px solid var(--line);border-radius:6px;padding:6px 8px;margin-top:6px}
+#indPick .ih{display:flex;align-items:center;gap:6px}
+#indPick .ih .sp{flex:1}
+#indPick .ih button{padding:2px 8px;font-size:12px}
+#indPick .ir{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0 0;color:var(--text);font-size:12px}
+#indPick .ir input[type=number]{width:70px;padding:2px 6px}
+#indPick .ir input[type=color]{width:34px;height:22px;padding:0;border:1px solid var(--line);border-radius:4px;background:none}
+#indPick .ir input[type=checkbox]{width:16px;height:16px}
 /* chart settings popover */
 #cfgPick{position:absolute;right:10px;top:42px;z-index:31;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;width:330px;max-height:calc(100% - 60px);overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.35);font-size:12.5px}
 #cfgPick .cfgh{display:flex;align-items:center;margin-bottom:6px}
@@ -328,6 +341,7 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
         <span class="spacer" style="flex:1"></span>
         <div class="tf" id="tf"></div>
         <button class="tfmore" id="bTf" title="All timeframes and custom">▾</button>
+        <button class="ghost fsb" id="bInd" title="Indicators">ƒx</button>
         <button class="ghost fsb" id="bCfg" title="Chart settings: colours and line styles">⚙</button>
         <button class="ghost fsb" id="bPanel" title="Show or hide the trade panel (P)">Panel</button>
         <button class="ghost fsb" id="bFull" title="Maximise the chart in this window (F · Shift+F = full screen)">⛶</button>
@@ -337,6 +351,10 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
         <div class="grid" id="tfGrid"></div>
         <div class="row2"><input id="tfCustom" placeholder="e.g. 7m, 2h, 4h, 1D, 1W, 1M" autocomplete="off"><button id="tfAdd">Use</button></div>
         <div class="err" id="tfErr" style="min-height:0"></div>
+      </div>
+      <div id="indPick" class="hide">
+        <div class="cfgh"><b>Indicators</b><button class="ghost" id="indClose">✕</button></div>
+        <div id="indBody"></div>
       </div>
       <div id="cfgPick" class="hide">
         <div class="cfgh"><b>Chart settings</b><button class="ghost" id="cfgClose">✕</button></div>
@@ -642,31 +660,117 @@ function buildChart(){
   // MT5-style quote lines: bid, ask and the last traded price (the candle's close), each with its price on the scale
   const mk = () => series.createPriceLine({price:0, color:"#888", lineWidth:1, lineStyle:0, axisLabelVisible:false, lineVisible:false, title:""});
   bidLine = mk(); askLine = mk(); lastLine = mk();
-  volSeries = null;
+  volSeries = null; INDS = [];
   volLayout();
+  indBuild();
   setTimeout(positionTools, 60);
-  // remember the volume pane's height when you drag the divider
-  el.addEventListener("mouseup", () => setTimeout(() => {
-    const ps = chart && chart.panes(); if(!ps || ps.length < 2) return;
-    const h = Math.round(ps[1].getHeight()); if(h > 20 && h !== prefGet("volH", 0)) prefSet("volH", h);
-  }, 50));
+  // remember each indicator pane's height when you drag a divider
+  el.addEventListener("mouseup", () => setTimeout(indSaveHeights, 50));
 }
 let volSeries = null, volCum = null;
-/* volume lives in its own pane under the candles (drag the divider to resize; on / off in Chart settings) */
+/* volume under the candles, in the candle pane (Chart settings tick box) */
 function volLayout(){
   const on = chartCfg().volOn;
   if(on && !volSeries){
-    volSeries = chart.addSeries(LightweightCharts.HistogramSeries, {priceFormat:{type:"volume"}, lastValueVisible:true, priceLineVisible:false}, 1);
-    volSeries.priceScale().applyOptions({scaleMargins:{top:0.15, bottom:0}});
-    const ps = chart.panes(), total = (ps[0].getHeight() + (ps[1] ? ps[1].getHeight() : 0)) || 400;
-    const want = prefGet("volH", 0) || Math.round(total * 0.2);
-    if(ps[1]) ps[1].setHeight(Math.max(40, Math.min(want, total - 120)));
+    volSeries = chart.addSeries(LightweightCharts.HistogramSeries, {priceFormat:{type:"volume"}, priceScaleId:"volov", lastValueVisible:false, priceLineVisible:false}, 0);
+    chart.priceScale("volov", 0).applyOptions({scaleMargins:{top:0.82, bottom:0}, visible:false});
     if(series && series.data().length) volSeries.setData(series.data().map(b => ({time:b.time, value:(volData[b.time] || 0), color:volColor(b)})));
-  } else if(!on && volSeries){
-    chart.removeSeries(volSeries); volSeries = null;
-    if(chart.panes().length > 1) chart.removePane(1);
+  } else if(!on && volSeries){ chart.removeSeries(volSeries); volSeries = null; }
+  series.priceScale().applyOptions({scaleMargins: on ? {top:0.08, bottom:0.22} : {top:0.08, bottom:0.08}});
+}
+
+/* ---------------------------------------------------------------- indicators
+   Each indicator on the chart is saved in your preferences ("indicators") and gets its own pane below the
+   candles. Built-in for now: Volume (with an optional moving average). Pine scripts (PineTS) plug in here next. */
+const IND_TYPES = {
+  volume: {name: "Volume", desc: "Volume bars in their own pane, with an optional moving average",
+    defaults: {ma: true, maLen: 20, maColor: "#e0b341"},
+    settings: [["ma", "Moving average", "bool"], ["maLen", "MA length", "int"], ["maColor", "MA colour", "color"]]},
+};
+let INDS = [];                                   // what's on the chart now: {cfg, pane, series[], data()}
+function indList(){ return (prefGet("indicators", []) || []).filter(c => IND_TYPES[c.type]); }
+function indSave(list){ prefSet("indicators", list); }
+function indBuild(){
+  if(!chart) return;
+  for(const r of INDS) for(const sr of r.series){ try{ chart.removeSeries(sr); }catch(e){} }
+  INDS = [];
+  while(chart.panes().length > 1) chart.removePane(chart.panes().length - 1);
+  const total = chart.panes()[0].getHeight() || 400;
+  for(const cfg of indList()){
+    const t = IND_TYPES[cfg.type], c = {...t.defaults, ...cfg}, pane = chart.panes().length;
+    const r = {cfg: c, pane, series: []};
+    if(cfg.type === "volume"){
+      r.hist = chart.addSeries(LightweightCharts.HistogramSeries, {priceFormat:{type:"volume"}, lastValueVisible:true, priceLineVisible:false, title:"Vol"}, pane);
+      r.hist.priceScale().applyOptions({scaleMargins:{top:0.15, bottom:0}});
+      r.series.push(r.hist);
+      if(c.ma){ r.ma = chart.addSeries(LightweightCharts.LineSeries, {color:c.maColor, lineWidth:1, lastValueVisible:false, priceLineVisible:false,
+        crosshairMarkerVisible:false, priceFormat:{type:"volume"}}, pane); r.series.push(r.ma); }
+    }
+    INDS.push(r);
+    const ps = chart.panes(); if(ps[pane]) ps[pane].setHeight(Math.max(40, c.h || Math.round(total * 0.22)));
+  }
+  indData();
+}
+function indData(){
+  if(!series) return;
+  const bars = series.data();
+  for(const r of INDS){
+    if(r.cfg.type === "volume"){
+      const v = bars.map(b => ({time:b.time, value:volData[b.time] || 0, color:volColor(b)}));
+      r.hist.setData(v);
+      if(r.ma){ const n = Math.max(1, +r.cfg.maLen || 20), out = []; let sum = 0;
+        for(let i = 0; i < v.length; i++){ sum += v[i].value; if(i >= n) sum -= v[i - n].value; if(i >= n - 1) out.push({time:v[i].time, value:sum / n}); }
+        r.ma.setData(out); }
+    }
   }
 }
+function indTick(bar){
+  for(const r of INDS){
+    if(r.cfg.type === "volume"){
+      r.hist.update({time:bar.time, value:volData[bar.time] || 0, color:volColor(bar)});
+      if(r.ma){ const n = Math.max(1, +r.cfg.maLen || 20), d = r.hist.data(); if(d.length >= n){
+        let sum = 0; for(let i = d.length - n; i < d.length; i++) sum += d[i].value; r.ma.update({time:bar.time, value:sum / n}); } }
+    }
+  }
+}
+function indSaveHeights(){
+  if(!chart || !INDS.length) return;
+  const ps = chart.panes(), list = indList(); let changed = false;
+  INDS.forEach((r, i) => { const h = ps[r.pane] && Math.round(ps[r.pane].getHeight()); if(h > 20 && list[i] && list[i].h !== h){ list[i].h = h; changed = true; } });
+  if(changed) indSave(list);
+}
+function renderIndPick(){
+  const list = indList();
+  let h = `<div class="sec">On this chart</div>`;
+  h += list.length ? list.map((c, i) => {
+    const t = IND_TYPES[c.type], v = {...t.defaults, ...c};
+    return `<div class="ind" data-i="${i}"><div class="ih"><b>${t.name}</b><span class="sp"></span>
+      <button class="ghost" data-a="set" title="Settings">⚙</button><button class="ghost" data-a="del" title="Remove">✕</button></div>
+      <div class="iset hide">${t.settings.map(([k, label, kind]) => `<label class="ir"><span>${label}</span>${
+        kind === "bool" ? `<input type="checkbox" data-k="${k}" ${v[k] ? "checked" : ""}>` :
+        kind === "color" ? `<input type="color" data-k="${k}" value="${v[k]}">` :
+        `<input type="number" data-k="${k}" value="${v[k]}" min="1" max="500">`}</label>`).join("")}</div></div>`;
+  }).join("") : `<div class="empty" style="padding:6px 0">No indicators yet.</div>`;
+  h += `<div class="sec">Add</div>` + Object.entries(IND_TYPES).map(([k, t]) =>
+    `<div class="ind"><div class="ih"><b>${t.name}</b><span class="sp"></span><button data-add="${k}">+ Add</button></div><div class="help" style="margin:0">${t.desc}</div></div>`).join("")
+    + `<div class="ind muted" style="font-size:12px">Your Pine Script indicators come next: paste a script here and it runs on this chart.</div>`;
+  $("#indBody").innerHTML = h;
+  $("#indBody").querySelectorAll("[data-add]").forEach(b => b.onclick = () => { const l = indList(); l.push({type: b.dataset.add, id: Date.now().toString(36)}); indSave(l); indBuild(); renderIndPick(); });
+  $("#indBody").querySelectorAll(".ind[data-i]").forEach(el => {
+    const i = +el.dataset.i;
+    el.querySelector('[data-a="del"]').onclick = () => { const l = indList(); l.splice(i, 1); indSave(l); indBuild(); renderIndPick(); };
+    el.querySelector('[data-a="set"]').onclick = () => el.querySelector(".iset").classList.toggle("hide");
+    el.querySelectorAll(".iset [data-k]").forEach(inp => inp.addEventListener("change", () => {
+      const l = indList(); l[i][inp.dataset.k] = inp.type === "checkbox" ? inp.checked : inp.type === "number" ? (+inp.value || 1) : inp.value;
+      indSave(l); indBuild();
+    }));
+  });
+}
+$("#bInd").onclick = e => { e.stopPropagation(); renderIndPick(); $("#indPick").classList.toggle("hide"); $("#cfgPick").classList.add("hide"); $("#tfPick").classList.add("hide"); };
+$("#indClose").onclick = () => $("#indPick").classList.add("hide");
+// clicks inside these menus re-draw their contents, so don't let them reach the "click outside closes" handlers
+for(const id of ["#indPick", "#cfgPick", "#tfPick"]) $(id).addEventListener("click", e => { if(!e.target.closest("#indClose,#cfgClose")) e.stopPropagation(); });
+document.addEventListener("click", e => { if(!e.target.closest("#indPick,#bInd")) $("#indPick").classList.add("hide"); });
 function volColor(b){ const C = chartCfg(); return rgbaHex(b.close >= b.open ? C.up : C.down, 0.45); }
 function rgbaHex(hex, a){ const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(hex || ""); if(!m) return hex;
   return `rgba(${parseInt(m[1], 16)},${parseInt(m[2], 16)},${parseInt(m[3], 16)},${a})`; }
@@ -691,6 +795,7 @@ function applyChartCfg(){
   series.applyOptions({upColor:C.up, downColor:C.down, wickUpColor:C.up, wickDownColor:C.down});
   volLayout();
   if(volSeries) volSeries.setData(series.data().map(b => ({time:b.time, value:(volData[b.time] || 0), color:volColor(b)})));
+  indData();
   chart.applyOptions({layout:{background:{type:"solid", color:C.bg || cssVar("--bg")}}, grid:{horzLines:{visible:!!C.grid, color:cssVar("--line")}}});
   if(lastQuote && cur && lastQuote.s === cur.s) bidAsk(lastQuote);
   if(typeof drawLines === "function") drawLines();
@@ -729,7 +834,7 @@ function renderCfg(){
     <div class="sec">Chart</div>
     <div class="cr"><span>Background</span><input type="color" data-k="bg" value="${hex("bg")}"><span class="muted" style="font-size:11px">${C.bg ? "" : "theme"}</span><span></span></div>
     <div class="cr"><span>Grid lines</span><span></span><span></span><input type="checkbox" data-k="grid" ${C.grid ? "checked" : ""}></div>
-    <div class="cr"><span>Volume pane</span><span></span><span></span><input type="checkbox" data-k="volOn" ${C.volOn ? "checked" : ""}></div>
+    <div class="cr"><span>Volume under candles</span><span></span><span></span><input type="checkbox" data-k="volOn" ${C.volOn ? "checked" : ""}></div>
     <div class="cr"><span>Candle timer</span><span></span><span></span><input type="checkbox" data-k="timerOn" ${C.timerOn ? "checked" : ""}></div>
     <div class="sec">BUY / SELL buttons</div>
     <div class="cr" style="grid-template-columns:1fr 150px"><span>Corner</span><select data-k="btnCorner">
@@ -745,7 +850,7 @@ function renderCfg(){
     prefSet("chart", cfg); applyChartCfg();
   }));
 }
-$("#bCfg").onclick = e => { e.stopPropagation(); renderCfg(); $("#cfgPick").classList.toggle("hide"); $("#tfPick").classList.add("hide"); };
+$("#bCfg").onclick = e => { e.stopPropagation(); renderCfg(); $("#cfgPick").classList.toggle("hide"); $("#tfPick").classList.add("hide"); $("#indPick").classList.add("hide"); };
 $("#cfgClose").onclick = () => $("#cfgPick").classList.add("hide");
 $("#cfgReset").onclick = () => { prefSet("chart", {}); renderCfg(); applyChartCfg(); };
 document.addEventListener("click", e => { if(!e.target.closest("#cfgPick,#bCfg")) $("#cfgPick").classList.add("hide"); });
@@ -828,6 +933,7 @@ async function loadHistory(){
   if(volSeries) volSeries.setData(bars.map(b => ({time:b.time, value:b.vol, color:volColor(b)})));
   bars = bars.map(b => ({time:b.time, open:b.open, high:b.high, low:b.low, close:b.close}));
   series.setData(bars);
+  indData();                                   // indicators follow the new candles (timeframe / contract change)
   series.applyOptions({priceFormat:{type:"price", precision:(String(cur.tick).split(".")[1]||"").length, minMove:cur.tick || 0.01}});
   lastBar = bars.length ? {...bars[bars.length - 1]} : null;
   msg.classList.toggle("hide", bars.length > 0);
@@ -852,6 +958,7 @@ function liveBar(t){
   else { lastBar.high = Math.max(lastBar.high, t.ltp); lastBar.low = Math.min(lastBar.low, t.ltp); lastBar.close = t.ltp; volData[b] = (volData[b] || 0) + dv; }
   series.update({...lastBar});
   if(volSeries) volSeries.update({time:b, value:volData[b] || 0, color:volColor(lastBar)});
+  if(INDS.length) indTick(lastBar);
   $("#chartMsg").classList.add("hide");
 }
 

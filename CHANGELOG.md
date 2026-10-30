@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.7.0 — 30 Oct 2026 — Indicators menu, Volume indicator
+
+Added
+- Indicators menu (ƒx above the chart): add, set up and remove indicators. Each indicator gets its own
+  pane below the candles; drag the divider to resize it (the height is remembered). Your indicators
+  are saved with your preferences, so every device shows the same set
+- Volume indicator: volume bars in their own pane with an optional moving average (on / off, length,
+  colour). This replaces the volume pane that v0.6.0 put in Chart settings
+- This is the menu your Pine Script indicators will plug into next
+
+Changed
+- Chart settings → "Volume under candles" is back: the volume strip at the bottom of the candle pane,
+  on / off with the tick box (as in v0.5.x)
+- The bid / ask text in the top bar gives way first when space is short, so more timeframe buttons stay visible
+
+Fixed
+- Clicking inside a menu above the chart could close it while you were still using it
+
 ## v0.6.1 — 30 Oct 2026 — BUY / SELL button position
 
 Added
