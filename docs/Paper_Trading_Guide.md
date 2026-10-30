@@ -1,4 +1,4 @@
-# Paper trading: how it works (v0.8.1)
+# Paper trading: how it works (v0.9.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -70,16 +70,20 @@ Turn it on or off in Chart settings (⚙).
 - **Save** (Ctrl+S) puts it in your library on the server; edit the name and Save to rename. **Save as** makes a copy. **Delete** removes it (and takes it off the chart).
 - **Add to chart** (Ctrl+Enter). When the script is already on the chart, the button says **Update on chart**. Saving also updates the chart.
 - **ƒx → My scripts** lists your library: **+ Add** puts a script on the chart, **{ }** opens it in the editor. You can add the same script twice with different inputs.
-- On the chart, each script's read-out shows its values for the bar under the cursor:
-  - **⚙** opens its inputs;
+- On the chart, each script's read-out shows its values for the bar under the cursor. Point at a read-out for its buttons:
+  - **👁** hides the indicator, or shows it again (a hidden script stops running);
+  - **⚙** opens its inputs (or double-click the name);
   - **{ }** opens the code;
   - **✕** removes it.
 
   Errors show in red there.
+- **Collapse:** the **▴** under the indicators on the candles folds them into "▸ N indicators". In a lower pane, **▾ / ▸** shows or hides that pane's values. Hidden and collapsed states are saved.
+- **Tooltips:** point at a label that has a tooltip to read it.
+- Scripts with their own pane can still draw on the candles (`force_overlay = true`), as on TradingView.
 - `overlay=true` scripts draw on the candles; others get their own pane.
 - **Supported:** plots (lines, step, circles, histogram, columns, area), hline, fill, bgcolor, barcolor, plotshape / plotchar / plotarrow, plotcandle, labels, lines, boxes, linefills, polylines, tables, inputs and request.security() for other timeframes.
 - Times are Indian time.
-- Each script sees the latest 1,500 bars and updates with live prices (each new bar, otherwise at most every 2 seconds).
+- Each script sees the latest 1,500 bars and updates with live prices: each new bar, otherwise every 2 seconds (heavy scripts less often, so the page stays smooth).
 - A script stuck in an endless loop is stopped with an error; the page keeps working.
 - Scripts run on PineTS, which covers most of Pine v5 / v6 but not every function. If one of your scripts errors, or draws differently from TradingView, send it over.
 

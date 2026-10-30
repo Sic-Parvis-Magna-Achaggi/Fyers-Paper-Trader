@@ -1,6 +1,6 @@
 /* Pine Script on the chart: your script library (saved on the server), the Pine Editor, and running
    scripts with PineTS in a Web Worker. Drawn with Lightweight Charts series, price lines and primitives.
-   Hooks used by the page (index.html): pineBuild, pineRun, pineTick, pineLegend, pineLayout, pineCleanup. */
+   Hooks used by the page (index.html): pineBuild, pineRun, pineTick, pineLegendParts, pineVisible, pineLayout, pineCleanup. */
 
 const PINE_BARS = 1500;                      // bars each script sees (the latest ones on the chart)
 const PINE = {scripts: [], loaded: false, loading: null};
@@ -127,8 +127,15 @@ function pineBuild(r){
   r.anchor = chart.addSeries(LightweightCharts.LineSeries, {lineVisible: false, pointMarkersVisible: false, crosshairMarkerVisible: false,
     lastValueVisible: false, priceLineVisible: false, autoscaleInfoProvider: () => pineAutoscale(r)}, r.pane);
   r.series.push(r.anchor);
-  r.prim = new PineDraw(r);
+  r.prim = new PineDraw(r, "own");
   r.anchor.attachPrimitive(r.prim);
+  if(!r.overlay){                              // force_overlay drawings / plots go on the candles
+    r.anchor0 = chart.addSeries(LightweightCharts.LineSeries, {lineVisible: false, pointMarkersVisible: false, crosshairMarkerVisible: false,
+      lastValueVisible: false, priceLineVisible: false}, 0);
+    r.series.push(r.anchor0);
+    r.prim0 = new PineDraw(r, "main");
+    r.anchor0.attachPrimitive(r.prim0);
+  }
   r.tbl = document.createElement("div"); r.tbl.className = "pine-tbls"; pq("#chart").append(r.tbl);
   r.cleanup = () => { r.tbl && r.tbl.remove(); r.dead = true; };
 }
@@ -148,7 +155,7 @@ function pineAutoscale(r){
 }
 
 async function pineRun(r){
-  const P = r.pine; if(!P || r.dead || !series || !cur) return;
+  const P = r.pine; if(!P || r.dead || !series || !cur || r.cfg.hidden) return;
   if(!PINE.loaded){ await pineLoad(); if(r.dead) return; }
   const sc = pineScript(r.cfg.scriptId);
   if(!sc){ P.err = "script not found - deleted from your library?"; legendFill(null); return; }
@@ -162,14 +169,16 @@ async function pineRun(r){
   if(r.dead || r.pine !== P) return;
   if(res.inputs && res.inputs.length) P.meta = res.inputs;
   if(!res.ok){ P.err = res.error + (res.line ? ` (line ${res.line})` : ""); }
-  else { P.err = null; P.off = off; P.times = times; P.n = times.length; pineApply(r, res, sc); }
+  else { P.err = null; P.ms = res.ms; P.off = off; P.times = times; P.n = times.length; pineApply(r, res, sc); }
   legendFill(null);
   if(P.dirty) setTimeout(() => pineRun(r), 50);
 }
 /* live price: re-run on a new bar, otherwise at most every 2 s */
 function pineTick(r, bar){
   const P = r.pine; if(!P || !P.times) return;
-  if(bar.time > P.times[P.times.length - 1] || Date.now() - (P.lastRun || 0) > 2000) pineRun(r);
+  // heavy scripts (a few hundred ms per run) re-run less often, so the page stays smooth
+  const gap = Math.max(2000, 4 * (P.ms || 0));
+  if(bar.time > P.times[P.times.length - 1] || Date.now() - (P.lastRun || 0) > gap) pineRun(r);
 }
 
 const PLOT_KIND = st => /histogram|columns/.test(st) ? "hist" : /area/.test(st) ? "area" : st === "candle" || st === "bar" ? "candle" : "line";
@@ -216,7 +225,7 @@ function pineApply(r, res, sc){
     if(st === "label" || /^drawing_|^table|^linefill/.test(st)) continue;
     if(hidden) continue;
     const kind = PLOT_KIND(st), color = pcol(o.color, PINE_BLUE), lw = Math.max(1, Math.min(4, +o.linewidth || 1));
-    const base = {title: "", lastValueVisible: true, priceLineVisible: false, priceFormat: pf,
+    const base = {title: "", visible: true, lastValueVisible: true, priceLineVisible: false, priceFormat: pf,
       autoscaleInfoProvider: r.overlay ? undefined : orig => pineMerge(orig(), [...(P.hlv || []), ...(P.dys || [])])};
     let opt;
     if(kind === "line"){
@@ -226,8 +235,10 @@ function pineApply(r, res, sc){
     else if(kind === "area") opt = {...base, lineColor: color, topColor: palpha(color, 0.35), bottomColor: palpha(color, 0.03), lineWidth: lw};
     else opt = {...base, upColor: color, downColor: color, wickUpColor: pcol(o.wickcolor, color), wickDownColor: pcol(o.wickcolor, color), borderVisible: true,
       borderUpColor: pcol(o.bordercolor, color), borderDownColor: pcol(o.bordercolor, color)};
-    const api = pineSeries(r, name, kind, opt);
-    keep.add(name); P.order.push({name, color, kind});
+    const fo = !!o.force_overlay && !r.overlay;
+    if(fo){ delete opt.autoscaleInfoProvider; opt.priceFormat = {type: "price", precision: tickDp, minMove: Math.pow(10, -tickDp)}; }
+    const api = pineSeries(r, name, kind, opt, fo ? 0 : r.pane);
+    keep.add(name); P.order.push({name, color, kind, legend: !/^(pane|none|data_window)$/.test(String(o.display || "all"))});
     const out = [], gaps = /br$/.test(st) || kind !== "line";
     for(let i = 0; i < P.n; i++){
       const t = P.times[i], v = vals[i], c = cols[i];
@@ -247,35 +258,37 @@ function pineApply(r, res, sc){
   for(const [name, s] of Object.entries(P.series)) if(!keep.has(name)){ try{ chart.removeSeries(s.api); }catch(e){} r.series = r.series.filter(x => x !== s.api); delete P.series[name]; }
   // barcolor: a second candle series over the chart's own, carrying only the coloured bars
   if(barc && r.overlay){
-    const api = pineSeries(r, "__barcolor__", "candle", {lastValueVisible: false, priceLineVisible: false, borderVisible: true});
+    const api = pineSeries(r, "__barcolor__", "candle", {visible: true, lastValueVisible: false, priceLineVisible: false, borderVisible: true});
     const byT = new Map(series.data().map(b => [b.time, b]));
     api.setData(P.times.map((t, i) => { const b = byT.get(t), c = barc[i]; return b && c ? {time: t, open: b.open, high: b.high, low: b.low, close: b.close, color: pcol(c), borderColor: pcol(c), wickColor: pcol(c)} : {time: t}; }));
   } else if(P.series.__barcolor__){ try{ chart.removeSeries(P.series.__barcolor__.api); }catch(e){} delete P.series.__barcolor__; }
   P.draw = res.drawings || {};
   // drawings convert prices with a series that has data: the candles (overlay), else the pane's first plot,
   // else the anchor, which then carries an invisible value so the pane has a scale (hlines / drawings only)
-  const ys = []; const D = P.draw;
+  const ys = []; const D = P.draw;   // (the _overlay sets are on the candles, not in this pane's range)
   for(const l of D.__lines__ || []) ys.push(l.y1, l.y2);
   for(const b of D.__boxes__ || []) ys.push(b.top, b.bottom);
   for(const l of D.__labels__ || []) ys.push(l.y);
   for(const pl of D.__polylines__ || []) for(const q of pl.points || []) ys.push(q.price);
   P.dys = ys.filter(v => v != null && isFinite(v));
-  const first = Object.entries(P.series).find(([k, x]) => k !== "__barcolor__");
+  const first = Object.entries(P.series).find(([k, x]) => k !== "__barcolor__" && x.pane === r.pane);
   P.yref = r.overlay ? series : first ? first[1].api : r.anchor;
   const v0 = !r.overlay && !first ? (P.hlv[0] ?? P.dys[0] ?? null) : null;
   try{ r.anchor.setData(P.times.map(t => v0 == null ? {time: t} : {time: t, value: v0})); }catch(e){}
+  if(r.anchor0) try{ r.anchor0.setData(P.times.map(t => ({time: t}))); }catch(e){}
   for(const h of hspec){ try{ P.hl.push([P.yref, P.yref.createPriceLine(h)]); }catch(e){} }   // price lines need a series with data
-  r.prim.update();
+  r.prim.update(); r.prim0 && r.prim0.update();
   pineTables(r);
 }
 const FULL_SHAPE = /shape|char|arrow/;
-function pineSeries(r, name, kind, opt){
+function pineSeries(r, name, kind, opt, pane){
   const P = r.pine; let s = P.series[name];
-  if(s && s.kind !== kind){ try{ chart.removeSeries(s.api); }catch(e){} r.series = r.series.filter(x => x !== s.api); s = null; }
+  pane = pane == null ? r.pane : pane;
+  if(s && (s.kind !== kind || s.pane !== pane)){ try{ chart.removeSeries(s.api); }catch(e){} r.series = r.series.filter(x => x !== s.api); s = null; }
   if(!s){
     const T = {line: "LineSeries", hist: "HistogramSeries", area: "AreaSeries", candle: "CandlestickSeries"}[kind];
-    const api = chart.addSeries(LightweightCharts[T], opt, r.pane);
-    s = P.series[name] = {kind, api}; r.series.push(api);
+    const api = chart.addSeries(LightweightCharts[T], opt, pane);
+    s = P.series[name] = {kind, api, pane}; r.series.push(api);
   } else s.api.applyOptions(opt);
   return s.api;
 }
@@ -284,13 +297,13 @@ function pineSeries(r, name, kind, opt){
 const PSIZE = {tiny: 9, small: 10.5, normal: 12, large: 15, huge: 20, auto: 11};
 const SHAPE_PX = {tiny: 6, small: 9, normal: 12, large: 18, huge: 26, auto: 9};
 class PineDraw {
-  constructor(r){ this.r = r; const self = this;
+  constructor(r, mode){ this.r = r; this.mode = mode || "own"; const self = this;
     this.views = [{zOrder: () => "bottom", renderer: () => ({draw: t => self.safe(t, "bg")})}, {zOrder: () => "top", renderer: () => ({draw: t => self.safe(t, "top")})}]; }
   attached(p){ this.req = p.requestUpdate; } detached(){ this.req = null; }
   update(){ this.req && this.req(); } updateAllViews(){} paneViews(){ return this.views; }
   safe(target, which){ try{ target.useMediaCoordinateSpace(s => this[which](s.context, s.mediaSize)); }catch(e){ console.warn("pine draw", e); } }
   env(){
-    const r = this.r, P = r.pine, ts = chart.timeScale(), A = P.yref || r.anchor, sec = tfPlan(tf).sec;
+    const r = this.r, P = r.pine, ts = chart.timeScale(), A = this.mode === "main" ? series : (P.yref || r.anchor), sec = tfPlan(tf).sec;
     const X = L => ts.logicalToCoordinate(L);
     const Y = p => p == null || !isFinite(p) ? null : A.priceToCoordinate(p);
     const tl = ms => {                          // a time (ms) -> logical index, beyond the last bar too
@@ -308,7 +321,7 @@ class PineDraw {
     return {P, X, Y, LX, tl, vr, sp, bars};
   }
   bg(ctx, size){
-    const P = this.r.pine; if(!P || !P.res) return;
+    const P = this.r.pine; if(!P || !P.res || this.r.cfg.hidden || this.mode === "main") return;
     const E = this.env(), {X, Y, vr, sp} = E;
     const i0 = Math.max(0, Math.floor(vr.from) - P.off - 1), i1 = Math.min(P.n - 1, Math.ceil(vr.to) - P.off + 1);
     for(const b of P.bg) for(let i = i0; i <= i1; i++){
@@ -336,14 +349,18 @@ class PineDraw {
     const v = P.vals[name]; return v ? {flat: false, at: i => v[i]} : null;
   }
   top(ctx, size){
-    const P = this.r.pine; if(!P || !P.res) return;
-    const E = this.env(), D = P.draw || {};
-    for(const b of D.__boxes__ || []) this.box(ctx, size, E, b);
-    for(const f of D.__linefills__ || []) this.linefill(ctx, E, f);
-    for(const l of D.__lines__ || []) this.line(ctx, size, E, l);
-    for(const pl of D.__polylines__ || []) this.poly(ctx, E, pl);
-    this.shapes(ctx, size, E);
-    for(const lb of D.__labels__ || []) this.label(ctx, E, lb);
+    const P = this.r.pine; if(!P || !P.res || this.r.cfg.hidden) return;
+    const E = this.env(), D0 = P.draw || {}, main = this.mode === "main";
+    this.hits = [];
+    // own pane: its drawings (plus the force_overlay ones when the script is on the candles anyway);
+    // the candle pane of a pane script: only the force_overlay ones
+    const pick = k => main ? (D0[`__${k}_overlay__`] || []) : [...(D0[`__${k}__`] || []), ...(this.r.overlay ? D0[`__${k}_overlay__`] || [] : [])];
+    for(const b of pick("boxes")) this.box(ctx, size, E, b);
+    for(const f of pick("linefills")) this.linefill(ctx, E, f);
+    for(const l of pick("lines")) this.line(ctx, size, E, l);
+    for(const pl of pick("polylines")) this.poly(ctx, E, pl);
+    if(!main) this.shapes(ctx, size, E);
+    for(const lb of pick("labels")) this.label(ctx, E, lb);
   }
   dash(ctx, st, w){ ctx.setLineDash(/dot/.test(st || "") ? [w, w * 2] : /dash/.test(st || "") ? [w * 4, w * 3] : []); }
   ends(E, x1, y1, x2, y2, ext, size){
@@ -406,7 +423,7 @@ class PineDraw {
     const L = lb.xloc === "bt" ? E.tl(lb.x) : E.P.off + lb.x; if(L == null) return;
     const x = E.X(L); if(x == null) return;
     const [hi, lo] = this.barHL(E, L);
-    const yl = lb.yloc || "pr", st = String(lb.style || "style_label_down").replace("style_", "");
+    const yl = lb.yloc || "pr", st = String(lb.style || "style_label_down").replace("style_", "").replace("lower_", "lower").replace("upper_", "upper");
     let y = yl === "ab" ? E.Y(hi) : yl === "bl" ? E.Y(lo) : E.Y(lb.y);
     if(y == null || !isFinite(y)) return;
     const bg = pcol(lb.color, PINE_BLUE), fs = PSIZE[lb.size] || 12;
@@ -417,6 +434,7 @@ class PineDraw {
       diamond: "diamond", xcross: "xcross", cross: "cross", flag: "flag"}[st];
     if(shape || st === "none" || st === "text_outline"){
       const sz = SHAPE_PX[lb.size] || 12;
+      if(lb.tooltip && this.hits) this.hits.push({x0: x - Math.max(sz, tw / 2) - 2, y0: y - Math.max(sz, th) - 2, x1: x + Math.max(sz, tw / 2) + 2, y1: y + Math.max(sz, th) + 2, tip: lb.tooltip});
       if(shape){ const up = /up/.test(shape); const yy = yl === "ab" ? y - sz / 2 - 3 : yl === "bl" ? y + sz / 2 + 3 : y; this.mark(ctx, shape, x, yy, sz, bg);
         if(lines.length){ ctx.fillStyle = pcol(lb.textcolor, bg); ctx.textAlign = "center"; ctx.textBaseline = "middle";
           const ty = up || yl === "bl" ? yy + sz / 2 + 4 + lh / 2 : yy - sz / 2 - 4 - th + lh / 2; lines.forEach((s, k) => ctx.fillText(s, x, ty + k * lh)); } }
@@ -424,14 +442,17 @@ class PineDraw {
       return;
     }
     const pad = 5, w = Math.max(tw + pad * 2, 10), h = Math.max(th + pad, 10), tip = 6;
+    const hit = (x0, y0, ww, hh) => { if(lb.tooltip && this.hits) this.hits.push({x0, y0, x1: x0 + ww, y1: y0 + hh, tip: lb.tooltip}); };
     let bx = x - w / 2, by;
     if(st === "label_up"){ by = y + tip; }
     else if(st === "label_left"){ bx = x + tip; by = y - h / 2; }
     else if(st === "label_right"){ bx = x - tip - w; by = y - h / 2; }
     else if(st === "label_center"){ by = y - h / 2; }
-    else if(st === "label_lowerleft"){ bx = x - w; by = y; } else if(st === "label_lowerright"){ bx = x; by = y; }
-    else if(st === "label_upperleft"){ bx = x - w; by = y - h; } else if(st === "label_upperright"){ bx = x; by = y - h; }
+    // lower_left = the point is the label's lower-left corner (the label sits up and to the right), and so on
+    else if(st === "label_lowerleft"){ bx = x; by = y - h; } else if(st === "label_lowerright"){ bx = x - w; by = y - h; }
+    else if(st === "label_upperleft"){ bx = x; by = y; } else if(st === "label_upperright"){ bx = x - w; by = y; }
     else { by = y - tip - h; }                    // label_down (the default)
+    hit(bx, by, w, h);
     ctx.fillStyle = bg; ctx.beginPath();
     if(ctx.roundRect) ctx.roundRect(bx, by, w, h, 3); else ctx.rect(bx, by, w, h);
     ctx.fill();
@@ -503,29 +524,60 @@ class PineDraw {
 const TSIZE = {tiny: "9px", small: "10.5px", normal: "12px", large: "15px", huge: "20px", auto: "12px"};
 function pineTables(r){
   if(!r.tbl) return;
-  const list = (r.pine.draw && r.pine.draw.__tables__) || [];
+  const D = r.pine.draw || {}, list = [...(D.__tables__ || []), ...(D.__tables_overlay__ || [])];
   r.tbl.innerHTML = list.map(t => {
     const pos = String(t.position || "top_right").replace("position.", "");
     const frame = +t.frame_width > 0 ? `outline:${+t.frame_width}px solid ${pcol(t.frame_color, "#888")};` : "";
     const bord = +t.border_width > 0 ? `${+t.border_width}px solid ${pcol(t.border_color, "#888")}` : "0";
     const rows = (t.cells || []).map(row => `<tr>${(row || []).map(c => !c ? `<td style="border:${bord}"></td>` : c._merge_parent ? "" :
       `<td style="border:${bord};${c.bgcolor ? `background:${pcol(c.bgcolor)};` : ""}color:${pcol(c.text_color, "#000")};font-size:${TSIZE[c.text_size] || "12px"};text-align:${c.text_halign === "left" ? "left" : c.text_halign === "right" ? "right" : "center"};vertical-align:${c.text_valign === "top" ? "top" : c.text_valign === "bottom" ? "bottom" : "middle"}"${c.tooltip ? ` title="${pesc(c.tooltip)}"` : ""}>${pesc(c.text).replace(/\n/g, "<br>")}</td>`).join("")}</tr>`).join("");
-    return `<table class="ptab" data-pos="${pos}" style="${t.bgcolor ? `background:${pcol(t.bgcolor)};` : ""}${frame}">${rows}</table>`;
+    return `<table class="ptab" data-pos="${pos}" data-ov="${t.force_overlay ? 1 : 0}" style="${t.bgcolor ? `background:${pcol(t.bgcolor)};` : ""}${frame}">${rows}</table>`;
   }).join("");
   pineLayout();
 }
+/* label tooltips, as on TradingView: hover a label that has one */
+document.addEventListener("DOMContentLoaded", () => {
+  const box = pq("#chart"); let tipEl = null;
+  const hide = () => { if(tipEl) tipEl.style.display = "none"; };
+  box.addEventListener("mouseleave", hide);
+  box.addEventListener("mousemove", e => {
+    if(!chart || !INDS.some(r => r.pine)) return hide();
+    const rc = box.getBoundingClientRect(), mx = e.clientX - rc.left, my = e.clientY - rc.top;
+    const top = []; let y = 0; chart.panes().forEach((p, k) => { top[k] = y; y += p.getHeight() + 1; });
+    let found = null;
+    for(const r of INDS){ if(!r.pine || r.cfg.hidden) continue;
+      for(const pr of [r.prim, r.prim0]){ if(!pr || !pr.hits) continue;
+        const py = my - (top[pr.mode === "main" ? 0 : r.pane] || 0);
+        for(let k = pr.hits.length - 1; k >= 0; k--){ const h = pr.hits[k]; if(mx >= h.x0 && mx <= h.x1 && py >= h.y0 && py <= h.y1){ found = h.tip; break; } }
+        if(found) break; }
+      if(found) break; }
+    if(!found) return hide();
+    if(!tipEl){ tipEl = document.createElement("div"); tipEl.className = "ptip"; box.append(tipEl); }
+    tipEl.textContent = found; tipEl.style.display = "block";
+    const w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+    tipEl.style.left = Math.min(mx + 14, box.clientWidth - w - 4) + "px";
+    tipEl.style.top = (my + 16 + h > box.clientHeight ? Math.max(0, my - h - 10) : my + 16) + "px";
+  });
+});
 /* tables sit in their pane's area; called whenever the legends are re-placed */
+function pineLegendBottom(){
+  // the candle read-out, then the indicators on the candles, then the collapse arrow (#lgdG, placed last)
+  let b = 30; for(const el of [pq("#lgd0"), pq("#lgdG")]) if(el && el.style.display !== "none") b = Math.max(b, el.offsetTop + el.offsetHeight + 4);
+  return b;
+}
 function pineLayout(){
   if(!chart) return;
   const ps = chart.panes(); let aw = 60; try{ aw = chart.priceScale("right").width() || 60; }catch(e){}
   const top = []; let y = 0; ps.forEach((p, k) => { top[k] = y; y += p.getHeight() + 1; });
   for(const r of INDS){
     if(!r.tbl || !r.pine) continue;
-    const pt = top[r.pane] || 0, ph = ps[r.pane] ? ps[r.pane].getHeight() : 0, w = pq("#chart").clientWidth - aw;
+    const w = pq("#chart").clientWidth - aw;
     r.tbl.querySelectorAll("table").forEach(t => {
+      const pn = t.dataset.ov === "1" ? 0 : r.pane, pt = top[pn] || 0, ph = ps[pn] ? ps[pn].getHeight() : 0;
       const [v, h] = (t.dataset.pos || "top_right").split("_");
       t.style.left = (h === "left" ? 6 : h === "center" ? Math.max(0, (w - t.offsetWidth) / 2) : Math.max(0, w - t.offsetWidth - 6)) + "px";
-      t.style.top = (pt + (v === "top" ? (r.pane === 0 ? 30 : 22) : v === "middle" ? Math.max(0, (ph - t.offsetHeight) / 2) : Math.max(0, ph - t.offsetHeight - 6))) + "px";
+      const under = pn === 0 ? pineLegendBottom() : 22;    // top tables go under the read-outs, as on TradingView
+      t.style.top = (pt + (v === "top" ? (h === "left" || pn !== 0 ? under : 6) : v === "middle" ? Math.max(0, (ph - t.offsetHeight) / 2) : Math.max(0, ph - t.offsetHeight - 6))) + "px";
     });
   }
 }
@@ -540,28 +592,35 @@ function pineInputsLine(r){
   const P = r.pine, m = (P.meta || []).filter(x => x.display !== "none" && !/color|bool|text_area|session/.test(x.type));
   return m.slice(0, 6).map(x => { const k = x.title || x.name || x.id, v = (r.cfg.inputs || {})[k] ?? x.defval; return Array.isArray(v) ? "" : String(v); }).filter(Boolean).join(" ");
 }
-function pineLegend(r, el, t){
+/* the read-out's name part and values part (index.html adds the buttons, hide / collapse states) */
+function pineLegendParts(r, t){
   const P = r.pine;
-  const acts = `<span class="la" data-pa="set" data-id="${r.cfg.id}" title="Settings">⚙</span><span class="la" data-pa="src" data-id="${r.cfg.id}" title="Source code">{ }</span><span class="la" data-pa="del" data-id="${r.cfg.id}" title="Remove">✕</span>`;
-  let h = `<b>${pesc(P.title)}</b>`;
-  const inl = P.meta ? pineInputsLine(r) : ""; if(inl) h += `<span class="lk">${pesc(inl)}</span> `;
-  if(P.err) h += `<span class="down">⚠ ${pesc(P.err.length > 90 ? P.err.slice(0, 90) + "…" : P.err)}</span>`;
+  let name = `<b>${pesc(P.title)}</b>`;
+  const inl = P.meta ? pineInputsLine(r) : ""; if(inl) name += `<span class="lk">${pesc(inl)}</span>`;
+  let vals = "";
+  if(P.err) vals = ` <span class="down">⚠ ${pesc(P.err.length > 90 ? P.err.slice(0, 90) + "…" : P.err)}</span>`;
   else if(P.res){
     let i = t != null ? P.idx.get(t) : undefined; if(i == null) i = P.n - 1;
     for(const o of P.order){ const v = P.vals[o.name][i], c = P.cols[o.name][i];
-      if(o.kind === "candle") continue;
-      h += ` <span style="color:${pcol(c || null, o.color)}">${pineFmt(P, v)}</span>`; }
-  } else h += `<span class="lk">…</span>`;
-  el.innerHTML = h + " " + acts;
+      if(o.kind === "candle" || !o.legend) continue;
+      vals += ` <span style="color:${pcol(c || null, o.color)}">${pineFmt(P, v)}</span>`; }
+  } else if(!r.cfg.hidden) vals = ` <span class="lk">…</span>`;
+  return [name, vals];
 }
-document.addEventListener("DOMContentLoaded", () => pq("#chart").addEventListener("click", e => {
-  const a = e.target.closest(".lgd .la"); if(!a) return;
-  e.stopPropagation();
-  const id = a.dataset.id, r = INDS.find(x => x.cfg.id === id);
-  if(a.dataset.pa === "del"){ const l = indList().filter(x => x.id !== id); indSave(l); indBuild(); }
-  if(a.dataset.pa === "set" && r) pineInputs(r);
-  if(a.dataset.pa === "src" && r) peOpen(r.cfg.scriptId);
-}));
+/* hide / show: series off, drawings and tables off, and the script stops running while hidden */
+function pineVisible(r){
+  const P = r.pine; if(!P) return;
+  if(r.cfg.hidden){
+    for(const s of Object.values(P.series)) s.api.applyOptions({visible: false});
+    for(const [owner, h] of P.hl) try{ owner.removePriceLine(h); }catch(e){}
+    P.hl = [];
+    if(r.tbl) r.tbl.style.display = "none";
+    r.prim && r.prim.update(); r.prim0 && r.prim0.update();
+  } else {
+    if(r.tbl) r.tbl.style.display = "";
+    pineRun(r);
+  }
+}
 
 /* ------------------------------------------------------------------ inputs dialog */
 function pineInputs(r){

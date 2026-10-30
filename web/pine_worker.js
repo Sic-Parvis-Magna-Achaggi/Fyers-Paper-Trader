@@ -4,7 +4,9 @@
    Other timeframes / symbols (request.security) are asked of the page: {need:{id, ticker, tf}} -> {data:{id, candles}} */
 import { PineTS, Indicator } from '/vendor/pinets/pinets.min.browser.es.js';
 
-const DRAW = new Set(['__labels__', '__lines__', '__boxes__', '__linefills__', '__polylines__', '__tables__']);
+// drawings: __lines__, __labels__, __boxes__, __linefills__, __polylines__, __tables__, and the same with
+// _overlay (force_overlay = true: drawn on the candles even when the script has its own pane)
+const DRAW = k => /^__\w+__$/.test(k);
 const FULL_OPTS = /shape|char|arrow/;          // these styles can change shape / place / text bar by bar
 const waiting = {};
 let ask = 0;
@@ -39,14 +41,14 @@ self.onmessage = async (e) => {
     console.log = log0;
     const plots = {}, drawings = {};
     for (const [k, p] of Object.entries(ctx.plots || {})) {
-      if (DRAW.has(k)) { drawings[k] = alive(lastValue(p)); continue; }
+      if (DRAW(k)) { drawings[k] = alive(lastValue(p)); continue; }
       const full = FULL_OPTS.test((p.options && p.options.style) || '');
       plots[k] = { options: p.options || {}, data: (p.data || []).map(d => full
         ? [d.time, d.value, d.options && d.options.color !== undefined ? d.options.color : undefined, d.options || null]
         : [d.time, d.value, d.options && d.options.color !== undefined ? d.options.color : undefined]) };
     }
     // a linefill whose lines are gone isn't drawn
-    if (drawings.__linefills__) drawings.__linefills__ = drawings.__linefills__.filter(f => f.line1 && f.line2 && !f.line1._deleted && !f.line2._deleted);
+    for (const k of ['__linefills__', '__linefills_overlay__']) if (drawings[k]) drawings[k] = drawings[k].filter(f => f.line1 && f.line2 && !f.line1._deleted && !f.line2._deleted);
     let indicator = {};
     try { indicator = JSON.parse(JSON.stringify(ctx.indicator || {})); } catch (_) {}
     const out = { id, ok: true, ms: Math.round(performance.now() - t0), bars: candles.length, indicator, inputs: meta, plots, drawings, logs };

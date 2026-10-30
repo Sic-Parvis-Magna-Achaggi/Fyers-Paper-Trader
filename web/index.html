@@ -166,9 +166,22 @@ section.chartwrap{display:grid;grid-template-rows:auto minmax(0,1fr) auto;min-wi
 .pd-errline{background:rgba(226,72,61,.18)!important}
 .CodeMirror-dialog{background:var(--panel2);color:var(--text);border-color:var(--line)!important}
 .CodeMirror-dialog input{width:20em;padding:2px 6px;background:var(--bg)}
-.lgd .la{pointer-events:auto;cursor:pointer;color:var(--muted);margin-left:6px;padding:0 3px;border-radius:3px;opacity:.75;font-family:var(--sans)}
-.lgd .la:hover{color:var(--text);background:var(--panel2);opacity:1}
+.lgd.lind{pointer-events:auto}
+.lgd .la,.lgdg .la{pointer-events:auto;cursor:pointer;color:var(--muted);padding:0 3px;border-radius:3px;font-family:var(--sans);display:inline-flex;align-items:center;vertical-align:middle;line-height:1.3}
+.lgd .la:hover,.lgdg .la:hover{color:var(--text);background:var(--panel2)}
+.lgd .lacts{display:none;margin-left:6px;gap:2px}
+.lgd.lind:hover .lacts,.lgd.off .lacts{display:inline-flex}
+.lgd.off .lacts .la:not(.leye){display:none}
+.lgd.lind:hover.off .lacts .la{display:inline-flex}
+.lgd .lchev{margin:0 3px 0 -3px;font-size:10px}
+.lgd .lname{cursor:pointer}
+.lgd.off .lname{opacity:.45}
+.lgd .leye.on{color:var(--warn)}
+.lgdg{position:absolute;z-index:5;font-size:11.5px;pointer-events:none;background:color-mix(in srgb,var(--bg) 70%,transparent);border-radius:4px}
+.lgdg .la{padding:0 6px}
+@media (hover:none){ .lgd .lacts{display:inline-flex} }
 .pine-tbls{position:absolute;inset:0;pointer-events:none;z-index:4}
+.ptip{position:absolute;z-index:30;display:none;max-width:360px;white-space:pre-line;pointer-events:none;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 9px;font:12px/1.45 var(--sans);box-shadow:0 6px 20px rgba(0,0,0,.35)}
 .pine-tbls table.ptab{position:absolute;border-collapse:collapse;font-family:var(--sans)}
 .pine-tbls td{padding:2px 6px;white-space:nowrap}
 #pineIn{position:fixed;z-index:70;left:50%;top:14%;transform:translateX(-50%);width:min(420px,calc(100% - 32px));max-height:72vh;display:flex;flex-direction:column;
@@ -785,6 +798,7 @@ function indBuild(){
       if(c.ma){ r.ma = chart.addSeries(LightweightCharts.LineSeries, {color:c.maColor, lineWidth:1, lastValueVisible:false, priceLineVisible:false,
         crosshairMarkerVisible:false, priceFormat:{type:"volume"}}, pane); r.series.push(r.ma); }
     }
+    if(c.hidden && cfg.type === "volume") for(const sr of r.series) sr.applyOptions({visible: false});
     INDS.push(r);
     const ps = chart.panes(); if(r.pane > 0 && ps[r.pane]){ want[r.pane] = Math.max(40, c.h || Math.round(total * 0.22)); ps[r.pane].attachPrimitive(new PaneShade()); }
   }
@@ -810,28 +824,48 @@ class PaneShade {
 function fmtVol(v){ if(v == null || isNaN(v)) return "–"; v = +v; return v >= 1e7 ? (v / 1e7).toFixed(2) + " Cr" : v >= 1e5 ? (v / 1e5).toFixed(2) + " L" : v >= 1e3 ? (v / 1e3).toFixed(2) + "K" : String(Math.round(v)); }
 function legendLayout(){
   const box = $("#chart"); if(!box || !chart) return;
-  box.querySelectorAll(".lgd").forEach(e => e.remove());
-  const mk = (id) => { const d = document.createElement("div"); d.className = "lgd"; d.id = id; box.append(d); return d; };
+  box.querySelectorAll(".lgd,#lgdG").forEach(e => e.remove());
+  const mk = (id, cls) => { const d = document.createElement("div"); d.className = cls || "lgd"; d.id = id; box.append(d); return d; };
   mk("lgd0");
-  INDS.forEach((r, i) => mk("lgd" + (i + 1)));
+  INDS.forEach((r, i) => mk("lgd" + (i + 1), "lgd lind"));
+  mk("lgdG", "lgdg");                            // collapse / expand the indicators on the candles
   legendPlace(); legendFill(null);
 }
+/* collapsed / hidden states, saved with the chart's indicators (like TradingView's status line) */
+function lgdGroupMin(){ return !!prefGet("lgdMin0", false); }
+function indSet(id, key, val){
+  const l = indList(), it = l.find(x => x.id === id); if(!it) return;
+  if(val) it[key] = true; else delete it[key];
+  indSave(l);
+  const r = INDS.find(x => x.cfg.id === id); if(r) r.cfg[key] = !!val;
+  return r;
+}
+function indVisible(r){
+  const on = !r.cfg.hidden;
+  if(r.cfg.type === "volume"){ for(const sr of r.series) sr.applyOptions({visible: on}); }
+  if(r.cfg.type === "pine") pineVisible(r);
+}
+const EYE = `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>`;
+const EYE_OFF = `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 21L21 3" stroke="currentColor" stroke-width="2"/></svg>`;
 function legendPlace(){
   const box = $("#chart"); if(!box || !chart) return;
   const ps = chart.panes(), C = chartCfg(), tools = $("#ctools");
   const l0 = $("#lgd0");
+  let left0 = 8;
   if(l0){
-    let left = 8, top = 6;
-    if((C.btnCorner || "tl") === "tl" && tools){ left = tools.offsetLeft + tools.offsetWidth + 10; top = tools.offsetTop + 4; }
-    l0.style.left = left + "px"; l0.style.top = top + "px";
+    let top = 6;
+    if((C.btnCorner || "tl") === "tl" && tools){ left0 = tools.offsetLeft + tools.offsetWidth + 10; top = tools.offsetTop + 4; }
+    l0.style.left = left0 + "px"; l0.style.top = top + "px";
   }
   const top = []; let y = 0;
   ps.forEach((pn, k) => { top[k] = y; y += pn.getHeight() + 1; });
-  // indicators on the candles stack under the candle read-out; the others sit at the top of their pane
-  let n0 = 0, l0b = l0 ? l0.offsetTop + l0.offsetHeight : 22;
+  // indicators on the candles stack under the candle read-out, then the collapse arrow; the others sit at the top of their pane
+  let yb = l0 ? l0.offsetTop + l0.offsetHeight + 2 : 24, n0 = 0;
   INDS.forEach((r, i) => { const el = $("#lgd" + (i + 1)); if(!el) return;
-    if(r.pane === 0){ el.style.left = (l0 ? l0.style.left : "8px"); el.style.top = (l0b + 2 + n0 * 18) + "px"; n0++; }
+    if(r.pane === 0){ n0++; el.style.left = left0 + "px"; el.style.top = yb + "px"; if(el.style.display !== "none") yb += el.offsetHeight + 2; }
     else { el.style.left = "8px"; el.style.top = ((top[r.pane] || 0) + 5) + "px"; } });
+  const g = $("#lgdG");
+  if(g){ g.style.display = n0 ? "" : "none"; g.style.left = left0 + "px"; g.style.top = yb + "px"; }
   if(typeof pineLayout === "function") pineLayout();
 }
 function legendFill(param){
@@ -846,17 +880,53 @@ function legendFill(param){
       + `<span class="lk">C</span><span class="${col}">${fmt(bar.close, tick)}</span> <span class="${col}">${ch >= 0 ? "+" : ""}${fmt(ch, tick)} (${(100 * ch / bar.open).toFixed(2)}%)</span>`
       + ` <span class="lk">Vol</span>${fmtVol(volData[t])}`;
   }
+  const gmin = lgdGroupMin();
+  let n0 = 0;
   INDS.forEach((r, i) => {
     const el = $("#lgd" + (i + 1)); if(!el) return;
-    if(r.cfg.type === "pine"){ pineLegend(r, el, t); return; }
-    if(r.cfg.type === "volume"){
+    const hid = !!r.cfg.hidden, min = r.pane > 0 && !!r.cfg.min, id = r.cfg.id;
+    if(r.pane === 0) n0++;
+    el.style.display = r.pane === 0 && gmin ? "none" : "";
+    if(el.style.display === "none") return;
+    let name = "", vals = "", isPine = r.cfg.type === "pine";
+    if(isPine){ [name, vals] = pineLegendParts(r, t); }
+    else if(r.cfg.type === "volume"){
       const v = (param && param.seriesData && param.seriesData.get(r.hist)) || r.hist.data().find(d => d.time === t);
       const m = r.ma ? ((param && param.seriesData && param.seriesData.get(r.ma)) || r.ma.data().find(d => d.time === t)) : null;
-      el.innerHTML = `<b>Volume</b> <span class="${bar && bar.close >= bar.open ? "up" : "down"}">${v ? (+v.value).toLocaleString("en-IN") : "–"}</span>`
-        + (r.ma ? ` <span class="lk">MA(${r.cfg.maLen})</span><span style="color:${r.cfg.maColor}">${m ? fmtVol(m.value) : "–"}</span>` : "");
+      name = `<b>Volume</b>` + (r.ma ? `<span class="lk">MA ${r.cfg.maLen}</span>` : "");
+      vals = ` <span class="${bar && bar.close >= bar.open ? "up" : "down"}">${v ? (+v.value).toLocaleString("en-IN") : "–"}</span>`
+        + (r.ma ? ` <span style="color:${r.cfg.maColor}">${m ? fmtVol(m.value) : "–"}</span>` : "");
     }
+    const chev = r.pane > 0 ? `<span class="la lchev" data-la="min" data-id="${id}" title="${min ? "Show values" : "Hide values"}">${min ? "▸" : "▾"}</span>` : "";
+    el.classList.toggle("off", hid);
+    el.innerHTML = chev + `<span class="lname" data-id="${id}" title="Double-click for settings">${name}</span>` + (hid || min ? "" : vals)
+      + `<span class="lacts"><span class="la leye${hid ? " on" : ""}" data-la="eye" data-id="${id}" title="${hid ? "Show" : "Hide"}">${hid ? EYE_OFF : EYE}</span>`
+      + `<span class="la" data-la="set" data-id="${id}" title="Settings">⚙</span>`
+      + (isPine ? `<span class="la" data-la="src" data-id="${id}" title="Source code">{ }</span>` : "")
+      + `<span class="la" data-la="del" data-id="${id}" title="Remove">✕</span></span>`;
   });
+  const g = $("#lgdG");
+  if(g){ g.innerHTML = gmin ? `<span class="la" data-la="group">▸ ${n0} indicator${n0 === 1 ? "" : "s"}</span>` : `<span class="la" data-la="group" title="Collapse the indicators on the candles">▴</span>`;
+    if(g.dataset.min !== String(gmin)){ g.dataset.min = String(gmin); setTimeout(legendPlace, 0); } }
 }
+/* the read-out buttons: hide / show, collapse, settings, source, remove */
+document.addEventListener("DOMContentLoaded", () => $("#chart").addEventListener("dblclick", e => {
+  const n = e.target.closest(".lgd .lname"); if(!n) return;
+  e.stopPropagation(); const r = INDS.find(x => x.cfg.id === n.dataset.id); if(r && r.cfg.type === "pine") pineInputs(r);
+}));
+document.addEventListener("DOMContentLoaded", () => $("#chart").addEventListener("click", e => {
+  const a = e.target.closest("[data-la]"); if(!a || !a.closest(".lgd,.lgdg")) return;
+  e.stopPropagation();
+  const id = a.dataset.id, act = a.dataset.la, r = id && INDS.find(x => x.cfg.id === id);
+  if(act === "group"){ prefSet("lgdMin0", !lgdGroupMin()); legendFill(null); legendPlace(); return; }
+  if(!r) return;
+  if(act === "eye"){ indSet(id, "hidden", !r.cfg.hidden); indVisible(r); }
+  if(act === "min"){ indSet(id, "min", !r.cfg.min); }
+  if(act === "del"){ indSave(indList().filter(x => x.id !== id)); indBuild(); return; }
+  if(act === "set"){ if(r.cfg.type === "pine") pineInputs(r); else { renderIndPick(); $("#indPick").classList.remove("hide"); const el = $(`#indBody .ind[data-i="${INDS.indexOf(r)}"] .iset`); if(el) el.classList.remove("hide"); } return; }
+  if(act === "src" && r.cfg.type === "pine"){ peOpen(r.cfg.scriptId); return; }
+  legendFill(null); legendPlace();
+}));
 function indData(){
   if(!series) return;
   setTimeout(() => legendFill(null), 0);

@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.9.0 — 30 Oct 2026 — Hide / collapse indicators; your Liquidity Levels script draws on the candles
+
+Added
+- Indicator read-outs work like TradingView's:
+  - 👁 on each indicator hides it (plots, drawings, tables) and shows it again; the name stays, greyed.
+    A hidden Pine script stops running until you show it again.
+  - The arrow under the indicators on the candles (▴) collapses them all into "▸ N indicators";
+    click it to expand.
+  - Each lower pane's read-out has ▾ / ▸ to show or hide its values.
+  - The buttons (👁 ⚙ { } ✕) appear when you point at a read-out, so they don't crowd the chart.
+    Double-click an indicator's name for its settings.
+  - Hidden and collapsed states are saved, so they survive a reload and work on any device.
+- Label tooltips: point at a Pine label that has a tooltip (your Liquidity Levels labels do) to read it.
+
+Fixed
+- Pine scripts with their own pane that draw on the candles (force_overlay = true) now draw there. This
+  is why Regime Matrix + Liquidity Levels showed its pane but none of the liquidity levels; its levels,
+  labels, zones and the stats table now appear on the candles.
+- Corner-style labels (label_lower_left, upper_left and so on) sit on the correct side of their point.
+- Plots marked display = pane (like the script's invisible scale plots) no longer clutter the read-out.
+- Tables at the top-left sit under the read-outs instead of on top of them.
+
+Changed
+- Heavy scripts re-run less often on live prices (every 2 s, or four times their run time if longer)
+  so the page stays smooth; every new bar still re-runs them straight away.
+
 ## v0.8.1 — 30 Oct 2026 — BE label always readable
 
 Fixed
