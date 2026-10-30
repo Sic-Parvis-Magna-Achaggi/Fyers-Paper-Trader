@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.7.1 — 30 Oct 2026 — Indicator panes easier to read
+
+Changed
+- Indicator panes have a shaded background and a brighter divider, so they no longer look like part of
+  the candle chart (the divider turns blue when you hover it to resize)
+
+Added
+- Read-outs at the top-left of each pane: the candle pane shows open, high, low, close, change and
+  volume; the Volume pane shows the volume and its moving average. Point at any bar to see that bar's
+  values; move off the chart and they show the latest bar
+- Volumes in read-outs use K / L / Cr for thousands, lakhs and crores
+
 ## v0.7.0 — 30 Oct 2026 — Indicators menu, Volume indicator
 
 Added

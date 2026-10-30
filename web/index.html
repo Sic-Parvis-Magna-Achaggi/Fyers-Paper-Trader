@@ -128,6 +128,11 @@ section.chartwrap{display:grid;grid-template-rows:auto minmax(0,1fr);min-width:0
 .bk-stats div{display:flex;justify-content:space-between}
 .bk-stats span:first-child{color:var(--muted)}
 .bk-stats span:last-child{font-family:var(--mono)}
+/* read-outs (legends) at the top-left of each pane */
+.lgd{position:absolute;z-index:5;font-family:var(--mono);font-size:11.5px;color:var(--text);pointer-events:none;white-space:nowrap;
+  background:color-mix(in srgb,var(--bg) 70%,transparent);padding:1px 6px;border-radius:4px}
+.lgd .lk{color:var(--muted);margin-right:3px}
+.lgd b{font-family:var(--sans);font-weight:600;margin-right:4px}
 /* indicators popover */
 #indPick{position:absolute;right:10px;top:42px;z-index:31;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;width:320px;max-height:calc(100% - 60px);overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.35);font-size:12.5px}
 #indPick .cfgh{display:flex;align-items:center;margin-bottom:6px}
@@ -648,7 +653,7 @@ function buildChart(){
   chart = LightweightCharts.createChart(el, {
     autoSize: true,
     layout:{background:{type:"solid", color:C.bg || cssVar("--bg")}, textColor:cssVar("--muted"), fontFamily:"IBM Plex Mono",
-      panes:{separatorColor:cssVar("--line"), separatorHoverColor:"rgba(128,128,128,0.35)", enableResize:true}},
+      panes:{separatorColor:cssVar("--muted"), separatorHoverColor:"rgba(79,140,255,0.45)", enableResize:true}},
     grid:{vertLines:{visible:false}, horzLines:{color:cssVar("--line"), visible:!!C.grid}},
     rightPriceScale:{borderColor:cssVar("--line")},
     timeScale:{borderColor:cssVar("--line"), timeVisible:true, secondsVisible:false, rightOffset:24},
@@ -663,11 +668,12 @@ function buildChart(){
   volSeries = null; INDS = [];
   volLayout();
   indBuild();
+  chart.subscribeCrosshairMove(param => { legendHover = !!(param && param.time != null && param.point); legendFill(legendHover ? param : null); });
   setTimeout(positionTools, 60);
   // remember each indicator pane's height when you drag a divider
   el.addEventListener("mouseup", () => setTimeout(indSaveHeights, 50));
 }
-let volSeries = null, volCum = null;
+let volSeries = null, volCum = null, legendHover = false;
 /* volume under the candles, in the candle pane (Chart settings tick box) */
 function volLayout(){
   const on = chartCfg().volOn;
@@ -707,12 +713,70 @@ function indBuild(){
         crosshairMarkerVisible:false, priceFormat:{type:"volume"}}, pane); r.series.push(r.ma); }
     }
     INDS.push(r);
-    const ps = chart.panes(); if(ps[pane]) ps[pane].setHeight(Math.max(40, c.h || Math.round(total * 0.22)));
+    const ps = chart.panes(); if(ps[pane]){ ps[pane].setHeight(Math.max(40, c.h || Math.round(total * 0.22))); ps[pane].attachPrimitive(new PaneShade()); }
   }
   indData();
+  legendLayout();
+}
+/* a shaded background and a bright top edge for indicator panes, so they don't read as part of the candles */
+class PaneShade {
+  constructor(){ const self = this; this.views = [{zOrder: () => "bottom", renderer: () => ({draw: t => self.draw(t)})}]; }
+  attached(){} detached(){} updateAllViews(){} paneViews(){ return this.views; }
+  draw(target){ target.useMediaCoordinateSpace(({context: ctx, mediaSize}) => {
+    ctx.fillStyle = cssVar("--panel2"); ctx.fillRect(0, 0, mediaSize.width, mediaSize.height);
+    ctx.fillStyle = cssVar("--line"); ctx.fillRect(0, 0, mediaSize.width, 2);
+  }); }
+}
+/* read-outs: the candle pane shows O / H / L / C / change / volume, each indicator pane its values -
+   for the bar under the cursor, or the latest bar when the cursor is off the chart */
+function fmtVol(v){ if(v == null || isNaN(v)) return "–"; v = +v; return v >= 1e7 ? (v / 1e7).toFixed(2) + " Cr" : v >= 1e5 ? (v / 1e5).toFixed(2) + " L" : v >= 1e3 ? (v / 1e3).toFixed(2) + "K" : String(Math.round(v)); }
+function legendLayout(){
+  const box = $("#chart"); if(!box || !chart) return;
+  box.querySelectorAll(".lgd").forEach(e => e.remove());
+  const mk = (id) => { const d = document.createElement("div"); d.className = "lgd"; d.id = id; box.append(d); return d; };
+  mk("lgd0");
+  INDS.forEach((r, i) => mk("lgd" + (i + 1)));
+  legendPlace(); legendFill(null);
+}
+function legendPlace(){
+  const box = $("#chart"); if(!box || !chart) return;
+  const ps = chart.panes(), C = chartCfg(), tools = $("#ctools");
+  const l0 = $("#lgd0");
+  if(l0){
+    let left = 8, top = 6;
+    if((C.btnCorner || "tl") === "tl" && tools){ left = tools.offsetLeft + tools.offsetWidth + 10; top = tools.offsetTop + 4; }
+    l0.style.left = left + "px"; l0.style.top = top + "px";
+  }
+  let y = 0;
+  ps.forEach((pn, k) => { const h = pn.getHeight();
+    if(k > 0){ const el = $("#lgd" + k); if(el){ el.style.left = "8px"; el.style.top = (y + 5) + "px"; } }
+    y += h + 1; });
+}
+function legendFill(param){
+  if(!series || !cur) return;
+  const tick = cur.tick, t = param && param.time != null ? param.time : (lastBar ? lastBar.time : null);
+  if(t == null) return;
+  const bar = (param && param.seriesData && param.seriesData.get(series)) || series.data().find(b => b.time === t) || lastBar;
+  const l0 = $("#lgd0");
+  if(l0 && bar){
+    const ch = bar.close - bar.open, col = ch >= 0 ? "up" : "down";
+    l0.innerHTML = `<span class="lk">O</span>${fmt(bar.open, tick)} <span class="lk">H</span>${fmt(bar.high, tick)} <span class="lk">L</span>${fmt(bar.low, tick)} `
+      + `<span class="lk">C</span><span class="${col}">${fmt(bar.close, tick)}</span> <span class="${col}">${ch >= 0 ? "+" : ""}${fmt(ch, tick)} (${(100 * ch / bar.open).toFixed(2)}%)</span>`
+      + ` <span class="lk">Vol</span>${fmtVol(volData[t])}`;
+  }
+  INDS.forEach((r, i) => {
+    const el = $("#lgd" + (i + 1)); if(!el) return;
+    if(r.cfg.type === "volume"){
+      const v = (param && param.seriesData && param.seriesData.get(r.hist)) || r.hist.data().find(d => d.time === t);
+      const m = r.ma ? ((param && param.seriesData && param.seriesData.get(r.ma)) || r.ma.data().find(d => d.time === t)) : null;
+      el.innerHTML = `<b>Volume</b> <span class="${bar && bar.close >= bar.open ? "up" : "down"}">${v ? (+v.value).toLocaleString("en-IN") : "–"}</span>`
+        + (r.ma ? ` <span class="lk">MA(${r.cfg.maLen})</span><span style="color:${r.cfg.maColor}">${m ? fmtVol(m.value) : "–"}</span>` : "");
+    }
+  });
 }
 function indData(){
   if(!series) return;
+  setTimeout(() => legendFill(null), 0);
   const bars = series.data();
   for(const r of INDS){
     if(r.cfg.type === "volume"){
@@ -959,6 +1023,7 @@ function liveBar(t){
   series.update({...lastBar});
   if(volSeries) volSeries.update({time:b, value:volData[b] || 0, color:volColor(lastBar)});
   if(INDS.length) indTick(lastBar);
+  if(!legendHover) legendFill(null);
   $("#chartMsg").classList.add("hide");
 }
 
@@ -1171,7 +1236,7 @@ function candleTimer(){
   el.style.top = Math.min(paneH, ys[ys.length - 1] + 10 + 18 * Math.ceil((near - 1) / 2)) + "px";
   el.classList.remove("hide");
 }
-setInterval(() => { candleTimer(); positionTools(); }, 1000);
+setInterval(() => { candleTimer(); positionTools(); legendPlace(); }, 1000);
 
 function clock(){ $("#pClock").textContent = new Date().toLocaleTimeString("en-GB",{timeZone:"Asia/Kolkata"}) + " IST"; }
 async function boot(){
