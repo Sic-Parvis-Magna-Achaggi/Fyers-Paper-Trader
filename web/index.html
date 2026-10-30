@@ -77,7 +77,7 @@ aside{border-right:1px solid var(--line);background:var(--panel);display:flex;fl
 .chain tr.atm td.k{color:var(--accent)}
 .empty{color:var(--muted);font-size:13px;padding:14px 4px}
 
-section.chartwrap{display:grid;grid-template-rows:auto minmax(0,1fr);min-width:0;min-height:0;position:relative}
+section.chartwrap{display:grid;grid-template-rows:auto minmax(0,1fr) auto;min-width:0;min-height:0;position:relative}
 .charthead{display:flex;align-items:center;gap:12px;padding:6px 10px 6px 14px;border-bottom:1px solid var(--line);flex-wrap:nowrap;min-width:0;overflow:hidden;overflow:clip}
 .charthead .sym,.charthead .ltp{flex:0 0 auto}
 .charthead .spacer{flex:1 1 0;min-width:0}
@@ -134,6 +134,55 @@ section.chartwrap{display:grid;grid-template-rows:auto minmax(0,1fr);min-width:0
 .lgd .lk{color:var(--muted);margin-right:3px}
 .lgd b{font-family:var(--sans);font-weight:600;margin-right:4px}
 /* indicators popover */
+/* Pine Editor + Pine scripts on the chart */
+#pineDock{display:flex;flex-direction:column;height:320px;min-height:120px;background:var(--panel);border-top:2px solid var(--accent);position:relative;min-width:0}
+#pdGrip{position:absolute;left:0;right:0;top:-5px;height:8px;cursor:ns-resize;z-index:3}
+.pd-bar{display:flex;align-items:center;gap:6px;padding:5px 8px;border-bottom:1px solid var(--line);flex-wrap:nowrap;overflow-x:auto;font-size:12.5px}
+.pd-bar>*{flex-shrink:0}
+.pd-bar #pdName{flex:0 1 150px;min-width:70px}
+.pd-bar button{padding:3px 10px;font-size:12.5px}
+.pd-bar button:disabled{opacity:.4;cursor:default}
+.pd-bar select{width:auto;max-width:150px;padding:3px 6px;font-size:12.5px}
+.pd-bar input{width:150px;flex-shrink:1;padding:3px 8px;font-size:12.5px}
+.pd-t{margin-right:4px}
+.pd-dirty{font-size:11.5px;color:var(--muted);min-width:60px}
+.pd-dirty.on{color:var(--warn)}
+#pdEd{flex:1;min-height:0;position:relative}
+#pdEd .CodeMirror{position:absolute;inset:0;height:auto;font:13px/1.5 var(--mono)}
+#pdCon{border-top:1px solid var(--line);padding:5px 10px;font:12px/1.5 var(--mono);max-height:110px;overflow:auto;color:var(--text)}
+#pdCon .pd-err{cursor:pointer;text-decoration:underline dotted}
+.pd-logs{color:var(--muted);margin-top:3px;border-top:1px dashed var(--line);padding-top:3px}
+.cm-s-pine.CodeMirror{background:var(--bg);color:var(--text)}
+.cm-s-pine .CodeMirror-gutters{background:var(--panel);border-right:1px solid var(--line)}
+.cm-s-pine .CodeMirror-linenumber{color:var(--muted)}
+.cm-s-pine .CodeMirror-cursor{border-left:2px solid var(--accent)}
+.cm-s-pine .CodeMirror-activeline-background{background:rgba(128,128,128,.08)}
+.cm-s-pine div.CodeMirror-selected,.cm-s-pine.CodeMirror-focused div.CodeMirror-selected{background:rgba(79,140,255,.25)}
+.cm-s-pine .CodeMirror-matchingbracket{color:var(--up)!important;outline:1px solid var(--up)}
+.cm-s-pine .cm-keyword{color:#c678dd} .cm-s-pine .cm-string{color:#7fb36a} .cm-s-pine .cm-number,.cm-s-pine .cm-atom{color:#d19a66}
+.cm-s-pine .cm-comment{color:#7d8695;font-style:italic} .cm-s-pine .cm-meta{color:#7d8695;font-weight:600}
+.cm-s-pine .cm-builtin{color:#4fa3e8} .cm-s-pine .cm-def{color:#4fa3e8;font-weight:600} .cm-s-pine .cm-type{color:#d4a72c}
+.cm-s-pine .cm-variable-2{color:#3fb0b8} .cm-s-pine .cm-variable-3{color:#5c9cf0} .cm-s-pine .cm-operator{color:var(--muted)}
+.pd-errline{background:rgba(226,72,61,.18)!important}
+.CodeMirror-dialog{background:var(--panel2);color:var(--text);border-color:var(--line)!important}
+.CodeMirror-dialog input{width:20em;padding:2px 6px;background:var(--bg)}
+.lgd .la{pointer-events:auto;cursor:pointer;color:var(--muted);margin-left:6px;padding:0 3px;border-radius:3px;opacity:.75;font-family:var(--sans)}
+.lgd .la:hover{color:var(--text);background:var(--panel2);opacity:1}
+.pine-tbls{position:absolute;inset:0;pointer-events:none;z-index:4}
+.pine-tbls table.ptab{position:absolute;border-collapse:collapse;font-family:var(--sans)}
+.pine-tbls td{padding:2px 6px;white-space:nowrap}
+#pineIn{position:fixed;z-index:70;left:50%;top:14%;transform:translateX(-50%);width:min(420px,calc(100% - 32px));max-height:72vh;display:flex;flex-direction:column;
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.45);font-size:13px}
+#pineIn .pih{display:flex;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+#pineIn .pib{padding:6px 14px 10px;overflow:auto}
+#pineIn .pig{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:12px 0 2px}
+#pineIn .pir{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 0;color:var(--text);font-size:13px}
+#pineIn .pir span{flex:1}
+#pineIn .pir input[type=number],#pineIn .pir input[type=text],#pineIn .pir select{width:150px;padding:4px 8px}
+#pineIn .pir input[type=checkbox]{width:16px;height:16px}
+#pineIn .pir input[type=color]{width:44px;height:26px;padding:0;border:1px solid var(--line);border-radius:4px;background:none}
+#pineIn .pir textarea{width:180px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;color:inherit;font:inherit}
+#pineIn .pif{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--line)}
 #indPick{position:absolute;right:10px;top:42px;z-index:31;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;width:320px;max-height:calc(100% - 60px);overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.35);font-size:12.5px}
 #indPick .cfgh{display:flex;align-items:center;margin-bottom:6px}
 #indPick .cfgh b{flex:1}
@@ -346,6 +395,7 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
         <span class="spacer" style="flex:1"></span>
         <div class="tf" id="tf"></div>
         <button class="tfmore" id="bTf" title="All timeframes and custom">▾</button>
+        <button class="ghost fsb" id="bPine" title="Pine Editor: write and save your own indicators">Pine</button>
         <button class="ghost fsb" id="bInd" title="Indicators">ƒx</button>
         <button class="ghost fsb" id="bCfg" title="Chart settings: colours and line styles">⚙</button>
         <button class="ghost fsb" id="bPanel" title="Show or hide the trade panel (P)">Panel</button>
@@ -371,6 +421,24 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
         <div id="tool" class="hide"></div>
         <div id="posbars"></div>
         <div id="ctimer" class="hide" title="Time left in this candle"></div>
+      </div>
+      <div id="pineDock" class="hide">
+        <div id="pdGrip" title="Drag to resize"></div>
+        <div class="pd-bar">
+          <b class="pd-t">Pine</b>
+          <select id="pdOpen" title="Open a saved script"></select>
+          <input id="pdName" placeholder="Untitled script" autocomplete="off" spellcheck="false" title="Script name (Save to rename)">
+          <span id="pdDirty" class="pd-dirty"></span>
+          <button id="pdNew" title="New script">New</button>
+          <button id="pdSave" title="Save (Ctrl+S)">Save</button>
+          <button id="pdSaveAs" title="Save a copy under a new name">Save as…</button>
+          <button id="pdDel" title="Delete from your library">Delete</button>
+          <span style="flex:1"></span>
+          <button id="pdAdd" class="primary" title="Ctrl+Enter">Add to chart</button>
+          <button class="ghost" id="pdClose" title="Close the editor">✕</button>
+        </div>
+        <div id="pdEd"></div>
+        <div id="pdCon"></div>
       </div>
     </section>
     <section id="panel">
@@ -460,7 +528,9 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
   </div>
 </div>
 
+<script>window.APP_V = "__V__";</script>
 <script src="/static/paper.js?v=__V__"></script>
+<script src="/static/pine.js?v=__V__"></script>
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
@@ -687,24 +757,27 @@ function volLayout(){
 
 /* ---------------------------------------------------------------- indicators
    Each indicator on the chart is saved in your preferences ("indicators") and gets its own pane below the
-   candles. Built-in for now: Volume (with an optional moving average). Pine scripts (PineTS) plug in here next. */
+   candles. Built-in: Volume (with an optional moving average). Pine scripts ({type:"pine", scriptId, inputs}) run
+   through pine.js: in their own pane, or on the candles when the script says overlay=true. */
 const IND_TYPES = {
   volume: {name: "Volume", desc: "Volume bars in their own pane, with an optional moving average",
     defaults: {ma: true, maLen: 20, maColor: "#e0b341"},
     settings: [["ma", "Moving average", "bool"], ["maLen", "MA length", "int"], ["maColor", "MA colour", "color"]]},
 };
 let INDS = [];                                   // what's on the chart now: {cfg, pane, series[], data()}
-function indList(){ return (prefGet("indicators", []) || []).filter(c => IND_TYPES[c.type]); }
+function indList(){ return (prefGet("indicators", []) || []).filter(c => IND_TYPES[c.type] || c.type === "pine"); }
 function indSave(list){ prefSet("indicators", list); }
 function indBuild(){
   if(!chart) return;
-  for(const r of INDS) for(const sr of r.series){ try{ chart.removeSeries(sr); }catch(e){} }
+  for(const r of INDS){ for(const sr of r.series){ try{ chart.removeSeries(sr); }catch(e){} } if(r.cleanup) r.cleanup(); }
   INDS = [];
   while(chart.panes().length > 1) chart.removePane(chart.panes().length - 1);
   const total = chart.panes()[0].getHeight() || 400;
+  const want = [];
   for(const cfg of indList()){
-    const t = IND_TYPES[cfg.type], c = {...t.defaults, ...cfg}, pane = chart.panes().length;
+    const t = IND_TYPES[cfg.type] || {defaults: {}}, c = {...t.defaults, ...cfg}, pane = chart.panes().length;
     const r = {cfg: c, pane, series: []};
+    if(cfg.type === "pine") pineBuild(r);       // Pine script: its own pane, or on the candles (overlay=true)
     if(cfg.type === "volume"){
       r.hist = chart.addSeries(LightweightCharts.HistogramSeries, {priceFormat:{type:"volume"}, lastValueVisible:true, priceLineVisible:false, title:"Vol"}, pane);
       r.hist.priceScale().applyOptions({scaleMargins:{top:0.15, bottom:0}});
@@ -713,8 +786,13 @@ function indBuild(){
         crosshairMarkerVisible:false, priceFormat:{type:"volume"}}, pane); r.series.push(r.ma); }
     }
     INDS.push(r);
-    const ps = chart.panes(); if(ps[pane]){ ps[pane].setHeight(Math.max(40, c.h || Math.round(total * 0.22))); ps[pane].attachPrimitive(new PaneShade()); }
+    const ps = chart.panes(); if(r.pane > 0 && ps[r.pane]){ want[r.pane] = Math.max(40, c.h || Math.round(total * 0.22)); ps[r.pane].attachPrimitive(new PaneShade()); }
   }
+  // share the height out in one go (setting panes one by one squeezes the earlier ones)
+  const ps = chart.panes(), all = ps.reduce((a, p) => a + p.getHeight(), 0) || total;
+  if(ps.length > 1){ let rest = all; for(let k = 1; k < ps.length; k++){ want[k] = Math.min(want[k] || Math.round(all * 0.22), Math.round(all * 0.4)); rest -= want[k]; }
+    rest = Math.max(rest, Math.round(all * 0.3));
+    try{ ps[0].setStretchFactor(rest); for(let k = 1; k < ps.length; k++) ps[k].setStretchFactor(want[k]); }catch(e){ for(let k = 1; k < ps.length; k++) ps[k].setHeight(want[k]); } }
   indData();
   legendLayout();
 }
@@ -747,10 +825,14 @@ function legendPlace(){
     if((C.btnCorner || "tl") === "tl" && tools){ left = tools.offsetLeft + tools.offsetWidth + 10; top = tools.offsetTop + 4; }
     l0.style.left = left + "px"; l0.style.top = top + "px";
   }
-  let y = 0;
-  ps.forEach((pn, k) => { const h = pn.getHeight();
-    if(k > 0){ const el = $("#lgd" + k); if(el){ el.style.left = "8px"; el.style.top = (y + 5) + "px"; } }
-    y += h + 1; });
+  const top = []; let y = 0;
+  ps.forEach((pn, k) => { top[k] = y; y += pn.getHeight() + 1; });
+  // indicators on the candles stack under the candle read-out; the others sit at the top of their pane
+  let n0 = 0, l0b = l0 ? l0.offsetTop + l0.offsetHeight : 22;
+  INDS.forEach((r, i) => { const el = $("#lgd" + (i + 1)); if(!el) return;
+    if(r.pane === 0){ el.style.left = (l0 ? l0.style.left : "8px"); el.style.top = (l0b + 2 + n0 * 18) + "px"; n0++; }
+    else { el.style.left = "8px"; el.style.top = ((top[r.pane] || 0) + 5) + "px"; } });
+  if(typeof pineLayout === "function") pineLayout();
 }
 function legendFill(param){
   if(!series || !cur) return;
@@ -766,6 +848,7 @@ function legendFill(param){
   }
   INDS.forEach((r, i) => {
     const el = $("#lgd" + (i + 1)); if(!el) return;
+    if(r.cfg.type === "pine"){ pineLegend(r, el, t); return; }
     if(r.cfg.type === "volume"){
       const v = (param && param.seriesData && param.seriesData.get(r.hist)) || r.hist.data().find(d => d.time === t);
       const m = r.ma ? ((param && param.seriesData && param.seriesData.get(r.ma)) || r.ma.data().find(d => d.time === t)) : null;
@@ -779,6 +862,7 @@ function indData(){
   setTimeout(() => legendFill(null), 0);
   const bars = series.data();
   for(const r of INDS){
+    if(r.cfg.type === "pine"){ pineRun(r); continue; }
     if(r.cfg.type === "volume"){
       const v = bars.map(b => ({time:b.time, value:volData[b.time] || 0, color:volColor(b)}));
       r.hist.setData(v);
@@ -790,6 +874,7 @@ function indData(){
 }
 function indTick(bar){
   for(const r of INDS){
+    if(r.cfg.type === "pine"){ pineTick(r, bar); continue; }
     if(r.cfg.type === "volume"){
       r.hist.update({time:bar.time, value:volData[bar.time] || 0, color:volColor(bar)});
       if(r.ma){ const n = Math.max(1, +r.cfg.maLen || 20), d = r.hist.data(); if(d.length >= n){
@@ -800,13 +885,20 @@ function indTick(bar){
 function indSaveHeights(){
   if(!chart || !INDS.length) return;
   const ps = chart.panes(), list = indList(); let changed = false;
-  INDS.forEach((r, i) => { const h = ps[r.pane] && Math.round(ps[r.pane].getHeight()); if(h > 20 && list[i] && list[i].h !== h){ list[i].h = h; changed = true; } });
+  INDS.forEach((r, i) => { const h = r.pane > 0 && ps[r.pane] && Math.round(ps[r.pane].getHeight()); if(h > 20 && list[i] && list[i].h !== h){ list[i].h = h; changed = true; } });
   if(changed) indSave(list);
 }
 function renderIndPick(){
   const list = indList();
+  if(!PINE.loaded) pineLoad().then(() => { if(!$("#indPick").classList.contains("hide")) renderIndPick(); });
   let h = `<div class="sec">On this chart</div>`;
   h += list.length ? list.map((c, i) => {
+    if(c.type === "pine"){
+      const sc = pineScript(c.scriptId), r = INDS.find(x => x.cfg.id === c.id);
+      return `<div class="ind" data-i="${i}" data-pine="${c.id}"><div class="ih"><b>${esc(sc ? sc.name : "Pine script")}</b><span class="muted" style="font-size:11px">Pine</span><span class="sp"></span>
+        <button class="ghost" data-a="pset" title="Inputs">⚙</button><button class="ghost" data-a="psrc" title="Open in the Pine Editor">{ }</button><button class="ghost" data-a="del" title="Remove">✕</button></div>
+        ${r && r.pine && r.pine.err ? `<div class="help down" style="margin:4px 0 0">⚠ ${esc(r.pine.err)}</div>` : ""}</div>`;
+    }
     const t = IND_TYPES[c.type], v = {...t.defaults, ...c};
     return `<div class="ind" data-i="${i}"><div class="ih"><b>${t.name}</b><span class="sp"></span>
       <button class="ghost" data-a="set" title="Settings">⚙</button><button class="ghost" data-a="del" title="Remove">✕</button></div>
@@ -815,14 +907,27 @@ function renderIndPick(){
         kind === "color" ? `<input type="color" data-k="${k}" value="${v[k]}">` :
         `<input type="number" data-k="${k}" value="${v[k]}" min="1" max="500">`}</label>`).join("")}</div></div>`;
   }).join("") : `<div class="empty" style="padding:6px 0">No indicators yet.</div>`;
-  h += `<div class="sec">Add</div>` + Object.entries(IND_TYPES).map(([k, t]) =>
-    `<div class="ind"><div class="ih"><b>${t.name}</b><span class="sp"></span><button data-add="${k}">+ Add</button></div><div class="help" style="margin:0">${t.desc}</div></div>`).join("")
-    + `<div class="ind muted" style="font-size:12px">Your Pine Script indicators come next: paste a script here and it runs on this chart.</div>`;
+  h += `<div class="sec">Built in</div>` + Object.entries(IND_TYPES).map(([k, t]) =>
+    `<div class="ind"><div class="ih"><b>${t.name}</b><span class="sp"></span><button data-add="${k}">+ Add</button></div><div class="help" style="margin:0">${t.desc}</div></div>`).join("");
+  const mine = [...PINE.scripts].sort((a, b) => a.name.localeCompare(b.name));
+  h += `<div class="sec" style="display:flex;align-items:center">My scripts<span style="flex:1"></span><button class="ghost" data-pnew style="padding:0 4px;font-size:11.5px;text-transform:none;letter-spacing:0">+ New script</button></div>`
+    + (mine.length ? mine.map(sc => `<div class="ind"><div class="ih"><b>${esc(sc.name)}</b><span class="sp"></span>
+        <button class="ghost" data-pedit="${sc.id}" title="Open in the Pine Editor">{ }</button><button data-padd="${sc.id}">+ Add</button></div></div>`).join("")
+      : `<div class="ind muted" style="font-size:12px">${PINE.loaded ? "No scripts yet. Open the <b>Pine</b> editor (top bar), paste or write a script, and Save." : "Loading…"}</div>`);
   $("#indBody").innerHTML = h;
   $("#indBody").querySelectorAll("[data-add]").forEach(b => b.onclick = () => { const l = indList(); l.push({type: b.dataset.add, id: Date.now().toString(36)}); indSave(l); indBuild(); renderIndPick(); });
+  $("#indBody").querySelectorAll("[data-padd]").forEach(b => b.onclick = () => { const l = indList(), sc = pineScript(b.dataset.padd);
+    l.push({type: "pine", id: Date.now().toString(36), scriptId: b.dataset.padd, inputs: {}, overlay: sc ? pineGuessOverlay(sc.source) : undefined}); indSave(l); indBuild(); renderIndPick(); });
+  $("#indBody").querySelectorAll("[data-pedit]").forEach(b => b.onclick = () => { $("#indPick").classList.add("hide"); peOpen(b.dataset.pedit); });
+  const pn = $("#indBody").querySelector("[data-pnew]"); if(pn) pn.onclick = () => { $("#indPick").classList.add("hide"); peOpen(null, true); };
   $("#indBody").querySelectorAll(".ind[data-i]").forEach(el => {
     const i = +el.dataset.i;
     el.querySelector('[data-a="del"]').onclick = () => { const l = indList(); l.splice(i, 1); indSave(l); indBuild(); renderIndPick(); };
+    if(el.dataset.pine){
+      el.querySelector('[data-a="pset"]').onclick = () => { const r = INDS.find(x => x.cfg.id === el.dataset.pine); if(r){ $("#indPick").classList.add("hide"); pineInputs(r); } };
+      el.querySelector('[data-a="psrc"]').onclick = () => { $("#indPick").classList.add("hide"); peOpen(list[i].scriptId); };
+      return;
+    }
     el.querySelector('[data-a="set"]').onclick = () => el.querySelector(".iset").classList.toggle("hide");
     el.querySelectorAll(".iset [data-k]").forEach(inp => inp.addEventListener("change", () => {
       const l = indList(); l[i][inp.dataset.k] = inp.type === "checkbox" ? inp.checked : inp.type === "number" ? (+inp.value || 1) : inp.value;
@@ -1246,6 +1351,7 @@ async function boot(){
   watch = prefGet("watch", []); cur = prefGet("cur", null); tf = prefGet("tf2", "5m"); tfFav = prefGet("tfs", tfFav);
   document.body.classList.toggle("nopanel", !!prefGet("nopanel", false));
   applyTheme();
+  if(prefGet("pineOpen", false)) setTimeout(() => peOpen(null), 300);   // the Pine Editor was open last time
   $("#vSetup").classList.add("hide"); $("#vLogin").classList.add("hide"); $("#app").classList.remove("hide");
   const p = new URLSearchParams(location.search);
   if(p.get("fyers") === "ok") toast("Logged in to Fyers");

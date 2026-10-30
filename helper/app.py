@@ -301,6 +301,63 @@ async def set_prefs(request: Request):
     return {"ok": True}
 
 
+# ------------------------------------------------------------------ Pine Script library
+# Your scripts, saved on the server by name (data/scripts.json), so every device sees the same list.
+SCRIPT_MAX = 200_000          # characters per script
+SCRIPTS_MAX = 200
+
+
+def _scripts() -> list:
+    s = store.load("scripts.json", {"scripts": []})
+    return s.get("scripts", []) if isinstance(s, dict) else []
+
+
+@app.get("/api/scripts")
+async def scripts_list(request: Request):
+    _need(request)
+    return {"ok": True, "scripts": _scripts()}
+
+
+@app.post("/api/scripts/save")
+async def scripts_save(request: Request):
+    """{id?, name, source}: a new script when id is missing (or unknown), otherwise an update."""
+    _same_origin(request)
+    _need(request)
+    b = await _body(request)
+    name = str(b.get("name") or "").strip()[:80]
+    src = b.get("source")
+    if not name or not isinstance(src, str):
+        return _err("a script needs a name and some code")
+    if len(src) > SCRIPT_MAX:
+        return _err(f"script too long (over {SCRIPT_MAX:,} characters)")
+    lst = _scripts()
+    sid = str(b.get("id") or "")
+    if any(x["name"].lower() == name.lower() and x["id"] != sid for x in lst):
+        return _err(f'you already have a script called "{name}"')
+    now = int(time.time())
+    hit = next((x for x in lst if x["id"] == sid), None) if sid else None
+    if hit:
+        hit.update(name=name, source=src, updated=now)
+    else:
+        if len(lst) >= SCRIPTS_MAX:
+            return _err(f"script library full ({SCRIPTS_MAX})")
+        import secrets
+        hit = {"id": secrets.token_hex(5), "name": name, "source": src, "created": now, "updated": now}
+        lst.append(hit)
+    store.save("scripts.json", {"scripts": lst})
+    return {"ok": True, "script": hit, "scripts": lst}
+
+
+@app.post("/api/scripts/delete")
+async def scripts_delete(request: Request):
+    _same_origin(request)
+    _need(request)
+    b = await _body(request)
+    lst = [x for x in _scripts() if x["id"] != str(b.get("id") or "")]
+    store.save("scripts.json", {"scripts": lst})
+    return {"ok": True, "scripts": lst}
+
+
 @app.get("/api/logs")
 def logs(request: Request):
     _need(request)

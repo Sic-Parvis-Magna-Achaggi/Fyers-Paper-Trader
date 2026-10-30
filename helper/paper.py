@@ -691,7 +691,14 @@ class Paper:
 
     def on_tick(self, t: dict):
         s = t["s"]
-        self.prices[s] = {"ltp": t.get("ltp"), "bid": t.get("bid"), "ask": t.get("ask"), "t": t.get("t"), "rt": now()}
+        prev = self.prices.get(s) or {}
+        # the day's low / high moving tells us a trade printed there, even if that trade's own tick never reached us
+        # (the socket sends snapshots, so a one-trade spike can fall between two of them)
+        dl, dh = t.get("l"), t.get("h")
+        lo = dl if dl and prev.get("dl") and dl < prev["dl"] else None
+        hi = dh if dh and prev.get("dh") and dh > prev["dh"] else None
+        self.prices[s] = {"ltp": t.get("ltp"), "bid": t.get("bid"), "ask": t.get("ask"), "t": t.get("t"), "rt": now(),
+                          "dl": dl or prev.get("dl"), "dh": dh or prev.get("dh"), "lo": lo, "hi": hi}
         touched = False
         for o in list(self.orders):
             if o["s"] == s:
@@ -705,6 +712,15 @@ class Paper:
             self._last_push = now()
             self.on_change(None)                          # refresh live P&L on the page (at most once a second)
 
+    @staticmethod
+    def _through(p: dict, side: int) -> float:
+        """The furthest trade seen on this tick in the direction that fills a resting order: the lowest for a buy
+        limit / a short's target (side > 0), the highest for a sell limit / a long's target."""
+        ltp = float(p.get("ltp") or 0)
+        if side > 0:
+            return min(ltp, p["lo"]) if p.get("lo") else ltp
+        return max(ltp, p["hi"]) if p.get("hi") else ltp
+
     def _check_order(self, o) -> bool:
         p = self.px(o["s"])
         ltp, bid, ask = p.get("ltp"), p.get("bid") or p.get("ltp"), p.get("ask") or p.get("ltp")
@@ -716,6 +732,10 @@ class Paper:
             mkt = ask if side > 0 else bid
             if side * (o["price"] - mkt) >= 0:
                 hit, price = True, (min(o["price"], mkt) if side > 0 else max(o["price"], mkt))
+            elif side * (o["price"] - self._through(p, side)) > 0:
+                # a trade went through the limit price: a real resting limit there would have been filled first
+                # (price priority), even if the quote we saw never touched it - fill at the limit
+                hit, price = True, o["price"]
         else:                                              # stop entry: triggers on the last price, fills at market
             if side * (ltp - o["price"]) >= 0:
                 hit, price = True, (ask if side > 0 else bid)
@@ -760,6 +780,11 @@ class Paper:
         if pos.get("tp") is not None and udir * (trig - pos["tp"]) >= 0:
             fill = mark if pos["basis"] == "underlying" else (max(pos["tp"], mark) if side > 0 else min(pos["tp"], mark))
             self.close(pos, fill, "tp")
+            return True
+        # the target is a resting limit order: a trade beyond it (a spike through a thin book) fills it at the
+        # target even when the bid / ask we saw never reached it
+        if pos.get("tp") is not None and pos["basis"] == "self" and side * (self._through(own, -side) - pos["tp"]) > 0:
+            self.close(pos, pos["tp"], "tp")
             return True
 
         # trailing (R in the stop's basis, from the first stop)

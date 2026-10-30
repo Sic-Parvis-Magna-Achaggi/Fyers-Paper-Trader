@@ -1,4 +1,4 @@
-# Paper trading: how it works (v0.7.0)
+# Paper trading: how it works (v0.8.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -17,7 +17,7 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
   - The target defaults to your R (Settings: the ticket's R box), net of charges.
 - **PLACE** sends it; **✕** closes the tool. The side panel shows the same trade with more detail (charges, margin, BE + costs). You don't need it open to trade.
 - **Open positions** show their zones from the entry candle and SL / TP lines you can drag. A control bar sits on the entry line, just left of the price scale. It shows:
-  - side, lots, live net P&L and R;
+  - side, lots, entry price, live net P&L and R;
   - **✕** to close at market;
   - **BE** to move the stop to break-even + costs now;
   - **BE-T** with its R box: trail to BE once the trade reaches that R;
@@ -61,9 +61,29 @@ Turn it on or off in Chart settings (⚙).
 
   With BUY or SELL pressed, click a price in the book to put the entry there. The book streams only while the tab is open.
 
+## Pine Script indicators
+
+- **Pine** (above the chart) opens the Pine Editor under the chart. Drag its top edge to resize it.
+- Write or paste a script. It's checked as you type: an error shows its line (click it to jump there) and the line turns red.
+- **Save** (Ctrl+S) puts it in your library on the server; edit the name and Save to rename. **Save as** makes a copy. **Delete** removes it (and takes it off the chart).
+- **Add to chart** (Ctrl+Enter). When the script is already on the chart, the button says **Update on chart**. Saving also updates the chart.
+- **ƒx → My scripts** lists your library: **+ Add** puts a script on the chart, **{ }** opens it in the editor. You can add the same script twice with different inputs.
+- On the chart, each script's read-out shows its values for the bar under the cursor:
+  - **⚙** opens its inputs;
+  - **{ }** opens the code;
+  - **✕** removes it.
+
+  Errors show in red there.
+- `overlay=true` scripts draw on the candles; others get their own pane.
+- **Supported:** plots (lines, step, circles, histogram, columns, area), hline, fill, bgcolor, barcolor, plotshape / plotchar / plotarrow, plotcandle, labels, lines, boxes, linefills, polylines, tables, inputs and request.security() for other timeframes.
+- Times are Indian time.
+- Each script sees the latest 1,500 bars and updates with live prices (each new bar, otherwise at most every 2 seconds).
+- A script stuck in an endless loop is stopped with an error; the page keeps working.
+- Scripts run on PineTS, which covers most of Pine v5 / v6 but not every function. If one of your scripts errors, or draws differently from TradingView, send it over.
+
 ## Saved on the server
 
-Your watchlist, pinned timeframes, last chart, theme, panel on/off, ticket defaults (risk mode and amount, product, R) and remembered stop distances are saved on the server. Your rules and trailing settings have been saved there since v0.2.0. Any device, after any login, opens the same set-up.
+Your Pine scripts and the indicators on your chart (with their inputs), your watchlist, pinned timeframes, last chart, theme, panel on/off, ticket defaults (risk mode and amount, product, R) and remembered stop distances are saved on the server. Your rules and trailing settings have been saved there since v0.2.0. Any device, after any login, opens the same set-up.
 
 ## Every ₹ figure is net
 
@@ -83,7 +103,7 @@ NSE futures and options rates are also in the app, for later. These rates come f
 
 - **Value** = price × quantity × multiplier. For example, CRUDEOILM is 10 barrels a lot, CRUDEOIL 100, and GOLDPETAL 1 gram.
 - **Lot sizing** finds the most lots whose loss at the stop, including both orders' charges, fits your risk.
-- **BE + costs** works like LiveTrader's: the exit price where closing nets ₹0 or more after the entry charges already paid and the charges the exit would pay, rounded to the profitable tick, plus the **BE buffer** in Rules (default 0 ticks). A stop at BE is labelled "BE +N ticks · covers ₹X".
+- **BE + costs** works like LiveTrader's: the exit price where closing nets ₹0 or more after the entry charges already paid and the charges the exit would pay, rounded to the profitable tick, plus the **BE buffer** in Rules (default 0 ticks). A stop at BE is labelled, for example, "BE · exit here nets +₹0 · 13 ticks below entry pay the ₹51.60 charges". The ₹ after "nets" is what you keep if the stop is hit. The ₹ at the end is the charges those ticks pay for, not profit. To lock in profit at BE, set a BE buffer in ticks.
 - **R** = net P&L ÷ the net risk at the first stop.
 
 ## Fills
@@ -91,10 +111,12 @@ NSE futures and options rates are also in the app, for later. These rates come f
 | Order | Fills |
 | --- | --- |
 | Market | Buy at the ask, sell at the bid |
-| Limit | When the ask (buy) or bid (sell) reaches your price, at your price or better |
+| Limit | When the ask (buy) or bid (sell) reaches your price, at your price or better. Also when a trade goes **through** your price (a buy limit: a trade below it), at your price |
 | Stop entry | When the last price crosses it, then at the ask / bid (market) |
 | Stop loss | When the bid (long) or ask (short) reaches it, as at MT5, then at that bid / ask, so a jump through the stop fills worse (slippage). A stop on an underlying future triggers on the future's last price |
-| Target | When the bid (long) or ask (short) reaches it: at the target, or better if price gapped through |
+| Target | When the bid (long) or ask (short) reaches it: at the target, or better if price gapped through. Also when a trade goes **through** it, at the target |
+
+**Trade-through.** Targets and limit orders are resting limit orders on a real exchange. A trade beyond your price means your order, being a better price, would have been filled first. So it fills at your price, even if the bid / ask we saw never touched it. A trade exactly *at* your price doesn't fill it, as orders may be ahead of you. Fyers' live feed sends snapshots, so a one-trade spike can fall between two of them. When the day's low (or high) moves past your price between snapshots, that counts as a trade there. A spike inside the day's range that never reaches us live can't be seen.
 
 Positions are netted per contract and product (Intraday / Carry), like Fyers. Adds average in, and one trade runs flat to flat. An opposite order on a contract you hold is refused: close it first.
 
@@ -138,6 +160,5 @@ When BE-T has already moved the stop to break-even, a Trail SL of N R behind the
 ## Not yet
 
 - The journal inside the app, and Telegram screenshots (next).
-- Your Pine Script indicators on the chart, via PineTS (next).
 - Partial closes.
 - Agri MCX contracts use the non-agri rates.

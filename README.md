@@ -6,6 +6,12 @@ It runs on our own server and serves its own page, so there is nothing to instal
 
 **Address:** https://68-183-245-178.sslip.io
 
+## Version 0.8.0: Pine Editor
+
+- **Write, save and run your own Pine Script indicators.** Pine (above the chart) opens the editor; scripts are saved on the server and listed in ƒx → My scripts.
+- **TradingView-style output:** plots, fills, shapes, background and bar colours, labels, lines, boxes, tables, inputs and request.security().
+- **Paper fills:** targets and limit orders fill when a trade goes through their price.
+
 ## Version 0.4.0: chart controls
 
 - **A control bar on each position's entry line:** close, BE, BE-trail and trail, each trail with its own R box.
@@ -43,14 +49,14 @@ See `docs/Paper_Trading_Guide.md`.
 - Page password, the daily Fyers login, MCX search and option chain, watchlist, and live candlestick charts.
 - Auto-update from GitHub.
 
-Next: Pine Script indicators on the chart (PineTS), then the journal in the app with Telegram screenshots.
+Next: the journal in the app, with Telegram screenshots.
 
 ## Repo layout
 
 | Folder | What |
 | --- | --- |
 | `helper/` | The Python server (FastAPI). `app.py` has the routes; `fyers_link.py` handles Fyers login and data; `feed.py` handles live prices; `symbols.py` handles the contract list; `auth.py` handles the page password; `paper.py` is the paper engine; `charges.py` holds every charge |
-| `web/` | The page (`index.html`), the trade panel (`paper.js`) and the bundled chart library |
+| `web/` | The page (`index.html`), the trade panel (`paper.js`), Pine Script (`pine.js`, `pine_worker.js`) and bundled libraries in `vendor/`: Lightweight Charts (Apache-2.0), PineTS (AGPL-3.0), CodeMirror 5 (MIT) |
 | `server/` | Install and auto-update scripts, the service files and the Caddy config |
 | `docs/` | Project brief, server details, setup guide |
 

@@ -1,5 +1,51 @@
 # Changelog
 
+## v0.8.0 — 30 Oct 2026 — Pine Editor and your own Pine Script indicators
+
+Added
+- Pine Editor (Pine button above the chart): a code editor docked under the chart, like TradingView's.
+  Syntax colouring, line numbers, bracket matching, Ctrl+/ to comment, Ctrl+F to find.
+  - Checks your code as you type: errors show with their line number (click to jump there), and the
+    line is marked red.
+  - New, Open, Save (Ctrl+S), Save as, rename (edit the name and Save), Delete.
+  - Add to chart (Ctrl+Enter). Once a script is on the chart the button reads "Update on chart", and
+    saving a script updates it on the chart straight away.
+  - log.info() output shows under the editor. Drag the editor's top edge to resize it.
+- Your scripts are saved on the server, so every device has the same library. ƒx → "My scripts"
+  lists them: + Add puts one on the chart, { } opens it in the editor.
+- Pine scripts on the chart:
+  - overlay=true scripts draw on the candles; the others get their own pane.
+  - plot (line, step line, line break, circles, cross, histogram, columns, area), hline, fill,
+    bgcolor, barcolor, plotshape, plotchar, plotarrow and plotcandle.
+  - Drawings: label, line, box, linefill, polyline; tables over the chart.
+  - request.security() for other timeframes, built from Fyers candles the same way as the chart.
+  - Times (hour, minute, sessions) are in Indian time, like TradingView with an MCX/NSE chart.
+  - Each script's read-out shows its values for the bar under the cursor, with ⚙ inputs, { } source
+    and ✕ remove. Errors show in red in the read-out.
+  - ⚙ opens the script's inputs (numbers, true/false, lists, sources, colours, timeframes, text),
+    grouped as in the script. Changes apply at once and are saved per chart indicator.
+  - Scripts see the latest 1,500 bars and update with live prices (on each new bar, otherwise at most
+    every 2 seconds).
+  - A script stuck in an endless loop is stopped with an error, without freezing the page.
+
+Fixed
+- Paper targets and limit orders now fill when a trade goes through their price, even if the bid / ask
+  never touched it. A real resting limit order would have been filled first. A trade exactly at your
+  price still doesn't fill it, as orders may be ahead of you in the queue. Fills are at your price.
+- Spikes between two live snapshots: when the day's low (or high) moves past a target or limit
+  between snapshots, that trade happened, so the order fills.
+- Indicator panes are sized together, so adding a pane no longer squeezes the one above it to a sliver.
+
+Changed
+- BE line label now leads with what you get there: "BE · exit here nets +₹0 · 13 ticks below entry
+  pay the ₹51.60 charges".
+- Position bar shows the entry price ("SHORT 4 @ 13,993"), and the entry line is labelled Entry.
+
+Notes
+- Pine Script runs on PineTS 0.13.1 (AGPL-3.0) and the editor on CodeMirror 5.65.18 (MIT). Both are
+  bundled in web/vendor with their licences. PineTS covers most of Pine v5/v6 but not all of it; if one
+  of your scripts errors or draws differently from TradingView, send it to me.
+
 ## v0.7.1 — 30 Oct 2026 — Indicator panes easier to read
 
 Changed

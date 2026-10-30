@@ -531,11 +531,11 @@ function drawLines(){
   if(P.snap){
     for(const p of P.snap.positions){
       const bs = p.basis === "underlying" ? p.ref : p.s, e = p.est ? "≈" : "";
-      if(p.s === cur.s) mkLine(P.posLines, p.avg, ENTRY, "", +C.entryS);
+      if(p.s === cur.s) mkLine(P.posLines, p.avg, ENTRY, "Entry", +C.entryS);
       else if(p.basis === "underlying" && p.ref === cur.s && p.basis_entry != null) mkLine(P.posLines, p.basis_entry, ENTRY, "", +C.entryS);
-      if(p.s === cur.s && p.floor != null) mkLine(P.posLines, p.floor, C.beC, `BE floor +${p.be_ticks || 0} ticks · covers ${rs(p.be_covers)}`, +C.beS);
+      if(p.s === cur.s && p.floor != null) mkLine(P.posLines, p.floor, C.beC, `BE floor · exit here nets ₹0 · ${p.be_ticks || 0} ticks ${p.side > 0 ? "above" : "below"} entry pay the ${rs(p.be_covers)} charges`, +C.beS);
       if(bs !== cur.s) continue;
-      const slTitle = p.at_be && p.basis === "self" ? `${p.trail ? "TRAIL" : "BE"} +${p.be_ticks} ticks · covers ${rs(p.be_covers)} · ${rsS(p.at_sl)}`
+      const slTitle = p.at_be && p.basis === "self" ? `${p.trail ? "TRAIL" : "BE"} · exit here nets ${rsS(p.at_sl)} · ${p.be_ticks} ticks ${p.side > 0 ? "above" : "below"} entry pay the ${rs(p.be_covers)} charges`
         : `SL ${e}${rsS(p.at_sl)}${p.trail ? " trail" : ""}`;
       const atBe = p.at_be && p.basis === "self";
       if(p.sl != null) drag(mkLine(P.posLines, p.sl, atBe ? C.beC : C.slC, slTitle, atBe ? +C.beS : +C.slS, 2), p.sl, tk(bs), v => papi("modify", {id: p.id, sl: v}));
@@ -643,7 +643,7 @@ function posBars(){
     const t = el.querySelector('[data-f="t"]');
     if(i.kind === "pos"){
       const p = i.p;
-      t.innerHTML = `<b class="${p.side > 0 ? "up" : "down"}">${p.side > 0 ? "LONG" : "SHORT"} ${p.lots}</b> <span class="${cls(p.net)}">${rsS(p.net)}</span>`
+      t.innerHTML = `<b class="${p.side > 0 ? "up" : "down"}">${p.side > 0 ? "LONG" : "SHORT"} ${p.lots}</b> <span class="muted">@ ${fmt(p.avg, (sym[p.s] || {}).tick || cur.tick)}</span> <span class="${cls(p.net)}">${rsS(p.net)}</span>`
         + (p.r_now != null ? ` <span class="muted">${p.r_now > 0 ? "+" : ""}${p.r_now}R</span>` : "");
       const ta = el.querySelector('[data-f="ta"]');
       if(ta){
