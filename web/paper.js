@@ -639,7 +639,13 @@ function posBars(){
     const el = host.querySelector(`.pbar[data-id="${i.id}"]`); if(!el) continue;
     const y = series.priceToCoordinate(i.price);
     if(y == null){ el.style.display = "none"; continue; }
-    el.style.display = ""; el.style.top = y + "px"; el.style.right = (axis + 6) + "px";
+    // the stop / target labels are drawn at the same spot, just left of the price scale: when one of those
+    // lines is close to the entry (a BE stop a few ticks away), slide the bar off it so its label stays readable
+    const src = i.kind === "pos" ? i.p : i.o, own = src && (src.basis !== "underlying" || src.ref === cur.s);
+    const near = (own ? [src.sl, src.tp, src.floor] : []).filter(v => v != null).map(v => series.priceToCoordinate(v)).filter(v => v != null && Math.abs(v - y) < 24);
+    let top = y;
+    if(near.length){ const n = near.sort((a, b) => Math.abs(a - y) - Math.abs(b - y))[0]; top = n >= y ? n - 24 : n + 24; }
+    el.style.display = ""; el.style.top = top + "px"; el.style.right = (axis + 6) + "px";
     const t = el.querySelector('[data-f="t"]');
     if(i.kind === "pos"){
       const p = i.p;

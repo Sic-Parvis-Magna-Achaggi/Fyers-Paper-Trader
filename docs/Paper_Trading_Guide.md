@@ -1,4 +1,4 @@
-# Paper trading: how it works (v0.8.0)
+# Paper trading: how it works (v0.8.1)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -22,6 +22,8 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
   - **BE** to move the stop to break-even + costs now;
   - **BE-T** with its R box: trail to BE once the trade reaches that R;
   - **TRAIL** with its R box: trail the stop that many R behind the best price.
+
+  When the stop or target is only a few ticks from the entry (a BE stop, say), the bar slides just off that line so its label stays readable; the **Entry** tag on the price scale marks the exact entry.
 
   These trailing settings belong to that trade. The panel's Trail row sets the defaults for new trades, and changing it there also changes every open trade.
 - **Pending orders** have a bar with their type and lots, and **✕** to cancel.

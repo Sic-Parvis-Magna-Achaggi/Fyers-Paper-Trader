@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.8.1 — 30 Oct 2026 — BE label always readable
+
+Fixed
+- When the stop sits a few ticks from the entry (for example at BE), its label was hidden under the
+  position bar. The bar now slides just above or below the stop line, so the "BE · exit here nets …"
+  label stays readable. The Entry tag on the price scale still marks the exact entry.
+
 ## v0.8.0 — 30 Oct 2026 — Pine Editor and your own Pine Script indicators
 
 Added
