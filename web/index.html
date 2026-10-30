@@ -424,10 +424,10 @@ function tfPlan(k){
   const t = parseTf(k) || parseTf("5m");
   if(t.min){
     const base = NATIVE.includes(t.min) ? t.min : Math.max(...NATIVE.filter(b => t.min % b === 0));
-    const days = Math.min(base === 1 ? 30 : 200, Math.max(2, Math.ceil(1000 * t.min / 870) + 3));
+    const days = Math.min(base === 1 ? 30 : 198, Math.max(2, Math.ceil(1000 * t.min / 870) + 3));
     return {t, res: String(base), agg: base !== t.min, sec: t.min * 60, days};
   }
-  return {t, res: "D", agg: t.u !== "D" || t.n > 1, sec: 86400 * (t.u === "D" ? t.n : 1), days: t.u === "D" && t.n === 1 ? 730 : 1100};
+  return {t, res: "D", agg: t.u !== "D" || t.n > 1, sec: 86400 * (t.u === "D" ? t.n : 1), days: t.u === "M" ? 1095 : 730};
 }
 function sessStart(){ const r = cur && sym[cur.s]; const m = /^(\d\d)(\d\d)/.exec((r && r.sess) || cur && cur.sess || ""); return m ? (+m[1]) * 60 + (+m[2]) : 540; }
 function bucket(ts, plan){                // ts: seconds already shifted to IST
@@ -646,7 +646,12 @@ async function loadHistory(){
   const plan = tfPlan(tf); curPlan = plan;
   const j = await api(`/api/history?symbol=${encodeURIComponent(cur.s)}&res=${plan.res}&days=${plan.days}`);
   if(my !== histToken) return;
-  if(!j.ok){ msg.textContent = j.error || "Couldn't load the chart."; series.setData([]); return; }
+  if(!j.ok){
+    msg.textContent = j.error || "Couldn't load the chart."; series.setData([]);
+    if(/busy/.test(j.error || "") && (histRetry = (histRetry || 0) + 1) <= 4){ msg.textContent = "Loading… (waiting for Fyers)"; setTimeout(() => { if(my === histToken) loadHistory(); }, 2500); }
+    return;
+  }
+  histRetry = 0;
   let bars = (j.candles || []).map(c => ({time:c[0] + IST, open:c[1], high:c[2], low:c[3], close:c[4]}));
   if(plan.agg){
     const out = [];
@@ -666,7 +671,7 @@ async function loadHistory(){
   if(last[cur.s]) bidAsk(last[cur.s]);
   drawLines();
 }
-let curPlan = null;
+let curPlan = null, histRetry = 0;
 function liveBar(t){
   if(!series || !t.ltp || !curPlan) return;
   const tt = Number(t.t) || Math.floor(Date.now()/1000), ts = tt + IST;

@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.4.1 — 30 Oct 2026 — Chart loading fix
+
+Fixed
+- "busy - too many data requests" on the chart when switching timeframes quickly (1D, 1W, 1M and
+  4h are fetched in several pieces, and the helper refused the extra ones instead of waiting)
+
+Changed
+- Data requests now queue for a moment instead of being refused, still staying well inside
+  Fyers' free-plan limits (helper caps: 3 a second, 35 a minute)
+- Fewer pieces per chart: 1D and 1W load 2 years (2 requests), 1M 3 years, 2h–4h up to 198 days (2 requests)
+- History already loaded for a longer range is reused for shorter ones; identical requests share one call
+- The chart retries by itself if Fyers is busy
+
 ## v0.4.0 — 30 Oct 2026 — Chart controls and view fixes
 
 Added

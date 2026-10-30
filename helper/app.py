@@ -66,6 +66,8 @@ async def _engine_loop():
 
 @app.on_event("startup")
 async def _startup():
+    from concurrent.futures import ThreadPoolExecutor
+    asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(max_workers=16))   # room for queued Fyers calls
     engine.on_change = _engine_changed
     engine.on_symbols = lambda: feed._resync()
     feed.extra = engine.watch_symbols
@@ -246,47 +248,36 @@ def option_chain(request: Request, u: str, exp: int = 0):
 
 
 _hist_cache: dict = {}
+_hist_inflight: dict = {}
 
 
 @app.get("/api/history")
 async def history(request: Request, symbol: str, res: str = "5", days: int = 5):
+    """Candles, cached for 45 s. A bigger range already in the cache serves smaller ones, and identical
+    requests that arrive together share one Fyers call."""
     _need(request)
+    now = time.time()
+    for (s, r, d), (t, candles) in list(_hist_cache.items()):
+        if s == symbol and r == res and d >= days and now - t < 45:
+            return {"ok": True, "candles": candles, "cached": True}
     key = (symbol, res, days)
-    hit = _hist_cache.get(key)
-    if hit and time.time() - hit[0] < 45:          # switching back and forth costs no data requests
-        return {"ok": True, "candles": hit[1], "cached": True}
+    fut = _hist_inflight.get(key)
+    if fut is None:
+        fut = asyncio.get_running_loop().run_in_executor(None, fyers_link.history, symbol, res, days)
+        _hist_inflight[key] = fut
     try:
-        candles = await asyncio.get_running_loop().run_in_executor(None, fyers_link.history, symbol, res, days)
+        candles = await asyncio.shield(fut)
     except PermissionError as e:
         return _err(e, 409)
     except Exception as e:
         log.warning("History %s %s failed: %s", symbol, res, e)
         return _err(e, 502)
+    finally:
+        _hist_inflight.pop(key, None)
     if len(_hist_cache) > 60:
         _hist_cache.clear()
     _hist_cache[key] = (time.time(), candles)
     return {"ok": True, "candles": candles}
-
-
-@app.get("/api/prefs")
-async def get_prefs(request: Request):
-    _need(request)
-    return {"ok": True, "prefs": store.load("prefs.json")}
-
-
-@app.post("/api/prefs")
-async def set_prefs(request: Request):
-    """Page preferences (watchlist, timeframes, last chart, theme, default stop distances...): merged, so
-    every device and every login gets the same set-up."""
-    _same_origin(request)
-    _need(request)
-    b = await _body(request)
-    if not isinstance(b, dict) or len(json.dumps(b)) > 100_000:
-        return _err("bad preferences")
-    p = store.load("prefs.json")
-    p.update(b)
-    store.save("prefs.json", p)
-    return {"ok": True}
 
 
 @app.get("/api/logs")

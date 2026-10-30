@@ -105,28 +105,38 @@ def _auth_header() -> dict:
 
 
 class Budget:
-    """Stay well inside Fyers' Standard data limits (5/s, 50/min, 5,000/day).
-    Going over the per-minute limit 3+ times in a day blocks the account for the day, so we refuse first."""
-    def __init__(self, per_sec=3, per_min=35, per_day=4000):
+    """Stay well inside Fyers' Standard limits (data: 5/s, 50/min, 5,000/day).
+    Going over the per-minute limit 3+ times in a day blocks the account for the day, so requests queue here
+    (a short wait) rather than ever going over. Only a long queue is refused."""
+    def __init__(self, per_sec=3, per_min=35, per_day=4000, max_wait=12.0):
         self.lim = (per_sec, per_min, per_day)
+        self.max_wait = max_wait
         self.calls: list = []
         self.day = ""
         self.today = 0
         self.lock = threading.Lock()
 
     def take(self) -> None:
-        with self.lock:
-            now = time.time()
-            d = time.strftime("%Y-%m-%d")
-            if d != self.day:
-                self.day, self.today = d, 0
-            self.calls = [t for t in self.calls if now - t < 60]
-            if self.today >= self.lim[2]:
-                raise RuntimeError("daily data budget used up - charts will refresh tomorrow")
-            if len(self.calls) >= self.lim[1] or sum(1 for t in self.calls if now - t < 1) >= self.lim[0]:
+        """Blocking (call from a worker thread): waits for a free slot."""
+        give_up = time.time() + self.max_wait
+        while True:
+            with self.lock:
+                now = time.time()
+                d = time.strftime("%Y-%m-%d")
+                if d != self.day:
+                    self.day, self.today = d, 0
+                self.calls = [t for t in self.calls if now - t < 60]
+                if self.today >= self.lim[2]:
+                    raise RuntimeError("daily data budget used up - charts will refresh tomorrow")
+                last_sec = [t for t in self.calls if now - t < 1]
+                if len(self.calls) < self.lim[1] and len(last_sec) < self.lim[0]:
+                    self.calls.append(now)
+                    self.today += 1
+                    return
+                wait = (min(last_sec) + 1 - now) if len(last_sec) >= self.lim[0] else (min(self.calls) + 60 - now)
+            if now + wait > give_up:
                 raise RuntimeError("busy - too many data requests, try again in a moment")
-            self.calls.append(now)
-            self.today += 1
+            time.sleep(max(0.05, wait))
 
     def status(self) -> dict:
         now = time.time()
@@ -187,14 +197,14 @@ def status() -> dict:
 RES = {"1": 60, "2": 120, "3": 180, "5": 300, "10": 600, "15": 900, "20": 1200, "30": 1800, "45": 2700,
        "60": 3600, "120": 7200, "180": 10800, "240": 14400, "D": 86400}
 CHUNK = {"D": 365}                       # days per request (Fyers: 100 for intraday, 366 for daily)
-MAX_TOTAL = {"1": 30, "2": 45, "3": 60, "D": 1100}   # most days we fetch in one go (others: 200)
+MAX_TOTAL = {"1": 30, "2": 45, "3": 60, "D": 1100}   # most days we fetch in one go (others: 198 = 2 requests)
 
 
 def history(symbol: str, res: str, days: int) -> list:
     """Candles [[epoch_sec, o, h, l, c, v], ...], oldest first. Long ranges are fetched in chunks."""
     if res not in RES:
         raise ValueError("bad resolution")
-    days = max(1, min(int(days), MAX_TOTAL.get(res, 200)))
+    days = max(1, min(int(days), MAX_TOTAL.get(res, 198)))
     chunk = CHUNK.get(res, 99)
     end = dt.datetime.now(IST).date()
     start = end - dt.timedelta(days=days)
