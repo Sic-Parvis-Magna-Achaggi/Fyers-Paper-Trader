@@ -529,9 +529,11 @@ function drawLines(){
       const bs = p.basis === "underlying" ? p.ref : p.s, e = p.est ? "≈" : "";
       if(p.s === cur.s) mkLine(P.posLines, p.avg, cssv("--text"), "", 2);
       else if(p.basis === "underlying" && p.ref === cur.s && p.basis_entry != null) mkLine(P.posLines, p.basis_entry, MUT, "", 2);
-      if(p.s === cur.s && p.floor != null) mkLine(P.posLines, p.floor, DOWN, "floor (BE)", 1);
+      if(p.s === cur.s && p.floor != null) mkLine(P.posLines, p.floor, ACC, `BE floor +${p.be_ticks || 0} ticks · covers ${rs(p.be_covers)}`, 1);
       if(bs !== cur.s) continue;
-      if(p.sl != null) drag(mkLine(P.posLines, p.sl, DOWN, `SL ${e}${rsS(p.at_sl)}${p.trail ? " trail" : ""}`, 0, 2), p.sl, tk(bs), v => papi("modify", {id: p.id, sl: v}));
+      const slTitle = p.at_be && p.basis === "self" ? `${p.trail ? "TRAIL" : "BE"} +${p.be_ticks} ticks · covers ${rs(p.be_covers)} · ${rsS(p.at_sl)}`
+        : `SL ${e}${rsS(p.at_sl)}${p.trail ? " trail" : ""}`;
+      if(p.sl != null) drag(mkLine(P.posLines, p.sl, p.at_be && p.basis === "self" ? ACC : DOWN, slTitle, 0, 2), p.sl, tk(bs), v => papi("modify", {id: p.id, sl: v}));
       if(p.tp != null) drag(mkLine(P.posLines, p.tp, UP, `TP ${e}${rsS(p.at_tp)}`, 0, 2), p.tp, tk(bs), v => papi("modify", {id: p.id, tp: v}));
     }
     for(const o of P.snap.orders){
@@ -735,6 +737,7 @@ const RULES = [
   ["squareoff", "Intraday square-off (IST)", "Intraday positions close at this time, HH:MM; empty = off"],
   ["expiry_exit", "Expiry-day exit (IST)", "Positions in contracts expiring today close at this time; empty = off"],
   ["stale_sec", "Stale price (seconds)", "Market orders are refused when the last price is older"],
+  ["be_buffer_ticks", "BE buffer (ticks)", "Extra ticks beyond break-even + costs when a stop moves to BE (BE, BE all, Trail BE)"],
 ];
 function renderRules(){
   if(!P.snap) return;

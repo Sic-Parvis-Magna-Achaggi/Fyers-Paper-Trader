@@ -1,4 +1,4 @@
-# Paper trading: how it works (v0.4.0)
+# Paper trading: how it works (v0.4.2)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -57,7 +57,7 @@ NSE futures and options rates are also in the app, for later. These rates come f
 
 - **Value** = price × quantity × multiplier. For example, CRUDEOILM is 10 barrels a lot, CRUDEOIL 100, and GOLDPETAL 1 gram.
 - **Lot sizing** finds the most lots whose loss at the stop, including both orders' charges, fits your risk.
-- **BE + costs** is the exit price where the net P&L is zero after every charge both ways, rounded to the profitable side of the tick.
+- **BE + costs** works like LiveTrader's: the exit price where closing nets ₹0 or more after the entry charges already paid and the charges the exit would pay, rounded to the profitable tick, plus the **BE buffer** in Rules (default 0 ticks). A stop at BE is labelled "BE +N ticks · covers ₹X".
 - **R** = net P&L ÷ the net risk at the first stop.
 
 ## Fills
@@ -67,8 +67,8 @@ NSE futures and options rates are also in the app, for later. These rates come f
 | Market | Buy at the ask, sell at the bid |
 | Limit | When the ask (buy) or bid (sell) reaches your price, at your price or better |
 | Stop entry | When the last price crosses it, then at the ask / bid (market) |
-| Stop loss | When the stop's price is crossed: at the bid (long) or ask (short) at that moment, so slippage is included |
-| Target | At the target, or better if price gapped through |
+| Stop loss | When the bid (long) or ask (short) reaches it, as at MT5, then at that bid / ask, so a jump through the stop fills worse (slippage). A stop on an underlying future triggers on the future's last price |
+| Target | When the bid (long) or ask (short) reaches it: at the target, or better if price gapped through |
 
 Positions are netted per contract and product (Intraday / Carry), like Fyers. Adds average in, and one trade runs flat to flat. An opposite order on a contract you hold is refused: close it first.
 

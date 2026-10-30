@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.4.2 — 30 Oct 2026 — Break-even matched to LiveTrader
+
+Changed
+- Stops and targets on a contract's own price now trigger on the price they exit at, as in MT5:
+  a long's SL / TP on the bid, a short's on the ask (they used to trigger on the last price). A stop at
+  BE + costs therefore closes at BE + costs, not a spread worse. Stops on an underlying future still
+  trigger on the future's last price
+- A stop at break-even is labelled like LiveTrader: "BE +N ticks · covers ₹X" (the entry charges already
+  paid plus the exit charges), "TRAIL …" once Trail SL has taken it over
+
+Added
+- Rules → BE buffer (ticks): extra ticks beyond break-even + costs for BE, BE all and Trail BE
+  (LiveTrader's "Break-even buffer (points)"; default 0)
+
 ## v0.4.1 — 30 Oct 2026 — Chart loading fix
 
 Fixed

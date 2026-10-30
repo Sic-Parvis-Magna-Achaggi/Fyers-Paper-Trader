@@ -36,6 +36,7 @@ DEFAULT_RULES = {
     "max_trades": 0,          # new trades per day (0 = no limit)
     "sl_required": True,
     "stale_sec": 90,          # refuse market orders when the last price is older (market closed)
+    "be_buffer_ticks": 0,     # extra ticks beyond break-even + costs when moving a stop to BE (LiveTrader: BE buffer)
     "squareoff": "23:15",     # INTRADAY positions are closed at this IST time ("" = off)
     "expiry_exit": "22:45",   # positions in contracts expiring today are closed at this IST time ("" = off)
 }
@@ -662,8 +663,11 @@ class Paper:
         self.changed()
 
     def _be_price(self, pos):
+        """Like LiveTrader's BreakEvenPrice: the exit price where closing nets >= 0 after every charge already
+        paid on the entries and every charge the exit would pay, plus the BE buffer, on the profitable tick."""
         row = self.row(pos["s"])
-        return charges.breakeven(row, pos["side"], pos["qty"], pos["avg"], paid=pos["paid"])
+        return charges.breakeven(row, pos["side"], pos["qty"], pos["avg"], paid=pos["paid"],
+                                 buffer_ticks=int(self.rules.get("be_buffer_ticks") or 0))
 
     def _set_be(self, pos, why):
         """Move the stop to where closing pays back every charge. Underlying stops get an own-price floor."""
@@ -741,16 +745,19 @@ class Paper:
             return False
         pos["basis_best"] = max(pos["basis_best"], b) if udir > 0 else min(pos["basis_best"], b)
 
-        # stops and targets
+        # stops and targets. An own-price stop or target triggers on the price it would exit at (a long sells
+        # at the bid, a short buys at the ask), as at MT5 - so a stop at BE + costs exits at BE + costs.
+        # A stop on the underlying future triggers on the future's last price.
+        trig = b if pos["basis"] == "underlying" else mark
         if pos.get("floor") is not None and side * (mark - pos["floor"]) <= 0:
             self.close(pos, mark, "be" if pos["be_done"] else "sl")
             return True
-        if pos.get("sl") is not None and udir * (b - pos["sl"]) <= 0:
+        if pos.get("sl") is not None and udir * (trig - pos["sl"]) <= 0:
             fill = mark                                    # stop = market order: the bid/ask now (slippage included)
             at_be = pos["be_done"] or (pos["basis"] == "self" and side * (pos["sl"] - pos["avg"]) >= 0)
             self.close(pos, fill, "trail sl" if pos["trail"] else ("be" if at_be else "sl"))
             return True
-        if pos.get("tp") is not None and udir * (b - pos["tp"]) >= 0:
+        if pos.get("tp") is not None and udir * (trig - pos["tp"]) >= 0:
             fill = mark if pos["basis"] == "underlying" else (max(pos["tp"], mark) if side > 0 else min(pos["tp"], mark))
             self.close(pos, fill, "tp")
             return True
@@ -859,6 +866,12 @@ class Paper:
         v["r_now"] = round(n["net"] / pos["init_risk"], 2) if pos["init_risk"] else None
         v["est"] = pos["basis"] == "underlying"
         v["basis_entry"] = pos.get("basis_entry")
+        # at break-even: the stop (or the floor) is at or past BE + costs - label it like LiveTrader ("BE +N ticks")
+        stop_px = pos.get("floor") if pos.get("floor") is not None else (pos.get("sl") if pos["basis"] == "self" else None)
+        if stop_px is not None and pos["side"] * (stop_px - v["be"]) >= -1e-9:
+            tick = row.get("tick") or 0.05
+            ex = charges.order(row, -pos["side"], pos["qty"], stop_px)["total"]
+            v.update(at_be=True, be_ticks=round(abs(stop_px - pos["avg"]) / tick), be_covers=round(pos["paid"] + ex, 2))
         v["tr"] = pos.get("tr") or dict(self.trail)            # figures at an underlying stop use the option's delta
         return v
 
