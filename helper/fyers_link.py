@@ -37,9 +37,9 @@ class Budget:
         self.today = 0
         self.lock = threading.Lock()
 
-    def take(self) -> None:
-        """Blocking (call from a worker thread): waits for a free slot."""
-        give_up = time.time() + self.max_wait
+    def take(self, max_wait: float | None = None) -> None:
+        """Blocking (call from a worker thread): waits for a free slot (live orders may wait longer)."""
+        give_up = time.time() + (self.max_wait if max_wait is None else max_wait)
         while True:
             with self.lock:
                 now = time.time()

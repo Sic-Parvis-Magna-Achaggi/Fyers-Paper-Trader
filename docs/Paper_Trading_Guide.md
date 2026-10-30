@@ -1,4 +1,4 @@
-# Paper trading: how it works (v0.13.3)
+# Paper and live trading: how it works (v0.14.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -7,9 +7,9 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
 - **Login** is your username and password, then a 6-digit code from your authenticator app (Google Authenticator, Microsoft Authenticator, Authy or similar). Lost your phone? Type one of your recovery codes instead of the app code; each works once.
 - **First login** (and the first login after this update, as user **admin** with your old page password): you scan a QR code into the app, type the code it shows, and save the 10 recovery codes shown once.
 - **Settings → Security:** change your name or password, get new recovery codes, move 2FA to a new phone, see every device you're logged in on (log any out, or everywhere else), and recent activity.
-- **A fresh code is asked again** (valid 5 minutes) for sensitive actions: adding or changing users, new recovery codes, moving 2FA, editing charge rates.
+- **A fresh code is asked again** (valid 5 minutes) for sensitive actions: adding or changing users, new recovery codes, moving 2FA, editing charge rates, turning an account Live, Resume after the kill switch.
 - **Lockout:** 5 wrong passwords or codes lock that user for 15 minutes. Sessions end after 48 hours without use and after 7 days at most.
-- **Users (admin only, Settings → Users):** add a user with a temporary password. They choose their own password and set up 2FA at first login, then enter their own Fyers app in their Settings for prices. You can disable / enable a user, reset their 2FA (lost phone) or give them a new temporary password. Other users are paper-only; live trading will be the admin's only.
+- **Users (admin only, Settings → Users):** add a user with a temporary password. They choose their own password and set up 2FA at first login, then enter their own Fyers app in their Settings for prices. You can disable / enable a user, reset their 2FA (lost phone) or give them a new temporary password. Other users are paper-only; live trading is the admin's only.
 - **Everything is per user:** Fyers app and login, watchlist, chart set-up, Pine scripts, paper accounts. Charge rates are shared; only the admin edits them.
 - **Lost phone and recovery codes (admin):** on the server console, in `/home/helper/app`, run `sudo -u helper /home/helper/venv/bin/python -m helper.users rescue admin`. It prints a temporary password; log in with it and set up 2FA again.
 
@@ -20,6 +20,48 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
 - Each account has its own balance, rules, trailing defaults, positions, orders and history. All of them keep running on the server (stops, targets, trailing, square-off), whichever one you're looking at.
 - **Rename, archive, restore** on the Account page. Archiving needs the account flat (no positions or orders) and keeps its trades. You always keep at least one account.
 - **Reset** (Account page) starts the account you're looking at again; its old trades are archived on the server.
+
+## Live trading (the admin only)
+
+An account can be **Paper** or **Live**. A Live account uses the same ticket, chart tool, rules, guards, BE, trailing and targets as paper, but its orders go to Fyers on your own login, from the server's own IP **134.209.159.171**.
+
+**Before the first live trade:** whitelist **134.209.159.171** in your Fyers API app (not 68.183.245.178) and give the app order permission. Then test with **1 lot on MCX**.
+
+**Turning it on:** Account page → *Your accounts* → **Turn on LIVE** on an account with no positions or orders. Type your Fyers client ID (shown in the dialog) and a fresh 2FA code. Its paper trades are archived on the server and it starts a fresh ledger at the capital you type (that's what the % rules use), so paper results and real money never mix. One Live account per Fyers login. **Back to Paper** works the same way (flat first). Both are in the security log.
+
+**You'll see:** a red **LIVE** badge and a **KILL** button in the top bar, a red line under the top bar, **LIVE** on the PLACE button, "● LIVE" in the account switcher, and under every position where its stop is at Fyers.
+
+**How a live trade runs**
+
+- **Entry:** the order goes to Fyers. The position opens only when Fyers reports the fill, at Fyers' price. Market orders become Fyers' market-price-protection orders. No after-market orders: a contract that isn't trading is refused. Every live trade needs a stop.
+- **The stop at Fyers:** as soon as the trade opens, a **stop-limit (SL-L)** order goes to Fyers at your stop. Its limit sits a little past the trigger (Rules: *LIVE: stop-limit slack*, 0.5% of the price or at least 5 ticks), so it fills even if price jumps. Example from the test: a CRUDEOIL long with the stop at 5,585 → Fyers stop 5,585, limit 5,557. Fyers doesn't take stop-market (SL-M) orders on options or BSE, so the app uses stop-limits everywhere.
+- **Trailing, BE and BE-T** move that same Fyers order (never below BE + costs, never backwards). Changes are paced at least 1.5 seconds apart per trade. Moving the SL yourself moves it too.
+- **The server still watches** with the bid / ask rule, like MT5 and paper: a long's stop fires when the bid reaches it. Fyers triggers its stop on the last traded price, so the server usually acts first, and live exits can differ from paper by a tick.
+- **Closing** (the server's stop rule, the target, intraday square-off, the expiry-day exit, ✕, Close all, the kill switch):
+  - **NSE / BSE:** the stop order itself is changed into a market order.
+  - **MCX:** Fyers doesn't allow changing an order's type there, so the app cancels the stop, waits until Fyers confirms it's gone, then sends one market exit.
+  - Either way there is **never more than one exit order** at Fyers for a position. If Fyers refuses a market order (some MCX options), a limit that crosses the spread is sent instead. An exit still open after 3 seconds (*LIVE: re-price…*) is re-priced to cross the spread.
+- **Targets stay on the server** (no target order at Fyers), so a stop and a target can never both fill.
+- **A stop that triggered but didn't fill** (price jumped past its limit): the server's rule catches it and turns it into a market exit.
+- **The trade is recorded** at Fyers' fill price, with every charge, net, as in paper.
+
+**When things go wrong**
+
+- **The server is down:** the stop at Fyers protects the position at its last level. Trailing and the target pause. When the server is back it reads Fyers' order book first: a stop that filled is recorded; then trailing resumes; a target already passed closes at market on the first price.
+- **Fyers refuses or is slow with a stop change:** the previous stop stays in force at Fyers, a warning shows, and the app retries.
+- **Fyers doesn't confirm an order** (a time-out): the app looks the order up by its tag and never sends it twice.
+- **No stop at Fyers** (refused, or waiting for the market): a red warning shows under the top bar and on the position until it's in.
+- **Overnight (Carry / NRML):** Fyers orders last one day. The next day, after your Fyers login and once the contract trades, the app places a fresh stop at the trailed level. Until then a warning shows. Before placing it, the app checks Fyers still has the position. If it was closed while the app was away, the trade is recorded as "closed at Fyers" at the last stop price, with a warning to check the real price in Fyers' trade book.
+- **No Fyers login today:** new orders are blocked; stops already at Fyers stay in force, but trailing can't move them and targets / square-off can't close.
+- **Part fills:** if Fyers fills only part of a stop or an exit, that part is recorded at once and the rest stays open (with its stop, or still closing). An exit is never larger than what Fyers still holds.
+- **"CHECK FYERS" warnings** appear when only you can sort something out in Fyers (for example an app order that filled after the app had stopped tracking it). They stay until you press **Resync with Fyers**.
+- **Delivery (CNC) shares:** a stop that sells delivery shares needs your Fyers authorisation to sell from your demat (TPIN / DDPI), as for any sell of shares you hold.
+
+**Kill switch** (KILL in the top bar, or the Account page): cancels every order and closes every position at Fyers on your login, the app's trades **and any others**, then pauses new entries until you press **Resume** on the Account page (Resume asks for a fresh 2FA code). Stops keep working meanwhile, and an entry that fills during it is closed too. KILL asks once to confirm (no 2FA code, so it's quick).
+
+**Account page (Live):** whether you're logged in to Fyers, whether order updates are connected (if not, the app reads the order book every 5 seconds), your Fyers funds, **Resync with Fyers** (re-reads Fyers and puts every stop where it should be), Resume and the kill switch.
+
+**Limits:** live orders, changes and cancels share Fyers' 10 a second / 200 a minute (the helper queues at 4 a second, 120 a minute). Fyers' order-update socket doesn't count against them. The Standard plan is enough; nothing here needs Fyers Prime.
 
 ## Markets
 
@@ -219,12 +261,14 @@ When BE-T has already moved the stop to break-even, a Trail SL of N R behind the
 
 ## Records
 
-- **History:** every closed trade, with the exit reason (tp, sl, be, trail sl, manual, square-off, expiry). Tap a trade for its full charge breakdown, first stop, risk, and best / worst price.
+- **History:** every closed trade, with the exit reason (tp, sl, be, trail sl, manual, square-off, expiry; live also kill, and "closed at Fyers" for a position closed outside the app). Tap a trade for its full charge breakdown, first stop, risk, and best / worst price.
 - **Download CSV:** one row per trade, with every charge in its own column.
 - Trades are stored on the server in `/home/helper/data/u/<user>/a/<account>/paper_trades.json`. **Reset** archives them and starts that account again.
 
 ## Not yet
 
-- The journal inside the app, and Telegram screenshots (next).
+- Comparing the charges the app counts with what Fyers actually deducted (live).
+- Telegram alerts if the server stops responding during a live trade (next).
+- The journal inside the app, and Telegram screenshots.
 - Partial closes.
 - Agri MCX contracts use the non-agri rates.

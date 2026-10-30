@@ -465,6 +465,88 @@ async def accounts_update(request: Request):
     return {"ok": True, "accounts": r.account_list()}
 
 
+@app.post("/api/accounts/mode")
+async def accounts_mode(request: Request):
+    """Paper <-> Live. Live: the admin only, Fyers logged in today, the Fyers client ID typed to confirm, and a fresh
+    2FA code. The account must be flat; its trades so far are archived and it starts a fresh ledger."""
+    _same_origin(request)
+    u, r = _urt(request)
+    b = await _body(request)
+    mode = str(b.get("mode") or "")
+    if mode == "live":
+        if u["role"] != "admin":
+            return _err("Live trading is for the admin only (SEBI / Fyers static-IP rules)", 403)
+        st = await asyncio.get_running_loop().run_in_executor(None, r.link.status)
+        if not st.get("logged_in") or not st.get("client_id"):
+            return _err("log in to Fyers first (today's login), so the app can read your client ID")
+        if str(b.get("confirm") or "").strip().upper() != str(st["client_id"]).upper():
+            return _err(f"type your Fyers client ID ({st['client_id']}) exactly to confirm")
+        _stepped(request)
+    try:
+        cap = float(b.get("capital") or 0) or None
+        a = r.set_mode(str(b.get("id") or ""), mode, cap)
+    except Refused as e:
+        return _err(e)
+    except (TypeError, ValueError):
+        return _err("enter the capital in rupees")
+    users.audit(u["uid"], f"LIVE {'ON' if mode == 'live' else 'off'}", a["name"], _ip(request))
+    log.warning("Account %s (%s) is now %s", a["name"], u["username"], mode.upper())
+    return {"ok": True, "account": a, "accounts": r.account_list()}
+
+
+# ------------------------------------------------------------------ live accounts (real orders at Fyers)
+def _live(request: Request, b: dict | None = None):
+    e = _eng(request, b)
+    if getattr(e, "mode", "paper") != "live":
+        raise HTTPException(400, "this is a paper account")
+    return e
+
+
+@app.get("/api/live/status")
+async def live_status(request: Request, funds: int = 0):
+    e = _live(request)
+    out = {"ok": True, "live": e.live_status()}
+    if funds:
+        try:
+            out["funds"] = await asyncio.get_running_loop().run_in_executor(None, e.broker.funds)
+        except Exception as ex:
+            out["funds_error"] = str(ex)
+    return out
+
+
+@app.post("/api/live/kill")
+async def live_kill(request: Request):
+    """Kill switch: cancel every order and close every position at Fyers (no 2FA: it must be quick)."""
+    _same_origin(request)
+    u = _user(request)
+    b = await _body(request)
+    e = _live(request, b)
+    e.kill()
+    users.audit(u["uid"], "KILL SWITCH", e.name, _ip(request))
+    return _ok(e)
+
+
+@app.post("/api/live/resume")
+async def live_resume(request: Request):
+    _same_origin(request)
+    u = _user(request)
+    b = await _body(request)
+    e = _live(request, b)
+    _stepped(request)                     # turning trading back on after the kill switch needs a fresh 2FA code
+    e.resume()
+    users.audit(u["uid"], "live trading resumed", e.name, _ip(request))
+    return _ok(e)
+
+
+@app.post("/api/live/resync")
+async def live_resync(request: Request):
+    _same_origin(request)
+    b = await _body(request)
+    e = _live(request, b)
+    e.resync()
+    return _ok(e)
+
+
 # ------------------------------------------------------------------ Fyers (each user's own app and daily login)
 @app.post("/api/fyers/settings")
 async def fyers_settings(request: Request):

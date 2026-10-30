@@ -18,7 +18,7 @@ const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m); if(!c) process.
 (async () => {
   const br = await chromium.launch();
   const pg = await (await br.newContext({ viewport: { width: 1400, height: 900 } })).newPage();
-  const errs = []; pg.on("pageerror", e => errs.push(e.message)); pg.on("console", m => { if(m.type() === "error") errs.push(m.text()); });
+  const errs = []; pg.on("pageerror", e => errs.push(e.message)); pg.on("console", m => { if(m.type() === "error" && !/^Failed to load resource/.test(m.text())) errs.push(m.text()); });   // HTTP answers the test provokes (401, 428...) aren't script errors
   await pg.goto(B); await pg.waitForSelector("#vLogin:not(.hide)");
   ok(true, "login screen shown");
   await pg.fill("#lUser", "admin"); await pg.fill("#lPw", "WrongPass123"); await pg.click("#fLogin button.primary");

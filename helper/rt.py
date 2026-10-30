@@ -1,5 +1,6 @@
-"""What runs for each user: their Fyers connection, their price feed, and their paper accounts (each a Paper
-engine that keeps working - stops, targets, trailing, square-off - with the page closed).
+"""What runs for each user: their Fyers connection, their price feed, and their accounts (each a Paper engine, or
+for the admin a LiveEngine with real orders at Fyers, that keeps working - stops, targets, trailing, square-off -
+with the page closed). A user with a Live account also has one Fyers order-update socket.
 
 Files:  u/<user>/fyers.json, prefs.json, scripts.json, candles.db, accounts.json
         u/<user>/a/<account>/paper.json, paper_rules.json, paper_trades.json (+ archives)"""
@@ -11,6 +12,7 @@ import time
 from . import store, users
 from .feed import Feed
 from .fyers_link import FyersLink
+from .live import LiveEngine
 from .paper import DEFAULT_RULES, Paper, Refused
 
 log = logging.getLogger("rt")
@@ -28,6 +30,9 @@ class UserRT:
         self.link = FyersLink(self.dir, self.label)
         self.feed = Feed(self.link, self.label)
         self.engines: dict = {}
+        self.role = u.get("role", "user")
+        self.ostream = None                        # Fyers order updates (only with a Live account)
+        self.loop = None
         self.feed.extra = self.watch_symbols
         self.feed.on_tick = self.on_tick
         for a in self.accounts():
@@ -44,11 +49,97 @@ class UserRT:
         store.save(self.dir + "accounts.json", {"accounts": lst})
 
     def _open(self, a: dict) -> Paper:
-        e = Paper(f"{self.dir}a/{a['id']}/", self.link, a.get("name", ""))
+        folder = f"{self.dir}a/{a['id']}/"
+        if a.get("mode") == "live" and self.role == "admin":
+            e = LiveEngine(folder, self.link, a.get("name", ""), broker=make_broker(self.link))
+        else:
+            e = Paper(folder, self.link, a.get("name", ""))
         e.on_change = lambda ev, aid=a["id"]: on_engine_change and on_engine_change(self, aid, ev)
         e.on_symbols = lambda: self.feed._resync()
         self.engines[a["id"]] = e
+        if isinstance(e, LiveEngine):
+            self._ensure_stream()
+            e.stream = self.ostream
+            if self.loop:
+                e.start(self.loop)
         return e
+
+    # ------------------------------------------------------------ live: the order-update socket
+    def live_engines(self) -> list:
+        return [e for e in self.engines.values() if isinstance(e, LiveEngine)]
+
+    def _ensure_stream(self):
+        if self.ostream is None:
+            self.ostream = make_stream(self.link, self._order_from_socket, self.label)
+            self.ostream.on_connect = self._stream_connected
+
+    def _order_from_socket(self, u: dict):
+        """Called on the socket's thread: hand the update to the event loop."""
+        if self.loop:
+            self.loop.call_soon_threadsafe(self._order_update, u)
+
+    def _order_update(self, u: dict):
+        for e in self.live_engines():
+            try:
+                e.on_update(u)
+            except Exception as ex:
+                log.exception("[%s] order update: %s", self.label, ex)
+
+    def _stream_connected(self):
+        """(Re)connected: read the order book once, in case something happened while it was down."""
+        if self.loop:
+            for e in self.live_engines():
+                self.loop.call_soon_threadsafe(e.enqueue, ("poll",), 3)
+
+    def attach(self, loop):
+        self.loop = loop
+        self.feed.start(loop)
+        for e in self.live_engines():
+            e.start(loop)
+
+    def set_mode(self, aid: str, mode: str, capital: float | None = None) -> dict:
+        """Switch an account between Paper and Live (the app checks the admin, the typed client ID and the 2FA code).
+        The account must be flat. Its trades so far are archived (kept on the server) and it starts a fresh ledger,
+        so paper results and real money never mix."""
+        if mode not in ("paper", "live"):
+            raise Refused("mode: paper or live")
+        lst = self.accounts()
+        a = next((x for x in lst if x["id"] == aid and not x.get("archived")), None)
+        if not a:
+            raise Refused("no such account")
+        if a.get("mode", "paper") == mode:
+            raise Refused(f"that account is already {mode.title()}")
+        if mode == "live":
+            if self.role != "admin":
+                raise Refused("Live trading is for the admin only (SEBI / Fyers static-IP rules)")
+            other = next((x for x in lst if x.get("mode") == "live" and not x.get("archived") and x["id"] != aid), None)
+            if other:
+                raise Refused(f'"{other["name"]}" is already Live - one Live account per Fyers login')
+        e = self.engines.get(aid)
+        if e and (e.positions or e.orders):
+            raise Refused("close its positions and cancel its orders first")
+        size = float(capital or (e.rules["size"] if e else DEFAULT_RULES["size"]))
+        if size <= 0:
+            raise Refused("capital must be above 0")
+        if e:
+            if isinstance(e, LiveEngine):
+                e.stop()
+            e.history_archive()
+            e.rules["size"] = size
+            store.save(e.dir + "paper_rules.json", e.rules)
+            e.acct = {"start": size, "realized": 0.0, "peak": size, "created": time.time(), "cycle": e.acct.get("cycle", 1) + 1}
+            e.day = {}
+            e.event(f"Switched to {mode.title()}: a fresh ledger at ₹{size:,.0f} (earlier trades archived on the server)")
+            e.save()
+        a["mode"] = mode
+        a["capital"] = size
+        self._save_accounts(lst)
+        self._open(a)
+        self.feed._resync()
+        users.audit(self.uid, f"account set to {mode}", f"{a['name']} (₹{size:,.0f})")
+        if on_engine_change:
+            on_engine_change(self, aid, f"{a['name']} is now {mode.title()}")
+        return a
 
     def engine(self, aid: str | None) -> Paper:
         if aid and aid in self.engines:
@@ -64,6 +155,7 @@ class UserRT:
         for a in self.accounts():
             e = self.engines.get(a["id"])
             row = dict(a)
+            row["mode"] = a.get("mode", "paper")
             if e:
                 row.update(balance=e.balance(), equity=e.equity(), open=len(e.positions), orders=len(e.orders))
             out.append(row)
@@ -118,7 +210,9 @@ class UserRT:
                 if len([x for x in lst if not x.get("archived")]) <= 1:
                     raise Refused("keep at least one account")
                 a["archived"] = time.time()
-                self.engines.pop(aid, None)
+                old = self.engines.pop(aid, None)
+                if isinstance(old, LiveEngine):
+                    old.stop()
             else:
                 a.pop("archived", None)
                 self._open(a)
@@ -150,7 +244,11 @@ class UserRT:
 
     def stop(self):
         self.feed.stop()
+        if self.ostream:
+            self.ostream.stop()
         for e in self.engines.values():
+            if isinstance(e, LiveEngine):
+                e.stop()
             e.save()
 
 
@@ -167,8 +265,19 @@ def get(uid: str) -> UserRT:
     if r is None:
         r = RT[uid] = UserRT(uid)
         if _loop:
-            r.feed.start(_loop)
+            r.attach(_loop)
     return r
+
+
+def make_broker(link):
+    """Fyers' order API (tests swap in a fake)."""
+    from .broker import FyersBroker
+    return FyersBroker(link)
+
+
+def make_stream(link, on_order, label):
+    from .broker import OrderStream
+    return OrderStream(link, on_order, label)
 
 
 def drop(uid: str):

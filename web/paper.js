@@ -819,6 +819,9 @@ const RULES = [
   ["expiry_exit_cd", "Currency expiry-day exit (IST)", ""],
   ["stale_sec", "Stale price (seconds)", "Market orders are refused when the last price is older"],
   ["be_buffer_ticks", "BE buffer (ticks)", "Extra ticks beyond break-even + costs when a stop moves to BE (BE, BE all, Trail BE)"],
+  ["live_slack_pct", "LIVE: stop-limit slack %", "The stop at Fyers is a stop-limit; its limit sits this far past the trigger (% of the stop price) so it fills if price jumps"],
+  ["live_slack_ticks", "LIVE: stop-limit slack, at least (ticks)", ""],
+  ["live_chase_sec", "LIVE: re-price an unfilled exit after (seconds)", "An exit still open after this is re-priced to cross the spread"],
 ];
 function sqToday(){
   const t = (P.snap || {}).squareoff_today || {};
@@ -829,7 +832,7 @@ function renderRules(sel = "#rulesForm"){
   if(!P.snap || !$(sel)) return;
   if(sel === "#rulesForm") P.rulesShown = true;
   const r = P.snap.rules;
-  $(sel).innerHTML = RULES.map(([k, label, help, opts]) => `<div class="rf"><label>${label}</label>` +
+  $(sel).innerHTML = RULES.filter(([k]) => !k.startsWith("live_") || P.snap.mode === "live").map(([k, label, help, opts]) => `<div class="rf"><label>${label}</label>` +
     (opts ? `<select data-k="${k}">${opts.map(o => `<option value="${o}" ${String(r[k]) === String(o) ? "selected" : ""}>${o === true ? (k === "squareoff_on" ? "on" : "required") : o === false ? (k === "squareoff_on" ? "off" : "optional") : o}</option>`).join("")}</select>`
           : `<input data-k="${k}" value="${esc(r[k])}" ${typeof r[k] === "number" ? 'inputmode="decimal"' : ""}>`) +
     (help ? `<div class="help">${help === "SQTODAY" ? sqToday() : help}</div>` : "") + `</div>`).join("");

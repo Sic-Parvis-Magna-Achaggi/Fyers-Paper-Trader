@@ -50,6 +50,11 @@ DEFAULT_RULES = {
     "expiry_exit": "22:45",     # MCX: positions in contracts expiring today are closed at this IST time ("" = off)
     "expiry_exit_eq": "15:00",
     "expiry_exit_cd": "12:00",
+    # Live accounts only (helper/live.py). The stop at Fyers is a stop-limit (SL-L): Fyers doesn't take SL-M on
+    # options or on BSE. Its limit sits this far past the trigger, so it fills even if price jumps.
+    "live_slack_pct": 0.5,      # % of the stop price
+    "live_slack_ticks": 5,      # at least this many ticks
+    "live_chase_sec": 3.0,      # an exit still unfilled after this long is re-priced to cross the spread
 }
 TIME_KEYS = ("expiry_exit", "expiry_exit_eq", "expiry_exit_cd", "squareoff_cd", "fy_sq_fo", "fy_sq_eq_fo", "fy_sq_eq",
              "fy_sq_mcx_summer", "fy_sq_mcx_winter")
@@ -126,6 +131,8 @@ class Refused(Exception):
 
 
 class Paper:
+    mode = "paper"
+
     def __init__(self, folder: str = "", link=None, name: str = ""):
         self.dir = folder                # "u/<user>/a/<account>/" - every file of this account lives there
         self.link = link                 # the user's Fyers connection (margin look-ups)
@@ -156,11 +163,18 @@ class Paper:
         self.ticket = {**DEFAULT_TICKET, **(s.get("ticket") or {})}
         self.events = s.get("events") or []
         self.history = store.load(self.dir + "paper_trades.json", [])
+        self._load_extra(s)
+
+    def _load_extra(self, s: dict):
+        """Live accounts keep their Fyers order ids here."""
+
+    def _save_extra(self) -> dict:
+        return {}
 
     def save(self):
         store.save(self.dir + "paper.json", {"acct": self.acct, "day": self.day, "positions": self.positions,
                                   "orders": self.orders, "seq": self.seq, "trail": self.trail, "ticket": self.ticket,
-                                  "events": self.events[-500:]})
+                                  "events": self.events[-500:], **self._save_extra()})
         self._dirty_at = 0.0
 
     def save_history(self):
@@ -1055,7 +1069,8 @@ class Paper:
         }
         return {"acct": acct, "positions": [self.pos_view(p) for p in self.positions],
                 "orders": [self.order_view(o) for o in self.orders], "trail": self.trail, "ticket": self.ticket,
-                "rules": self.rules, "events": self.events[-20:], "day": self.day, "squareoff_today": self.squareoff_today()}
+                "rules": self.rules, "events": self.events[-20:], "day": self.day, "squareoff_today": self.squareoff_today(),
+                "mode": self.mode}
 
     def set_rules(self, new: dict):
         r = dict(self.rules)

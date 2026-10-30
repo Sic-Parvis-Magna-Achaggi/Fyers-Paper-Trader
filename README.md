@@ -6,6 +6,12 @@ It runs on our own server and serves its own page, so there is nothing to instal
 
 **Address:** https://68-183-245-178.sslip.io
 
+## Version 0.14.0: live trading (the admin only)
+
+- **Turn an account Live** (Account page): orders go to Fyers on your login, from the server's IP 134.209.159.171 (whitelist it in your Fyers API app first).
+- **A real stop at Fyers from the moment a trade opens;** trailing and BE move that same order. Targets stay on the server, and there's never more than one exit order at Fyers.
+- **Red LIVE badge, KILL switch,** and the Fyers stop shown on every position. Test with 1 lot on MCX first.
+
 ## Version 0.10.0: pages, NSE and BSE
 
 - **Full pages** for Trades, History (stats, equity curve, filters), Book (up to 4 order books), Account and Log, next to the chart.

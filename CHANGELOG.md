@@ -1,5 +1,73 @@
 # Changelog
 
+## v0.14.0 — 31 Oct 2026 — Live mode (the admin only): real orders at Fyers with the stop at Fyers
+
+Added
+- **Live accounts.** Any account can be Paper or Live (Account page → Your accounts → Turn on LIVE / Back to
+  Paper). Live is for the admin only, one Live account per Fyers login, and needs the account flat, Fyers logged in
+  today, the Fyers client ID typed to confirm and a fresh 2FA code. The account's earlier trades are archived and a
+  fresh ledger starts at the capital typed, so paper results and real money never mix. In the security log.
+- **Real orders, same engine.** A Live account uses the paper engine's ticket, chart tool, rules and guards, BE,
+  BE-T, trailing, targets, square-off and expiry exit; orders go to Fyers on the owner's login. A position opens when
+  Fyers reports the fill, at Fyers' price, and every ₹ figure stays net of all charges. Every live trade needs a stop;
+  no orders when the contract isn't trading (Fyers takes no after-market orders) or without today's Fyers login.
+- **The stop at Fyers.** As soon as a trade opens, a stop-limit (SL-L) sits at Fyers at the stop, its limit 0.5% (at
+  least 5 ticks) past the trigger so it fills if price jumps (new rules: LIVE stop-limit slack % and ticks).
+  Trailing, BE, BE-T and your own SL edits move that same order, paced 1.5 s apart, never below BE, never backwards.
+- **Exits, never two at Fyers.** The server's bid / ask rule (and targets, square-off, expiry, ✕, Close all, the kill
+  switch) closes at Fyers: on NSE / BSE the stop order itself becomes a market order; on MCX (no type change allowed)
+  the stop is cancelled, the cancel confirmed, then one market exit. Market refused → a limit that crosses the spread;
+  an exit still open after 3 s is re-priced (new rule: LIVE re-price after, seconds). Targets stay on the server.
+- **When things go wrong.** Server restart: Fyers' order book is read first (a stop that filled is recorded), then
+  trailing resumes. A refused stop change keeps the old stop and retries with a warning. An unconfirmed order is
+  looked up by its tag, never sent twice. Overnight (Carry) positions get a fresh stop at the trailed level the next
+  day once the contract trades, after checking Fyers still holds the position.
+- **Kill switch** (KILL in the top bar and on the Account page): cancels every order and closes every position at
+  Fyers on the login (the app's and any others), then pauses new orders until Resume.
+- **On the page:** red LIVE badge, KILL button and a red line under the top bar; "● LIVE" in the switcher; LIVE on
+  the PLACE button; live warnings under the top bar (no stop at Fyers, no Fyers login, order updates down); each
+  position shows its Fyers stop (and on the Trades page under SL); the Account page's Live card (Fyers login, order
+  updates, Fyers funds, Resync with Fyers, Resume, kill switch).
+- **Fyers order updates** through Fyers' order socket (not counted against API limits), with the order book read as
+  a fallback (every 5 s if the socket is down).
+- **Routes:** `POST /api/accounts/mode`, `GET /api/live/status`, `POST /api/live/kill`, `/api/live/resume`,
+  `/api/live/resync`. The paper routes work for Live accounts too.
+- **Tests:** `tests/fake_broker.py` (a fake Fyers order API with Fyers' rules, which records any moment two exit
+  orders are open), `tests/live_test.py` (61 checks of the live engine), `tests/live_flow.js` (browser). The mock
+  server fakes the order API too.
+
+Roadmap
+- Added, in this order: saved chart layouts per user (indicators and their settings); multi-charts (vertical and
+  horizontal) in a layout; a proper mobile version (full-screen chart, like the MT5 mobile app).
+
+Changed
+- The account manager is headed "Your accounts" and shows each account's mode.
+- `tests/security_flow.js`: the "no page errors" check ignores HTTP answers the test provokes on purpose (401, 428)
+  and fonts the test machine can't reach; script errors still fail it.
+
+Safety fixes before release (an independent review of the live engine found these; each is now a test)
+- A stop or exit that part-fills at Fyers: each part is recorded as it fills and an exit is never larger than what
+  Fyers still holds (before: a part-filled stop then a full-size exit could open an opposite position).
+- An order whose answer from Fyers was lost: its tag and "sent" mark are saved before sending, and after a restart
+  it's looked up, never sent again.
+- Kill switch: its second phase never touches a contract the app was handling, and acts only on positions Fyers
+  shows twice, 1.5 s apart (before: an app exit filling meanwhile could be "closed" a second time).
+- Cancelling an order Fyers hadn't confirmed: it's kept until Fyers shows it (then cancelled there) or confirms it
+  doesn't exist; if it filled, the position opens with its stop. Nothing is left at Fyers without the app knowing.
+- An extra app order that turns up late at Fyers is cancelled (or, if filled, recorded), and when a position closes
+  every other app order for it is cancelled. Anything only you can sort out shows as a "CHECK FYERS" warning until
+  Resync.
+- The kill switch pauses new entries only; stops keep being placed and moved. An entry that fills during it is closed.
+- Delivery (CNC) shares held overnight are found in Fyers' holdings.
+- Order updates that fail are retried from the order book; a silent order socket is reopened after 45 s.
+- **Resume** after the kill switch asks for a fresh 2FA code.
+- After a restart, the day's finished orders aren't replayed (no false "CHECK FYERS" warnings); the kill switch's
+  own close of an outside position is never mistaken for a stray; the app records a position as "closed at Fyers"
+  only when two reads of Fyers' positions, 3 s apart, both show it gone; a fill whose recording fails is retried;
+  "not placed" is decided only after 6 looks at the order book (about 12 s).
+
+Not tested (needs the real Fyers): see "Where live mode stands" in `docs/Handoff.md`.
+
 ## v0.13.3 — 31 Oct 2026 — Roadmap as a ticked task list, project instructions (no change to the app)
 
 Added

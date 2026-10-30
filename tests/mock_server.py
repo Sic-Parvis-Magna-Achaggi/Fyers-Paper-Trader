@@ -55,6 +55,28 @@ def fake_get(self, url, params):
 
 
 FL._get = fake_get
+
+# Live accounts: Fyers' order API and order-update socket are faked too (tests/fake_broker.py)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from fake_broker import FakeBroker  # noqa: E402
+from helper import rt as rtmod  # noqa: E402
+from helper.broker import norm_order  # noqa: E402
+FB = FakeBroker()
+
+
+class FakeStream:
+    up = True
+    on_connect = None
+
+    def __init__(self, link, on_order, label):
+        FB.emit = lambda row: on_order(norm_order(row))
+
+    def stop(self):
+        pass
+
+
+rtmod.make_broker = lambda link: FB
+rtmod.make_stream = lambda link, on_order, label: FakeStream(link, on_order, label)
 FL.quotes = fake_quotes
 FL.margin = lambda self, s, q, side, prod, price=0: {"MCX:CRUDEOIL26NOVFUT": 52000.0}.get(s, 20000.0) * q
 feedmod.Feed._ensure_socket = lambda self: None
@@ -81,6 +103,7 @@ def tick_feed(feed):
             p = round(round(p / t) * t, 2)
             feed.sock_up = True
             VOL[s] = VOL.get(s, 10000) + random.randint(0, 40)
+            FB.set_price(s, p, round(p - t, 2), round(p + t, 2))
             feed.publish({"s": s, "ltp": p, "bid": round(p - t, 2), "ask": round(p + t, 2), "t": int(time.time()), "vol": VOL[s], "src": "ws",
                           "tbq": 5200 + random.randint(0, 900), "tsq": 4800 + random.randint(0, 900), "o": 5590, "h": 5650, "l": 5560, "pc": 5580, "atp": 5602.4, "ltq": 3})
         for s in feed.wanted_depth():

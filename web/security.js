@@ -200,7 +200,7 @@ function acctSetup(){
   if(!list.find(a => a.id === ACCT)) ACCT = list.length ? list[0].id : null;
   const sel = sq("#acctSel"); if(!sel) return;
   const rsx = n => n == null ? "" : " · ₹" + Math.round(n).toLocaleString("en-IN");
-  sel.innerHTML = list.map(a => `<option value="${a.id}" ${a.id === ACCT ? "selected" : ""}>${sesc(a.name)}${rsx(a.balance)}</option>`).join("")
+  sel.innerHTML = list.map(a => `<option value="${a.id}" ${a.id === ACCT ? "selected" : ""}>${a.mode === "live" ? "● LIVE · " : ""}${sesc(a.name)}${rsx(a.balance)}</option>`).join("")
     + `<option value="+new">+ New account…</option><option value="+manage">Manage accounts…</option>`;
   sel.onchange = () => {
     const v = sel.value;
@@ -221,10 +221,10 @@ async function acctRefresh(){ const j = await api("/api/accounts"); if(j.ok){ S.
 function acctMgrRender(){
   const box = sq("#acctMgr"); if(!box) return;
   const all = (S && S.accounts) || [], rsx = n => n == null ? "–" : "₹" + Math.round(n).toLocaleString("en-IN");
-  box.innerHTML = `<h3 class="pg-h3" style="margin-top:0">Your paper accounts</h3>
+  box.innerHTML = `<h3 class="pg-h3" style="margin-top:0">Your accounts</h3>
     <div class="alist">${all.map(a => `<div class="arow ${a.archived ? "arch" : ""}" data-id="${a.id}"><div><b>${sesc(a.name)}</b> ${a.id === ACCT ? '<span class="tag">showing</span>' : ""}${a.archived ? '<span class="tag">archived</span>' : ""}
-        <div class="muted sm">${a.archived ? "" : `balance ${rsx(a.balance)} · equity ${rsx(a.equity)} · ${a.open || 0} open, ${a.orders || 0} orders · `}started with ${rsx(a.capital)} · Paper</div></div>
-      <div class="ubtns">${a.archived ? `<button class="sm" data-a="restore">Restore</button>` : `${a.id === ACCT ? "" : `<button class="sm" data-a="show">Show</button>`}<button class="sm" data-a="rename">Rename</button><button class="sm" data-a="archive">Archive</button>`}</div></div>`).join("")}</div>
+        <div class="muted sm">${a.archived ? "" : `balance ${rsx(a.balance)} · equity ${rsx(a.equity)} · ${a.open || 0} open, ${a.orders || 0} orders · `}started with ${rsx(a.capital)} · ${a.mode === "live" ? '<span class="mode-live">LIVE at Fyers</span>' : "Paper"}</div></div>
+      <div class="ubtns">${a.archived ? `<button class="sm" data-a="restore">Restore</button>` : `${a.id === ACCT ? "" : `<button class="sm" data-a="show">Show</button>`}<button class="sm" data-a="rename">Rename</button>${a.mode === "live" ? `<button class="sm" data-a="mode">Back to Paper</button>` : (S.user && S.user.role === "admin" && !all.some(x => x.mode === "live" && !x.archived) ? `<button class="sm danger" data-a="mode">Turn on LIVE</button>` : "")}<button class="sm" data-a="archive">Archive</button>`}</div></div>`).join("")}</div>
     <h4>New account</h4>
     <div class="f2"><div><label>Name</label><input id="naName" placeholder="e.g. NIFTY options" autocomplete="off"></div><div><label>Starting capital ₹</label><input id="naCap" class="mono" value="25000" inputmode="decimal"></div></div>
     <label>Rules and trailing</label><select id="naCopy"><option value="">Defaults</option>${all.filter(a => !a.archived).map(a => `<option value="${a.id}">Copy from ${sesc(a.name)}</option>`).join("")}</select>
@@ -238,6 +238,7 @@ function acctMgrRender(){
   box.querySelectorAll(".arow [data-a]").forEach(b => b.onclick = async () => {
     const id = b.closest(".arow").dataset.id, a = all.find(x => x.id === id), act = b.dataset.a;
     if(act === "show"){ acctSwitch(id); return; }
+    if(act === "mode"){ liveModeDialog(a); return; }
     let body = {id};
     if(act === "rename"){ const n = prompt("New name:", a.name); if(!n) return; body.name = n; }
     if(act === "archive"){ if(!confirm(`Archive "${a.name}"? Its trades are kept; you can restore it later.`)) return; body.archived = true; }
