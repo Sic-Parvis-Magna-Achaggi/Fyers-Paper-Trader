@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.15.0)
+# Paper and live trading: how it works (v0.16.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -139,11 +139,20 @@ The button after the timeframes (it shows the current type, e.g. **Candles**, **
 | Renko | Bricks of one size. A new brick when price moves a box past the last one; a reversal needs two boxes. Box: ATR (default 14, worked out from the candles loaded, then fixed until you reload) or fixed points, saved per underlying (one for CRUDEOIL, another for NIFTY). Built from the closes, or from each candle's high and low; wicks optional. |
 | Range bars | Each bar spans the same range (high − low); a new bar starts when price goes beyond it. Range: ATR or fixed points. |
 | Line break | A new line when the close passes the highs (or lows) of the last 3 lines (settable). |
+| Point & Figure | Columns of X (rising) and O (falling), one mark per box. A new column needs a reversal of 3 boxes (settable) from the column's extreme and starts one box back from it. Box: ATR or fixed points (per underlying); built from the closes, or from highs and lows. The button shows box × reversal, e.g. **P&F 11 × 3**. |
 
-- **Renko, range bars and line break** are built from the timeframe's candles: pick **1m** for the finest bricks. They don't follow the clock, so the candle timer is off and the time axis shows when each brick formed.
-- **Indicators work on every type.** Volume, the built-in indicators and your Pine scripts run on the bars the chart shows, as on TradingView: on Heikin-Ashi an RSI uses the Heikin-Ashi closes; on Renko there's one value per brick. They line up bar for bar, on the candles and in their own panes, and follow live prices.
+- **Renko, range bars, line break and Point & Figure** are built from the timeframe's candles: pick **1m** for the finest bricks. They don't follow the clock, so the candle timer is off and the time axis shows when each brick formed.
+- **Indicators work on every type.** Volume, the built-in indicators and your Pine scripts run on the bars the chart shows, as on TradingView: on Heikin-Ashi an RSI uses the Heikin-Ashi closes; on Renko there's one value per brick; on Point & Figure one per column (its last box). They line up bar for bar, on the candles and in their own panes, and follow live prices.
 - **Prices stay real.** Bid, ask, last, your entry / SL / TP lines and every ₹ figure use real prices, whatever the chart type. (A Heikin-Ashi close isn't a price you can trade at.)
 - The long / short tool and the position bars work on every type.
+
+## Order-flow check (admin, Log page)
+
+A real footprint (buy × sell volume at each price) needs every trade's price and size. Fyers' API documents no trade-by-trade feed, so the app measures what its normal price feed delivers:
+
+- The server records every price snapshot for the contracts listed (by default the nearest CRUDEOIL and NIFTY futures; up to 6) while you're logged in to Fyers, with or without the page open. Files: `data/feedcheck/` on the server, one per day.
+- **Exact volume** is the share of the volume that arrived one trade per snapshot (the day's volume grew by exactly the last trade's size), so each trade's price and size is known. **Price known** adds the last trade of each merged snapshot. **Merged** snapshots carried several trades, whose prices are lost. Shown per contract and per hour (IST).
+- The footprint will be built only if this shows the trades arrive exactly. It stays a check: nothing here changes how the app trades.
 
 ## Candle timer
 
@@ -284,7 +293,7 @@ When BE-T has already moved the stop to break-even, a Trail SL of N R behind the
 
 ## Not yet
 
-- Footprint / delta (order flow).
+- Footprint / delta (order flow): waiting for the order-flow check (Monday 2 Nov).
 - Comparing the charges the app counts with what Fyers actually deducted (live).
 - Telegram alerts if the server stops responding during a live trade (next).
 - The journal inside the app, and Telegram screenshots.

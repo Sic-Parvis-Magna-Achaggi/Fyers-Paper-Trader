@@ -6,6 +6,11 @@ It runs on our own server and serves its own page, so there is nothing to instal
 
 **Address:** https://68-183-245-178.sslip.io
 
+## Version 0.16.0: Point & Figure, order-flow check
+
+- **Point & Figure** chart type, with indicators like the others.
+- **Order-flow check** (Log page): measures whether Fyers' feed delivers every trade, before any footprint is built.
+
 ## Version 0.15.0: chart types
 
 - **Heikin-Ashi, Renko, range bars, line break,** plus hollow candles, bars, line and area (the button after the timeframes).

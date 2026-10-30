@@ -482,12 +482,14 @@ async function pgLog(reload){
     box.innerHTML = `<div class="pg-head"><h2>Log</h2><span class="sp"></span>
         <div class="seg" id="pgLogF"><button data-f="all" class="on">Everything</button><button data-f="trades">Trades</button><button data-f="warn">Warnings</button><button data-f="system">System</button><button data-f="security">Security</button></div>
         <input id="pgLogQ" placeholder="Search…" autocomplete="off" style="width:200px"><button id="pgLogR" class="ghost" title="Refresh">↻</button></div>
+      <div class="pg-card admin-only" id="pgFc"></div>
       <div class="tblw"><table class="tbl" id="pgLogT"></table></div>`;
     pgq("#pgLogF").querySelectorAll("button").forEach(b => b.onclick = () => { PG.logF = b.dataset.f; pgq("#pgLogF").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); pgLogRender(); });
     pgq("#pgLogQ").oninput = () => { PG.logQ = pgq("#pgLogQ").value.toLowerCase(); pgLogRender(); };
     pgq("#pgLogR").onclick = () => pgLog(true);
-    clearInterval(PG.logTimer); PG.logTimer = setInterval(() => { if(PG.page === "log") pgLog(true); }, 10000);
+    clearInterval(PG.logTimer); PG.logTimer = setInterval(() => { if(PG.page === "log") pgLog(true); }, 10000);   // (and the order-flow check)
   }
+  if(S.user && S.user.role === "admin") pgFeedCheck();
   if(reload || !PG.logs){
     const [e, l, sc] = await Promise.all([api("/api/paper/events"), api("/api/logs"), api("/api/security")]);
     PG.logs = [...(e.ok ? e.events.map(x => ({t: x.t, kind: "trades", lvl: x.lvl === "warn" ? "warn" : "info", src: "paper", msg: x.msg})) : []),
@@ -496,6 +498,33 @@ async function pgLog(reload){
         msg: x.event + (x.detail ? " - " + x.detail : "") + (x.ip ? " (" + x.ip + ")" : "")})) : [])].sort((a, b) => b.t - a.t);
   }
   pgLogRender();
+}
+/* the order-flow check (admin): does Fyers' feed deliver every trade? (helper/feedcheck.py) */
+async function pgFeedCheck(day){
+  const box = pgq("#pgFc"); if(!box) return;
+  const j = await api("/api/feedcheck" + (day || PG.fcDay ? "?day=" + encodeURIComponent(day || PG.fcDay) : ""));
+  if(!j.ok){ box.innerHTML = ""; return; }
+  const c = j.config || {}, rows = Object.entries(j.symbols || {}), pct = v => v == null ? "–" : v.toFixed(1) + "%";
+  const n = v => v == null ? "–" : Number(v).toLocaleString("en-IN");
+  const line = (name, x, sub) => `<tr class="${sub ? "fcsub" : ""}"><td class="${sub ? "mono sm" : "mono"}">${esc(name)}</td><td class="r mono">${n(x.updates)}</td><td class="r mono">${x.per_sec ?? "–"}</td>
+    <td class="r mono">${n(x.trade_updates)}</td><td class="r mono">${n(x.vol)}</td><td class="r mono"><b>${pct(x.exact_vol_pct)}</b></td><td class="r mono">${pct(x.known_vol_pct)}</td>
+    <td class="r mono">${n(x.merged_updates)}</td><td class="r mono">${n(x.max_merge)}</td><td class="r mono">${n(x.gaps)}</td><td class="r mono">${n(x.odd_updates)}</td></tr>`;
+  box.innerHTML = `<div style="display:flex;align-items:center;gap:8px"><h3 class="pg-h3" style="margin:0;flex:1">Order-flow check: does Fyers' feed send every trade?</h3>
+      <select id="fcDay" style="width:auto">${(j.days.length ? j.days : [j.day]).slice().reverse().map(d => `<option ${d === j.day ? "selected" : ""}>${d}</option>`).join("")}</select>
+      <button class="sm" id="fcOn" style="white-space:nowrap">${c.on ? "Recording · stop" : "Stopped · start"}</button></div>
+    <p class="help">Every price snapshot for these contracts is recorded on the server. When the day's volume grows by exactly the last trade's size, that snapshot is one trade, known exactly; when it grows by more, trades were merged and their prices are lost. A real footprint needs close to 100% exact.</p>
+    <div class="tblw"><table class="tbl"><thead><tr><th>Contract / hour (IST)</th><th class="r">Snapshots</th><th class="r">Per second</th><th class="r">With trades</th><th class="r">Volume</th>
+      <th class="r">Exact volume</th><th class="r">Price known</th><th class="r">Merged</th><th class="r">Largest merge</th><th class="r">Gaps &gt; 5 s</th><th class="r">Odd</th></tr></thead><tbody>
+      ${rows.length ? rows.map(([s, x]) => line(s.replace(/^[A-Z]+:/, ""), x) + Object.entries(x.hours || {}).map(([h, y]) => line("  " + h + ":00", y, true)).join("")).join("")
+        : `<tr><td colspan="11" class="empty">Nothing recorded ${j.day === undefined ? "" : "on " + esc(j.day)} yet: it starts when the contracts trade and you're logged in to Fyers.</td></tr>`}</tbody></table></div>
+    <div class="f2" style="margin-top:8px"><div><label>Contracts recorded (up to 6, comma-separated)</label><input id="fcSyms" class="mono" value="${esc((c.symbols || []).join(", "))}"></div>
+      <div style="align-self:end"><button class="sm" id="fcSave">Save contracts</button> <span id="fcMsg" class="muted sm"></span></div></div>`;
+  pgq("#fcDay").onchange = e => { PG.fcDay = e.target.value; pgFeedCheck(); };
+  pgq("#fcOn").onclick = async () => { await api("/api/feedcheck", {body: {on: !c.on}}); pgFeedCheck(); };
+  pgq("#fcSave").onclick = async () => {
+    const r = await api("/api/feedcheck", {body: {symbols: pgq("#fcSyms").value.split(/[,\s]+/).filter(Boolean)}});
+    pgq("#fcMsg").textContent = r.ok ? "Saved" : r.error; if(r.ok) setTimeout(pgFeedCheck, 400);
+  };
 }
 function pgLogRender(){
   const tb = pgq("#pgLogT"); if(!tb) return;

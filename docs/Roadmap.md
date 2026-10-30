@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 31 Oct 2026 (v0.15.0). This is the one task list for the project.
+Updated 31 Oct 2026 (v0.16.0). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -19,9 +19,13 @@ Updated 31 Oct 2026 (v0.15.0). This is the one task list for the project.
    - [x] Safeguards: a typed confirmation of the Fyers client ID plus a fresh 2FA code to turn Live on; a red LIVE badge everywhere; a kill switch (cancel everything, close everything at Fyers, then pause until Resume); all of it in the security log. *(v0.14.0)*
    - [ ] **First real trade (the owner):** whitelist the droplet's own IP **134.209.159.171** in the Fyers API app with order permission, turn on Live, and test with 1 lot on MCX: entry, the stop at Fyers, a trail move, BE, a close with ✕, and the kill switch. Report anything odd with a screenshot.
    - [ ] Then: compare the app's charges with the charges Fyers actually deducted, and flag any gap.
-2. [ ] **Candle types and order flow** (moved up 31 Oct 2026). Candle types done in **v0.15.0**; order flow still to do.
+2. [ ] **Candle types and order flow** (moved up 31 Oct 2026). Candle types done in **v0.15.0**, Point & Figure in **v0.16.0**; the footprint waits for Monday's measurement.
    - [x] Heikin-Ashi, Renko, range bars, line break, plus hollow candles, bars, line and area. Indicators (Volume, built-ins, your Pine scripts) work on every type, on the bars the chart shows, as on TradingView (asked 31 Oct 2026). *(v0.15.0)*
-   - [ ] Footprint / delta built from live snapshots, recorded from the day it's switched on. These are approximate: Fyers sends snapshots, not every trade, and its history has no order-flow data.
+   - [x] **Point & Figure** chart type (asked 31 Oct 2026): X / O columns, box size (ATR or fixed) and reversal (3 boxes), from closes or highs and lows, with indicators like the other types. *(v0.16.0)*
+   - [ ] **Footprint: real trades only, never an estimate** (agreed 31 Oct 2026). Fyers' API documents no trade-by-trade feed (the tick-by-tick socket is 50-level depth only, NSE / NFO, 1 symbol on Standard); its normal feed sends snapshots with the last trade's price and size and the day's volume.
+     - [x] The recorder: the server records every feed snapshot for chosen contracts (default CRUDEOIL and NIFTY futures) and reports how much of the volume arrives as single, exact trades (Log page, admin). *(v0.16.0)*
+     - [ ] Measure on Monday 2 Nov (needs the owner's Fyers login that morning), then read the report together.
+     - [ ] Then decide with the owner: build the footprint (buy x sell volume at each price per bar, delta, cumulative delta, imbalances) only where the trades are exact; otherwise ask Fyers for a trade feed. Buyer / seller is classified by the bid / ask at the trade, as Fyers' own order flow does.
 3. [ ] **Telegram alerts:** a message if the server stops responding while a live trade is open (with the journal's Telegram set-up).
 4. [ ] **Journal: full Octagon port** (from `octagon_journal.html`)
    - Paper and live trades arrive automatically, per user and account.
@@ -61,6 +65,7 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Done
 
+- [x] **v0.16.0** (31 Oct): Point & Figure chart type; the order-flow check (records the feed to measure whether it carries every trade).
 - [x] **v0.15.0** (31 Oct): chart types (Heikin-Ashi, Renko, range bars, line break, hollow, bars, line, area) with indicators on every type (item 2's first part).
 - [x] **v0.14.0** (31 Oct): live mode built (see item 1 above: its first real trade and the charges check are still open).
 - [x] **v0.13.3** (31 Oct): roadmap kept as a ticked task list; project instructions updated.

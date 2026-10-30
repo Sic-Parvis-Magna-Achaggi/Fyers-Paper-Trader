@@ -156,7 +156,7 @@ class Feed:
         self.publish({
             "s": m["symbol"], "ltp": m.get("ltp"), "bid": m.get("bid_price"), "ask": m.get("ask_price"),
             "t": m.get("exch_feed_time") or m.get("last_traded_time") or int(time.time()),
-            "vol": m.get("vol_traded_today"), "src": "ws",
+            "vol": m.get("vol_traded_today"), "src": "ws", "ltt": m.get("last_traded_time"),
             # day figures for the Book tab
             "bsz": m.get("bid_size"), "asz": m.get("ask_size"), "ltq": m.get("last_traded_qty"),
             "tbq": m.get("tot_buy_qty"), "tsq": m.get("tot_sell_qty"), "atp": m.get("avg_trade_price"),

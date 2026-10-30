@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.16.0 — 31 Oct 2026 — Point & Figure, and the order-flow check
+
+Added
+- **Point & Figure** chart type: X (rising) and O (falling) columns, one mark per box; reversal of 3 boxes
+  (settable), new column one box back; box by ATR or fixed points per underlying; from closes or highs and lows.
+  Volume, indicators and Pine scripts run on the columns (one value per column) like every other type; the chart
+  fits the columns to the width; the button shows box × reversal.
+- **Order-flow check** (admin, Log page): the server records every price snapshot of chosen contracts (default the
+  nearest CRUDEOIL and NIFTY futures, up to 6) to `data/feedcheck/<day>.jsonl.gz` and reports, per contract and per
+  hour, how much of the volume arrived one trade per snapshot (exact), how much was merged, the largest merge and
+  gaps. It decides whether a real footprint can be built from Fyers' feed (measured from Monday 2 Nov). Routes:
+  `GET` / `POST /api/feedcheck`.
+- The price feed passes Fyers' last-trade time along with each tick.
+- **Tests:** `tests/feedcheck_test.py`; Point & Figure in `tests/ctype_test.js` (hand-worked columns) and in
+  `tests/charttypes_flow.js` (with Volume and two Pine scripts, whole boxes, alternating columns; the Log page card).
+
+Roadmap
+- Footprint: real trades only, never an estimate (agreed); the recorder is built, the measurement is on Monday.
+
 ## v0.15.0 — 31 Oct 2026 — Chart types, with indicators on every type
 
 Added

@@ -12,17 +12,20 @@
      Built from the closes, or from each candle's path (open, low/high, high/low, close) with source "hl".
    - range: range bars, each high - low = the range; built from each candle's path.
    - lb: line break (3 by default): a new line when the close passes the highs / lows of the last N lines.
+   - pf: Point & Figure: columns of X (rising) and O (falling), one per box; a new column needs a reversal of N boxes
+     (3 by default) from the column's extreme and starts one box back from it. Each column is a bar: low = its lowest
+     box, high = its highest; open / close follow its direction (X: low -> high, O: high -> low); bar.pf = 1 (X) or -1 (O).
    Renko, range and line break don't follow time: each bar gets the time of the candle it formed in (+1 s for each
    extra bar in the same candle), so times always increase. */
 "use strict";
 const CT = {
   TYPES: [["candles", "Candles"], ["hollow", "Hollow candles"], ["bars", "Bars (OHLC)"], ["line", "Line"], ["area", "Area"],
-          ["ha", "Heikin-Ashi"], ["renko", "Renko"], ["range", "Range bars"], ["lb", "Line break"]],
+          ["ha", "Heikin-Ashi"], ["renko", "Renko"], ["range", "Range bars"], ["lb", "Line break"], ["pf", "Point & Figure"]],
   DEFAULTS: {type: "candles", renkoMode: "atr", renkoAtr: 14, renkoSrc: "close", renkoWicks: false, rangeMode: "atr",
-             rangeAtr: 14, lbLines: 3},
+             rangeAtr: 14, lbLines: 3, pfMode: "atr", pfAtr: 14, pfRev: 3, pfSrc: "close"},
 
   name(t){ return (CT.TYPES.find(x => x[0] === t) || CT.TYPES[0])[1]; },
-  timeBased(t){ return !["renko", "range", "lb"].includes(t); },
+  timeBased(t){ return !["renko", "range", "lb", "pf"].includes(t); },
   ohlc(t){ return !["line", "area"].includes(t); },
 
   roundTick(p, tick){ tick = tick || 0.05; return +(Math.round(p / tick) * tick).toFixed(6); },
@@ -58,6 +61,7 @@ const CT = {
       case "renko": return CT.renko(raw, o.box, o.renkoSrc, o.renkoWicks);
       case "range": return CT.range(raw, o.range);
       case "lb": return CT.lineBreak(raw, o.lbLines || 3);
+      case "pf": return CT.pf(raw, o.box, o.pfRev || 3, o.pfSrc);
       default: return raw.map(b => ({time: b.time, open: b.open, high: b.high, low: b.low, close: b.close, vol: b.vol || 0}));
     }
   },
@@ -119,6 +123,37 @@ const CT = {
         }
         cur.high = Math.max(cur.high, p); cur.low = Math.min(cur.low, p); cur.close = p;
       }
+    }
+    return out;
+  },
+
+  pf(raw, box, rev, src){
+    if(!(box > 0)) return [];
+    rev = Math.max(1, rev | 0);
+    // work in whole boxes (k = level / box) so rounding can't drift
+    const up = p => Math.floor(p / box + 1e-9), dn = p => Math.ceil(p / box - 1e-9), L = k => +(k * box).toFixed(6);
+    const out = [];
+    let dir = 0, top = 0, bot = 0, base = up(raw[0].close), cur = null, lastT = -Infinity, vol = 0;
+    const bar = () => ({open: L(dir > 0 ? bot : top), close: L(dir > 0 ? top : bot), high: L(top), low: L(bot), pf: dir});
+    const start = t => { const tt = Math.max(t, lastT + 1); lastT = tt; cur = {time: tt, ...bar(), vol}; out.push(cur); vol = 0; };
+    const sync = () => { if(cur) Object.assign(cur, bar()); };
+    for(const b of raw){
+      vol += b.vol || 0;
+      // high / low: a rising column looks at the high first (to extend), then the low (to reverse); falling: the other way
+      const ps = src === "hl" ? (dir >= 0 ? [b.high, b.low] : [b.low, b.high]) : [b.close];
+      for(const p of ps){
+        if(dir === 0){
+          if(up(p) >= base + 1){ dir = 1; bot = base; top = up(p); start(b.time); }
+          else if(dn(p) <= base - 1){ dir = -1; top = base; bot = dn(p); start(b.time); }
+        } else if(dir > 0){
+          if(up(p) > top){ top = up(p); sync(); }
+          else if(dn(p) <= top - rev){ dir = -1; top = top - 1; bot = dn(p); start(b.time); }
+        } else {
+          if(dn(p) < bot){ bot = dn(p); sync(); }
+          else if(up(p) >= bot + rev){ dir = 1; bot = bot + 1; top = up(p); start(b.time); }
+        }
+      }
+      if(cur && vol){ cur.vol += vol; vol = 0; }
     }
     return out;
   },

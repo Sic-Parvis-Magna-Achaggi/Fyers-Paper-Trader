@@ -10,6 +10,7 @@ import shutil
 import time
 
 from . import store, users
+from .feedcheck import FC
 from .feed import Feed
 from .fyers_link import FyersLink
 from .live import LiveEngine
@@ -226,9 +227,16 @@ class UserRT:
         out = set()
         for e in self.engines.values():
             out |= set(e.watch_symbols())
+        if self.role == "admin":                   # the order-flow check records the admin's feed (feedcheck.py)
+            out |= set(FC.symbols())
         return sorted(out)
 
     def on_tick(self, t: dict):
+        if self.role == "admin":
+            try:
+                FC.record(t)
+            except Exception as ex:
+                log.warning("feed check: %s", ex)
         for e in list(self.engines.values()):
             try:
                 e.on_tick(t)

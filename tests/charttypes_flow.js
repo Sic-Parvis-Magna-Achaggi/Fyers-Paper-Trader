@@ -7,7 +7,7 @@ const fs = require("fs");
 const SHOT = (process.env.FYERS_HELPER_DATA || ".") + "/shots/";
 fs.mkdirSync(SHOT, { recursive: true });
 const ok = (c, m) => { fs.writeSync(1, (c ? "PASS " : "FAIL ") + m + "\n"); if(!c) process.exitCode = 1; };
-const TYPES = ["candles", "hollow", "bars", "line", "area", "ha", "renko", "range", "lb"];
+const TYPES = ["candles", "hollow", "bars", "line", "area", "ha", "renko", "range", "lb", "pf"];
 let br;
 (async () => {
   br = await chromium.launch();
@@ -65,8 +65,12 @@ let br;
     ok(r.smaAligned && r.rsiAligned && r.rsiN > 0, `${t}: Pine plots line up with the bars (SMA on the candles, RSI ${r.rsiN} values in its own pane)`);
     ok(r.smaPane === 0 && r.rsiPane, `${t}: SMA on the candles, RSI in its own pane`);
     ok(r.smaLast != null && Math.abs(r.smaLast - r.want) < 1e-6 * Math.max(1, Math.abs(r.want)) + 0.01, `${t}: the SMA uses the chart's own closes (${r.smaLast && r.smaLast.toFixed(3)} vs ${r.want.toFixed(3)})`);
-    if(["renko", "range", "lb"].includes(t)) ok(!r.timer, `${t}: no candle timer (these bars don't follow the clock); button "${r.label}"`);
+    if(["renko", "range", "lb", "pf"].includes(t)) ok(!r.timer, `${t}: no candle timer (these bars don't follow the clock); button "${r.label}"`);
     if(t === "renko") ok(r.heights.every(h => Math.abs(h - r.box) < 1e-6), `renko: every brick is one box (${r.box})`);
+    if(t === "pf"){
+      const pf = await pg.evaluate(() => ({cols: DISP.slice(-30).map(b => [b.pf, +((b.high - b.low) / CT_SIZE).toFixed(6)]), alt: DISP.slice(1).every((b, i) => b.pf === -DISP[i].pf)}));
+      ok(pf.cols.every(([d, n]) => Math.abs(n - Math.round(n)) < 1e-6 && (d === 1 || d === -1)) && pf.alt, `pf: columns are whole boxes and alternate X / O (${JSON.stringify(pf.cols.slice(-4))})`);
+    }
     if(t === "range") ok(r.heights.slice(0, -1).every(h => h <= r.box + 1e-6), `range: no finished bar wider than the range (${r.box})`);
     // live: a few seconds of ticks, everything stays lined up
     await pg.waitForTimeout(4000);
@@ -95,6 +99,12 @@ let br;
   await pg.waitForFunction(() => ctType() === "candles" && DISP.length > 50, null, { timeout: 20000 });
   ok(await pg.evaluate(() => !$("#ctimer").classList.contains("hide") || !chartCfg().timerOn || true), "back to candles from the menu");
   await pg.evaluate(() => indSave([]));
+  // the order-flow check on the Log page (admin): the server has been recording the fake feed's CRUDEOIL snapshots
+  await pg.click('#nav button[data-pg="log"]');
+  await pg.waitForFunction(() => /CRUDEOIL/.test((document.querySelector("#pgFc table") || {}).textContent || ""), null, { timeout: 15000 })
+    .then(() => ok(true, "Log page: the order-flow check shows the recorded CRUDEOIL snapshots"))
+    .catch(() => ok(false, "Log page: the order-flow check shows the recorded CRUDEOIL snapshots"));
+  await pg.screenshot({ path: SHOT + "feedcheck.png", fullPage: false });
   ok(errs.length === 0, "no script errors" + (errs.length ? ": " + errs.slice(0, 5).join(" / ") : ""));
   await br.close();
 })().catch(async e => { ok(false, e.message.split("\n")[0]); if(br) await br.close(); });

@@ -451,6 +451,7 @@ body.is-live #panel{box-shadow:inset 3px 0 0 var(--down)}
 .warnc{color:var(--warn)}
 button.place.live,#tool .tp.live{outline:2px solid var(--down);outline-offset:2px}
 .livecard{border-color:var(--down)!important}
+#pgFc{margin-bottom:12px} #pgFc .fcsub td{color:var(--muted);font-size:11.5px;padding-top:2px;padding-bottom:2px}
 .modalwrap{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:150;display:flex;align-items:center;justify-content:center;padding:16px}
 .modalwrap.hide{display:none}
 .modalwrap .ca{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px;width:100%;max-width:440px}
@@ -928,6 +929,7 @@ function ctOpts(){
   if(CT_SIZE == null && RAW.length){
     if(t === "renko") CT_SIZE = CT.size(RAW, c.renkoMode, (c.renkoBox || {})[k], c.renkoAtr, tick);
     if(t === "range") CT_SIZE = CT.size(RAW, c.rangeMode, (c.rangeSize || {})[k], c.rangeAtr, tick);
+    if(t === "pf") CT_SIZE = CT.size(RAW, c.pfMode, (c.pfBox || {})[k], c.pfAtr, tick);
   }
   return {...c, box: CT_SIZE, range: CT_SIZE};
 }
@@ -947,12 +949,56 @@ function makeSeries(C){
   if(t === "area") return chart.addSeries(LightweightCharts.AreaSeries, {...base, lineColor:C.lineC, lineWidth:2,
     topColor:rgbaHex(C.lineC, 0.35), bottomColor:rgbaHex(C.lineC, 0.02)});
   if(t === "bars") return chart.addSeries(LightweightCharts.BarSeries, {...base, upColor:C.up, downColor:C.down, thinBars:false});
+  if(t === "pf"){                             // invisible columns (scale, indicators, the trade tool) + the X / O drawing
+    const s = chart.addSeries(LightweightCharts.CandlestickSeries, {...base, ...PF_CLEAR});
+    s.attachPrimitive(new PfPrim());
+    return s;
+  }
   const boxes = t === "renko" && !ctCfg().renkoWicks || t === "lb";
   return chart.addSeries(LightweightCharts.CandlestickSeries, {...base, upColor:C.up, downColor:C.down, borderVisible:t === "hollow" || boxes,
     borderUpColor:C.up, borderDownColor:C.down, wickUpColor:C.up, wickDownColor:C.down, wickVisible:!boxes});
 }
+const PF_CLEAR = {upColor:"rgba(0,0,0,0)", downColor:"rgba(0,0,0,0)", borderVisible:false, wickVisible:false};
+/* Point & Figure: an X (rising column) or an O (falling) on every box of every column on screen */
+class PfPrim {
+  constructor(){ this.req = null; const self = this; this.views = [{zOrder: () => "normal", renderer: () => ({draw: t => self.draw(t)})}]; }
+  attached(p){ this.req = p.requestUpdate; }
+  detached(){ this.req = null; }
+  updateAllViews(){}
+  paneViews(){ return this.views; }
+  draw(target){
+    target.useMediaCoordinateSpace(({context: ctx}) => {
+      if(!DISP.length || !CT_SIZE || ctType() !== "pf") return;
+      const ts = chart.timeScale(), vr = ts.getVisibleLogicalRange(); if(!vr) return;
+      const C = chartCfg(), box = CT_SIZE;
+      const y0 = series.priceToCoordinate(DISP[DISP.length - 1].low), y1 = series.priceToCoordinate(DISP[DISP.length - 1].low + box);
+      if(y0 == null || y1 == null) return;
+      const bh = Math.abs(y0 - y1), sp = ts.options().barSpacing || 6;
+      const sz = Math.max(2, Math.min(sp * 0.8, bh * 0.85)) / 2;
+      ctx.lineWidth = Math.max(1, Math.min(2, sz / 4));
+      for(let i = Math.max(0, Math.floor(vr.from) - 1); i <= Math.min(DISP.length - 1, Math.ceil(vr.to) + 1); i++){
+        const b = DISP[i], x = ts.timeToCoordinate(b.time); if(x == null) continue;
+        ctx.strokeStyle = b.pf > 0 ? C.up : C.down;
+        if(bh < 4 || sp < 4){                   // too small to read single boxes: the column as a line
+          const ya = series.priceToCoordinate(b.low), yb = series.priceToCoordinate(b.high);
+          if(ya != null && yb != null){ ctx.beginPath(); ctx.moveTo(x, ya); ctx.lineTo(x, yb); ctx.stroke(); }
+          continue;
+        }
+        const n = Math.round((b.high - b.low) / box);
+        for(let k = 0; k <= n; k++){
+          const y = series.priceToCoordinate(b.low + k * box); if(y == null) continue;
+          ctx.beginPath();
+          if(b.pf > 0){ ctx.moveTo(x - sz, y - sz); ctx.lineTo(x + sz, y + sz); ctx.moveTo(x + sz, y - sz); ctx.lineTo(x - sz, y + sz); }
+          else ctx.arc(x, y, sz * 0.9, 0, 2 * Math.PI);
+          ctx.stroke();
+        }
+      }
+    });
+  }
+}
 function seriesColors(C){
   const t = ctType();
+  if(t === "pf") return PF_CLEAR;
   if(t === "line") return {color:C.lineC};
   if(t === "area") return {lineColor:C.lineC, topColor:rgbaHex(C.lineC, 0.35), bottomColor:rgbaHex(C.lineC, 0.02)};
   if(t === "bars") return {upColor:C.up, downColor:C.down};
@@ -1335,8 +1381,9 @@ function renderCfg(){
 /* the chart type menu (web/ctype.js does the work) */
 function ctLabel(){
   const b = $("#bCt"); if(!b) return;
-  const t = ctType(), short = {candles:"Candles", hollow:"Hollow", bars:"Bars", line:"Line", area:"Area", ha:"Heikin-Ashi", renko:"Renko", range:"Range", lb:"Line break"}[t];
-  b.textContent = short + ((t === "renko" || t === "range") && CT_SIZE ? " " + fmt(CT_SIZE, cur && cur.tick) : t === "lb" ? " " + (ctCfg().lbLines || 3) : "");
+  const t = ctType(), short = {candles:"Candles", hollow:"Hollow", bars:"Bars", line:"Line", area:"Area", ha:"Heikin-Ashi", renko:"Renko", range:"Range", lb:"Line break", pf:"P&F"}[t];
+  b.textContent = short + ((t === "renko" || t === "range") && CT_SIZE ? " " + fmt(CT_SIZE, cur && cur.tick) : t === "lb" ? " " + (ctCfg().lbLines || 3)
+    : t === "pf" && CT_SIZE ? ` ${fmt(CT_SIZE, cur && cur.tick)} × ${ctCfg().pfRev || 3}` : "");
   b.classList.toggle("on", t !== "candles");
 }
 function ctSave(changes, rebuild = true){
@@ -1357,9 +1404,15 @@ function renderCt(){
     <div class="cr"><span>Range</span><select id="ctGM"><option value="atr" ${c.rangeMode !== "fixed" ? "selected" : ""}>ATR</option><option value="fixed" ${c.rangeMode === "fixed" ? "selected" : ""}>Fixed points</option></select></div>
     ${c.rangeMode === "fixed" ? `<div class="cr"><span>Points (${esc(k)})</span><input id="ctGB" class="mono" inputmode="decimal" value="${(c.rangeSize || {})[k] ?? (CT_SIZE || "")}"></div>`
       : `<div class="cr"><span>ATR length</span><input id="ctGA" class="mono" inputmode="numeric" value="${c.rangeAtr}"></div>`}`;
+  if(t === "pf") h += `<div class="sec">Point & Figure</div>
+    <div class="cr"><span>Box size</span><select id="ctPM"><option value="atr" ${c.pfMode !== "fixed" ? "selected" : ""}>ATR</option><option value="fixed" ${c.pfMode === "fixed" ? "selected" : ""}>Fixed points</option></select></div>
+    ${c.pfMode === "fixed" ? `<div class="cr"><span>Points (${esc(k)})</span><input id="ctPB" class="mono" inputmode="decimal" value="${(c.pfBox || {})[k] ?? (CT_SIZE || "")}"></div>`
+      : `<div class="cr"><span>ATR length</span><input id="ctPA" class="mono" inputmode="numeric" value="${c.pfAtr}"></div>`}
+    <div class="cr"><span>Reversal (boxes)</span><input id="ctPR" class="mono" inputmode="numeric" value="${c.pfRev}"></div>
+    <div class="cr"><span>Built from</span><select id="ctPS"><option value="close" ${c.pfSrc !== "hl" ? "selected" : ""}>Closes</option><option value="hl" ${c.pfSrc === "hl" ? "selected" : ""}>Highs and lows</option></select></div>`;
   if(t === "lb") h += `<div class="sec">Line break</div><div class="cr"><span>Lines to break</span><input id="ctLN" class="mono" inputmode="numeric" value="${c.lbLines}"></div>`;
-  if(t === "renko" || t === "range") h += `<p class="help" style="margin:6px 0 0">Now ${fmt(CT_SIZE, tick)} points on this chart${(t === "renko" ? c.renkoMode : c.rangeMode) === "fixed" ? "" : " (ATR of the candles loaded, fixed until you reload)"}. Built from the timeframe's candles: pick 1m for the finest ${t === "renko" ? "bricks" : "bars"}. The candle timer is off: these bars don't follow the clock.</p>`;
-  h += `<p class="help" style="margin:8px 0 0">Volume, indicators and your Pine scripts run on the bars the chart shows${t === "ha" ? " (Heikin-Ashi values)" : t === "renko" ? " (one value per brick)" : ""}, as on TradingView. Bid, ask, last and your trade lines are always real prices.</p>`;
+  if(t === "renko" || t === "range" || t === "pf") h += `<p class="help" style="margin:6px 0 0">Now ${fmt(CT_SIZE, tick)} points ${t === "pf" ? "a box" : ""} on this chart${({renko: c.renkoMode, range: c.rangeMode, pf: c.pfMode})[t] === "fixed" ? "" : " (ATR of the candles loaded, fixed until you reload)"}. Built from the timeframe's candles: pick 1m for the finest ${{renko: "bricks", range: "bars", pf: "columns"}[t]}. The candle timer is off: these bars don't follow the clock.</p>`;
+  h += `<p class="help" style="margin:8px 0 0">Volume, indicators and your Pine scripts run on the bars the chart shows${t === "ha" ? " (Heikin-Ashi values)" : t === "renko" ? " (one value per brick)" : t === "pf" ? " (one value per column: its last box)" : ""}, as on TradingView. Bid, ask, last and your trade lines are always real prices.</p>`;
   $("#ctBody").innerHTML = h;
   $("#ctBody").querySelectorAll("[data-ct]").forEach(b => b.onclick = () => ctSave({type: b.dataset.ct}));
   const on = (id, fn) => { const el = $(id); if(el) el.onchange = () => fn(el); };
@@ -1372,6 +1425,11 @@ function renderCt(){
   on("#ctGB", el => { const n = pos(el.value); if(n) ctSave({rangeSize: {...(c.rangeSize || {}), [k]: n}}); });
   on("#ctRS", el => ctSave({renkoSrc: el.value}));
   on("#ctRW", el => ctSave({renkoWicks: el.checked}));
+  on("#ctPM", el => ctSave({pfMode: el.value}));
+  on("#ctPA", el => { const n = pos(el.value); if(n) ctSave({pfAtr: Math.round(n)}); });
+  on("#ctPB", el => { const n = pos(el.value); if(n) ctSave({pfBox: {...(c.pfBox || {}), [k]: n}}); });
+  on("#ctPR", el => { const n = pos(el.value); if(n) ctSave({pfRev: Math.max(1, Math.min(10, Math.round(n)))}); });
+  on("#ctPS", el => ctSave({pfSrc: el.value}));
   on("#ctLN", el => { const n = pos(el.value); if(n) ctSave({lbLines: Math.max(1, Math.min(10, Math.round(n)))}); });
 }
 $("#bCt").onclick = e => { e.stopPropagation(); renderCt(); $("#ctPick").classList.toggle("hide"); $("#cfgPick").classList.add("hide"); $("#tfPick").classList.add("hide"); $("#indPick").classList.add("hide"); };
@@ -1483,7 +1541,8 @@ function showRaw(){
   if(!series || !cur) return;
   CT_SIZE = null;                              // Renko box / range size: worked out again for these candles
   dispSet();
-  chart.timeScale().scrollToRealTime();        // (the bar count can change a lot between chart types)
+  // the bar count can change a lot between chart types: P&F (a few dozen columns) fills the width, the rest scroll to now
+  if(ctType() === "pf" && DISP.length < 300) chart.timeScale().fitContent(); else chart.timeScale().scrollToRealTime();
   indData();                                   // indicators follow the new candles (timeframe / contract change)
   series.applyOptions({priceFormat:{type:"price", precision:(String(cur.tick).split(".")[1]||"").length, minMove:cur.tick || 0.01}});
   lastBar = RAW.length ? RAW[RAW.length - 1] : null;

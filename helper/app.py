@@ -16,6 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import charges, charges_watch, fyers_link, logbuf, rt, store, symbols, users
+from .feedcheck import FC
 from . import candles as candles_store
 from .paper import Refused
 
@@ -70,6 +71,8 @@ async def _engine_loop():
         for urt in list(rt.RT.values()):
             urt.housekeeping()
         n += 1
+        if FC.buf:                                         # the order-flow check's snapshots, written every few seconds
+            asyncio.get_running_loop().run_in_executor(None, FC.flush)
         if n % 120 == 1 and charges_watch.due():          # every 10 minutes: is the daily charges check due?
             asyncio.get_running_loop().run_in_executor(None, _charges_check)
 
@@ -84,6 +87,11 @@ def _charges_check():
                     urt.feed.loop.call_soon_threadsafe(urt.feed.broadcast, {"charges": st})
     except Exception as e:
         log.warning("charges check: %s", e)
+
+
+@app.on_event("shutdown")
+def _shutdown():
+    FC.flush()
 
 
 @app.on_event("startup")
@@ -956,6 +964,27 @@ async def charge_check(request: Request):
     _admin(request)
     st = await asyncio.get_running_loop().run_in_executor(None, charges_watch.check)
     return {"ok": True, "check": st}
+
+
+@app.get("/api/feedcheck")
+def feedcheck_report(request: Request, day: str = ""):
+    """The order-flow check (admin): how much of the feed's volume arrived as exact single trades."""
+    _admin(request)
+    return {"ok": True, **FC.report(day or None)}
+
+
+@app.post("/api/feedcheck")
+async def feedcheck_set(request: Request):
+    _same_origin(request)
+    _admin(request)
+    b = await _body(request)
+    try:
+        c = FC.set_config(on=b.get("on"), syms=b.get("symbols"))
+    except ValueError as e:
+        return _err(e)
+    for urt in list(rt.RT.values()):
+        urt.feed._resync()
+    return {"ok": True, "config": c}
 
 
 @app.post("/api/charges/reviewed")

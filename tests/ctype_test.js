@@ -34,6 +34,20 @@ const lb = CT.transform(lbRaw, "lb", {lbLines: 3});
 ok(lb.map(b => b.close).join() === "100,105,108,97", "3-line break: up 98-100, 105, 108; 104 and 99 don't break the 3-line low (98); 97 does", lb.map(b => [b.open, b.close]));
 ok(lb[3].open === 105 && lb[3].close === 97, "the reversal line starts at the open of the last up line", lb[3]);
 
+// Point & Figure, box 1, reversal 3, from closes: 100 -> 105 (X 100..105), 103 (no reversal), 101 (O 104..101),
+// 103 (no reversal: needs 104), 105 (X 102..105), 106 (extends to 106)
+const pfRaw = [100, 105, 103, 101, 103, 105, 106].map((c, i) => bar(60 * (i + 1), c, c, c, c, 1));
+const pf = CT.transform(pfRaw, "pf", {box: 1, pfRev: 3, pfSrc: "close"});
+ok(pf.length === 3, "P&F: three columns (X, O, X)", pf);
+ok(pf[0].pf === 1 && pf[0].low === 100 && pf[0].high === 105, "P&F: first column X from 100 to 105", pf[0]);
+ok(pf[1].pf === -1 && pf[1].high === 104 && pf[1].low === 101 && pf[1].open === 104 && pf[1].close === 101,
+   "P&F: the O column starts one box below the X top (104) and falls to 101", pf[1]);
+ok(pf[2].pf === 1 && pf[2].low === 102 && pf[2].high === 106, "P&F: 103 isn't a 3-box reversal from 101; 105 is: X from 102, extended to 106", pf[2]);
+ok(pf[0].time === 120 && pf[1].time === 240 && pf[2].time === 360, "P&F: each column has the time its first box formed", pf.map(b => b.time));
+ok(pf[0].vol === 3 && pf[1].vol === 2 && pf[2].vol === 2, "P&F: volume of every candle from the one that started a column until the next (3, 2, 2)", pf.map(b => b.vol));
+const pfHL = CT.transform([bar(60, 100, 100, 100, 100), bar(120, 100, 104, 96, 101)], "pf", {box: 1, pfRev: 3, pfSrc: "hl"});
+ok(pfHL.length === 2 && pfHL[0].high === 104 && pfHL[1].low === 96, "P&F from highs and lows: a rising column takes the high (104), then the low reverses it (96)", pfHL);
+
 // sizes: ATR, rounded to the tick
 const s = CT.size([bar(1, 10, 12, 9, 11), bar(2, 11, 13, 10, 12), bar(3, 12, 14, 11, 13)], "atr", 0, 2, 0.05);
 ok(s === 3, "ATR(2) of ranges 3, 3 = 3", s);
