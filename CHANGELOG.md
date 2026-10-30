@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.6.0 — 30 Oct 2026 — Volume pane (chart library upgrade)
+
+Changed
+- Chart library upgraded from Lightweight Charts 4.2 to 5.2.1, which has real panes - the foundation
+  for indicators in their own panes later
+- Volume now has its own pane under the candles, with its own scale and the latest bar's value on it.
+  Drag the divider to make it taller or shorter; the height is remembered. On / off in Chart settings (⚙)
+- Candles use the full height of the top pane again (the volume strip no longer shares it)
+
 ## v0.5.3 — 30 Oct 2026 — Candle timer easier to see
 
 Changed

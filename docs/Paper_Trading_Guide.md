@@ -1,4 +1,4 @@
-# Paper trading: how it works (v0.5.2)
+# Paper trading: how it works (v0.6.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -52,7 +52,7 @@ Turn it on or off in Chart settings (⚙).
 
 ## Volume and the order book
 
-- **Volume** is shown in a strip under the candles. Turn it off in Chart settings (⚙).
+- **Volume** has its own pane under the candles. Drag the divider to resize it; the height is remembered. Turn it off in Chart settings (⚙).
 - **Book tab** (trade panel) shows the chart contract's order book:
   - the top 5 bid and ask levels, with quantity, number of orders and depth bars;
   - total buy vs sell quantity, with a ratio bar;

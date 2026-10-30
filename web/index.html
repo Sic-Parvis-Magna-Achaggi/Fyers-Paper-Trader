@@ -623,27 +623,42 @@ function buildChart(){
   const C = chartCfg();
   chart = LightweightCharts.createChart(el, {
     autoSize: true,
-    layout:{background:{type:"solid", color:C.bg || cssVar("--bg")}, textColor:cssVar("--muted"), fontFamily:"IBM Plex Mono"},
+    layout:{background:{type:"solid", color:C.bg || cssVar("--bg")}, textColor:cssVar("--muted"), fontFamily:"IBM Plex Mono",
+      panes:{separatorColor:cssVar("--line"), separatorHoverColor:"rgba(128,128,128,0.35)", enableResize:true}},
     grid:{vertLines:{visible:false}, horzLines:{color:cssVar("--line"), visible:!!C.grid}},
     rightPriceScale:{borderColor:cssVar("--line")},
     timeScale:{borderColor:cssVar("--line"), timeVisible:true, secondsVisible:false, rightOffset:24},
     crosshair:{mode:0}
   });
-  series = chart.addCandlestickSeries({upColor:C.up, downColor:C.down, borderVisible:false,
+  series = chart.addSeries(LightweightCharts.CandlestickSeries, {upColor:C.up, downColor:C.down, borderVisible:false,
     wickUpColor:C.up, wickDownColor:C.down, priceLineVisible:false, lastValueVisible:false});
+  series.priceScale().applyOptions({scaleMargins:{top:0.08, bottom:0.08}});
   // MT5-style quote lines: bid, ask and the last traded price (the candle's close), each with its price on the scale
   const mk = () => series.createPriceLine({price:0, color:"#888", lineWidth:1, lineStyle:0, axisLabelVisible:false, lineVisible:false, title:""});
   bidLine = mk(); askLine = mk(); lastLine = mk();
-  // volume in a strip under the candles
-  volSeries = chart.addHistogramSeries({priceFormat:{type:"volume"}, priceScaleId:"vol", lastValueVisible:false, priceLineVisible:false});
-  chart.priceScale("vol").applyOptions({scaleMargins:{top:0.82, bottom:0}, visible:false});
+  volSeries = null;
   volLayout();
+  // remember the volume pane's height when you drag the divider
+  el.addEventListener("mouseup", () => setTimeout(() => {
+    const ps = chart && chart.panes(); if(!ps || ps.length < 2) return;
+    const h = Math.round(ps[1].getHeight()); if(h > 20 && h !== prefGet("volH", 0)) prefSet("volH", h);
+  }, 50));
 }
 let volSeries = null, volCum = null;
+/* volume lives in its own pane under the candles (drag the divider to resize; on / off in Chart settings) */
 function volLayout(){
   const on = chartCfg().volOn;
-  volSeries.applyOptions({visible: on});
-  series.priceScale().applyOptions({scaleMargins: on ? {top:0.08, bottom:0.22} : {top:0.08, bottom:0.08}});
+  if(on && !volSeries){
+    volSeries = chart.addSeries(LightweightCharts.HistogramSeries, {priceFormat:{type:"volume"}, lastValueVisible:true, priceLineVisible:false}, 1);
+    volSeries.priceScale().applyOptions({scaleMargins:{top:0.15, bottom:0}});
+    const ps = chart.panes(), total = (ps[0].getHeight() + (ps[1] ? ps[1].getHeight() : 0)) || 400;
+    const want = prefGet("volH", 0) || Math.round(total * 0.2);
+    if(ps[1]) ps[1].setHeight(Math.max(40, Math.min(want, total - 120)));
+    if(series && series.data().length) volSeries.setData(series.data().map(b => ({time:b.time, value:(volData[b.time] || 0), color:volColor(b)})));
+  } else if(!on && volSeries){
+    chart.removeSeries(volSeries); volSeries = null;
+    if(chart.panes().length > 1) chart.removePane(1);
+  }
 }
 function volColor(b){ const C = chartCfg(); return rgbaHex(b.close >= b.open ? C.up : C.down, 0.45); }
 function rgbaHex(hex, a){ const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(hex || ""); if(!m) return hex;
@@ -695,7 +710,7 @@ function renderCfg(){
     <div class="sec">Chart</div>
     <div class="cr"><span>Background</span><input type="color" data-k="bg" value="${hex("bg")}"><span class="muted" style="font-size:11px">${C.bg ? "" : "theme"}</span><span></span></div>
     <div class="cr"><span>Grid lines</span><span></span><span></span><input type="checkbox" data-k="grid" ${C.grid ? "checked" : ""}></div>
-    <div class="cr"><span>Volume strip</span><span></span><span></span><input type="checkbox" data-k="volOn" ${C.volOn ? "checked" : ""}></div>
+    <div class="cr"><span>Volume pane</span><span></span><span></span><input type="checkbox" data-k="volOn" ${C.volOn ? "checked" : ""}></div>
     <div class="cr"><span>Candle timer</span><span></span><span></span><input type="checkbox" data-k="timerOn" ${C.timerOn ? "checked" : ""}></div>`;
   $("#cfgBody").innerHTML = h;
   $("#cfgBody").querySelectorAll("[data-k]").forEach(el => el.addEventListener("input", () => {
@@ -784,7 +799,7 @@ async function loadHistory(){
   }
   volData = {}; for(const b of bars) volData[b.time] = b.vol;
   volCum = null;
-  volSeries.setData(bars.map(b => ({time:b.time, value:b.vol, color:volColor(b)})));
+  if(volSeries) volSeries.setData(bars.map(b => ({time:b.time, value:b.vol, color:volColor(b)})));
   bars = bars.map(b => ({time:b.time, open:b.open, high:b.high, low:b.low, close:b.close}));
   series.setData(bars);
   series.applyOptions({priceFormat:{type:"price", precision:(String(cur.tick).split(".")[1]||"").length, minMove:cur.tick || 0.01}});
@@ -1018,7 +1033,8 @@ function candleTimer(){
   el.textContent = txt;
   el.style.width = (aw - 4) + "px";
   el.style.left = (box.clientWidth - aw + 2) + "px";
-  el.style.top = Math.min(box.clientHeight - 40, ys[ys.length - 1] + 10 + 18 * Math.ceil((near - 1) / 2)) + "px";
+  let paneH = box.clientHeight - 40; try{ paneH = chart.panes()[0].getHeight() - 22; }catch(e){}
+  el.style.top = Math.min(paneH, ys[ys.length - 1] + 10 + 18 * Math.ceil((near - 1) / 2)) + "px";
   el.classList.remove("hide");
 }
 setInterval(candleTimer, 1000);
