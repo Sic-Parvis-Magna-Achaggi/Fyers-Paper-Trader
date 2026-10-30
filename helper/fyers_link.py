@@ -232,6 +232,17 @@ def margin(symbol: str, qty: int, side: int, product: str, price: float = 0.0) -
     return float(d.get("margin_total") or d.get("margin_new_order") or 0)
 
 
+def depth(symbol: str):
+    """Order book (5 levels) by REST - only used when the socket isn't delivering depth."""
+    j = _get(f"{DATA}/depth", {"symbol": symbol, "ohlcv_flag": "1"})
+    d = (j.get("d") or {}).get(symbol) or {}
+    if not d:
+        return None
+    lv = lambda rows: [[r.get("price"), r.get("volume"), r.get("ord")] for r in (rows or [])[:5]]
+    return {"s": symbol, "bids": lv(d.get("bids")), "asks": lv(d.get("ask")), "t": int(time.time()), "src": "poll",
+            "tbq": d.get("totalbuyqty"), "tsq": d.get("totalsellqty")}
+
+
 def quotes(symbols: list) -> dict:
     """One request for up to 50 symbols -> {symbol: values}."""
     j = _get(f"{DATA}/quotes", {"symbols": ",".join(symbols[:50])})

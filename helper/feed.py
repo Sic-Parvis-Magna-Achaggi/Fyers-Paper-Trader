@@ -18,6 +18,7 @@ class Client:
     def __init__(self):
         self.queue: asyncio.Queue = asyncio.Queue(maxsize=500)
         self.symbols: set = set()
+        self.depth = None               # symbol whose order book this page shows (Book tab open)
 
 
 class Feed:
@@ -28,7 +29,10 @@ class Feed:
         self.sock_token = ""
         self.sock_up = False
         self.subscribed: list = []
+        self.dsubscribed: list = []     # symbols subscribed for market depth
         self.last: dict = {}            # symbol -> latest tick
+        self.last_depth: dict = {}      # symbol -> latest order book
+        self.last_depth_at = 0.0
         self.last_tick_at = 0.0
         self._ops = threading.Lock()
         self.extra = None               # callable -> symbols the paper engine needs, page open or not
@@ -54,6 +58,15 @@ class Feed:
         for s in c.symbols:                       # send the last known price straight away
             if s in self.last:
                 self._offer(c, {"tick": self.last[s]})
+
+    def set_depth(self, c: Client, symbol):
+        c.depth = symbol if isinstance(symbol, str) and ":" in symbol else None
+        self._resync()
+        if c.depth and c.depth in self.last_depth:
+            self._offer(c, {"depth": self.last_depth[c.depth]})
+
+    def wanted_depth(self) -> list:
+        return sorted({c.depth for c in self.clients if c.depth})[:5]
 
     def wanted(self) -> list:
         u = set()
@@ -87,6 +100,18 @@ class Feed:
             if tick["s"] in c.symbols:
                 self._offer(c, {"tick": tick})
 
+    def _fanout_depth(self, d: dict):
+        for c in list(self.clients):
+            if c.depth == d["s"]:
+                self._offer(c, {"depth": d})
+
+    def publish_depth(self, d: dict):
+        """Called from any thread."""
+        self.last_depth[d["s"]] = d
+        self.last_depth_at = time.time()
+        if self.loop:
+            self.loop.call_soon_threadsafe(self._fanout_depth, d)
+
     def publish(self, tick: dict):
         """Called from any thread."""
         self.last[tick["s"]] = tick
@@ -96,19 +121,31 @@ class Feed:
 
     # ------------------------------------------------------------ Fyers socket
     def _on_message(self, m):
-        if not isinstance(m, dict) or "symbol" not in m or "ltp" not in m:
+        if not isinstance(m, dict) or "symbol" not in m:
+            return
+        if m.get("type") == "dp":                 # market depth (5 levels)
+            self.sock_up = True
+            lv = lambda side: [[m.get(f"{side}_price{i}"), m.get(f"{side}_size{i}"), m.get(f"{side}_order{i}")] for i in range(1, 6)]
+            self.publish_depth({"s": m["symbol"], "bids": lv("bid"), "asks": lv("ask"), "t": int(time.time()), "src": "ws"})
+            return
+        if "ltp" not in m:
             return
         self.sock_up = True                       # the SDK reconnects on its own; ticks prove it's up
         self.publish({
             "s": m["symbol"], "ltp": m.get("ltp"), "bid": m.get("bid_price"), "ask": m.get("ask_price"),
             "t": m.get("exch_feed_time") or m.get("last_traded_time") or int(time.time()),
             "vol": m.get("vol_traded_today"), "src": "ws",
+            # day figures for the Book tab
+            "bsz": m.get("bid_size"), "asz": m.get("ask_size"), "ltq": m.get("last_traded_qty"),
+            "tbq": m.get("tot_buy_qty"), "tsq": m.get("tot_sell_qty"), "atp": m.get("avg_trade_price"),
+            "o": m.get("open_price"), "h": m.get("high_price"), "l": m.get("low_price"), "pc": m.get("prev_close_price"),
         })
 
     def _on_connect(self):
         self.sock_up = True
         log.info("Price feed connected")
         self.subscribed = []
+        self.dsubscribed = []
         self._resync()
 
     def _on_close(self, msg):
@@ -147,6 +184,7 @@ class Feed:
         self.sock_up = False
         self.sock_token = ""
         self.subscribed = []
+        self.dsubscribed = []
 
     def _resync(self):
         """Safe to call from any thread."""
@@ -156,17 +194,27 @@ class Feed:
     def _resync_blocking(self):
         with self._ops:
             try:
-                want = self.wanted()
-                if not want:
+                want, dwant = self.wanted(), self.wanted_depth()
+                if not want and not dwant:
                     return
                 self._ensure_socket()
-                if not self.sock or not self.sock_up or want == self.subscribed:
+                if not self.sock or not self.sock_up:
                     return
-                if self.subscribed:
-                    self.sock.unsubscribe(symbols=self.subscribed, data_type="SymbolUpdate")
-                self.sock.subscribe(symbols=want, data_type="SymbolUpdate")
-                self.subscribed = want
-                log.info("Streaming %s", ", ".join(want))
+                if want != self.subscribed:
+                    if self.subscribed:
+                        self.sock.unsubscribe(symbols=self.subscribed, data_type="SymbolUpdate")
+                    if want:
+                        self.sock.subscribe(symbols=want, data_type="SymbolUpdate")
+                    self.subscribed = want
+                    log.info("Streaming %s", ", ".join(want))
+                if dwant != self.dsubscribed:              # order book only while a page has the Book tab open
+                    gone = [x for x in self.dsubscribed if x not in dwant]
+                    new = [x for x in dwant if x not in self.dsubscribed]
+                    if gone:
+                        self.sock.unsubscribe(symbols=gone, data_type="DepthUpdate")
+                    if new:
+                        self.sock.subscribe(symbols=new, data_type="DepthUpdate")
+                    self.dsubscribed = dwant
             except Exception as e:
                 log.warning("Price feed subscribe failed: %s", e)
 
@@ -175,9 +223,20 @@ class Feed:
         """Every 3 s: reopen the socket if needed. Poll quotes (one batched request) only when the socket is
         down (every 10 s) or has been silent for a minute (every 60 s) - this keeps us far inside the
         Standard plan's 50 data requests/minute."""
-        last_poll = 0.0
+        last_poll = last_dpoll = 0.0
         while True:
             await asyncio.sleep(3)
+            dwant = self.wanted_depth()
+            now = time.time()
+            # order book fallback: one REST call every 6 s, only if the socket isn't delivering depth
+            if dwant and fyers_link.token() and now - self.last_depth_at > 15 and now - last_dpoll > 6:
+                last_dpoll = now
+                try:
+                    d = await self.loop.run_in_executor(None, fyers_link.depth, dwant[0])
+                    if d:
+                        self.publish_depth(d)
+                except Exception as e:
+                    log.debug("depth poll failed: %s", e)
             want = self.wanted()
             if not want or not fyers_link.token():
                 continue
@@ -204,7 +263,7 @@ class Feed:
         return out
 
     def status(self) -> dict:
-        return {"socket": self.sock_up, "streaming": self.subscribed, "last_tick_age": (
+        return {"socket": self.sock_up, "streaming": self.subscribed, "depth": self.dsubscribed, "last_tick_age": (
             round(time.time() - self.last_tick_at, 1) if self.last_tick_at else None),
             "data_budget": fyers_link.data_budget.status()}
 

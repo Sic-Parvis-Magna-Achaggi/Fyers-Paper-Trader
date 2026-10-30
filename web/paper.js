@@ -93,6 +93,7 @@ function setDefaults(){
   return true;
 }
 function paperOnSymbol(row){
+  if(!P.book || P.book.s !== row.s){ P.book = null; if(P.tab === "book") renderBook(null); }
   // the chart switched contract: the tool follows it, unless it's the future of an option tool using underlying stops
   if(P.T.basis === "underlying" && row.s === P.T.ref){ renderTicket(); toolRedraw(); return; }
   if(P.T.s !== row.s){
@@ -396,8 +397,11 @@ function wireTabs(){
   document.querySelectorAll("#ptabs button").forEach(b => b.onclick = () => {
     P.tab = b.dataset.t;
     document.querySelectorAll("#ptabs button").forEach(x => x.classList.toggle("on", x === b));
-    for(const t of ["pos", "ord", "hist", "ev"]) $("#p_" + t).classList.toggle("hide", t !== P.tab);
+    for(const t of ["pos", "ord", "hist", "book", "ev"]) $("#p_" + t).classList.toggle("hide", t !== P.tab);
     if(P.tab === "hist") loadTrades();
+    if(P.tab === "book"){ P.book = null; renderBook(null); }
+    $("#ptabs").scrollIntoView({block: "start", behavior: "smooth"});   // bring the tab's content into view
+    sendWant();                               // the order book streams only while this tab is open
   });
 }
 async function openBySymbol(s){ const j = await api("/api/symbol?s=" + encodeURIComponent(s)); if(j.ok) openSymbol(j.row); }
@@ -720,6 +724,48 @@ function wireDrag(){
     el.addEventListener(ev, fn, {capture: true, passive: false});
   window.addEventListener("mouseup", up, true); window.addEventListener("touchend", up, true);
   new ResizeObserver(() => toolOverlay()).observe(el);
+}
+
+/* ---------------------------------------------------------------- order book (Book tab) */
+function panelShown(){ const el = $("#panel"); return !!el && getComputedStyle(el).display !== "none"; }
+function bookSymbol(){ return P.tab === "book" && cur && panelShown() ? cur.s : null; }
+function renderBook(d){
+  if(d){ if(!cur || d.s !== cur.s) return; P.book = d; }
+  const box = $("#bookBox"); if(!box || P.tab !== "book") return;
+  d = P.book;
+  if(!cur){ box.innerHTML = `<div class="empty">Open a chart to see its order book.</div>`; return; }
+  if(!d){ box.innerHTML = `<div class="empty">Waiting for ${esc(short(cur.s))}'s order book…</div>`; return; }
+  const tick = cur.tick, rows = [];
+  const qs = [...d.bids, ...d.asks].map(r => +r[1] || 0), mx = Math.max(1, ...qs);
+  const cell = (cls, v, w) => `<div class="${cls}">${w != null ? `<span class="bar" style="width:${Math.round(100 * w / mx)}%"></span>` : ""}<span style="position:relative">${v}</span></div>`;
+  for(let i = 0; i < 5; i++){
+    const b = d.bids[i] || [], a = d.asks[i] || [];
+    rows.push(`<div class="o">${b[2] ?? ""}</div>` + cell("q bq", b[1] != null ? (+b[1]).toLocaleString("en-IN") : "", +b[1] || 0)
+      + `<div class="bp" data-px="${b[0] ?? ""}">${b[0] ? fmt(b[0], tick) : ""}</div><div class="ap" data-px="${a[0] ?? ""}">${a[0] ? fmt(a[0], tick) : ""}</div>`
+      + cell("q aq", a[1] != null ? (+a[1]).toLocaleString("en-IN") : "", +a[1] || 0) + `<div class="o">${a[2] ?? ""}</div>`);
+  }
+  const t = last[cur.s] || {}, tbq = d.tbq ?? t.tbq, tsq = d.tsq ?? t.tsq;
+  const ratio = tbq != null && tsq != null && tbq + tsq > 0 ? tbq / (tbq + tsq) : null;
+  box.innerHTML = `<div class="bk-h"><span class="mono">${esc(short(cur.s))}</span><span class="muted">${d.src === "poll" ? "polled" : "live"} · top 5 levels</span></div>
+    <div class="bk"><div class="hd o">Ord</div><div class="hd q">Bid qty</div><div class="hd q">Bid</div><div class="hd">Ask</div><div class="hd">Ask qty</div><div class="hd o">Ord</div>${rows.join("")}</div>
+    ${ratio != null ? `<div class="bk-tot"><span class="up">Buy ${(+tbq).toLocaleString("en-IN")}</span><span class="muted">${Math.round(ratio * 100)}% / ${100 - Math.round(ratio * 100)}%</span><span class="down">Sell ${(+tsq).toLocaleString("en-IN")}</span></div>
+      <div class="bk-ratio"><div style="width:${ratio * 100}%"></div></div>` : ""}
+    <div class="bk-stats" id="bkStats"></div>
+    <p class="help">With BUY or SELL pressed, click a price to put the entry there (it becomes a limit or stop order).</p>`;
+  box.querySelectorAll("[data-px]").forEach(el => el.onclick = () => {
+    const v = num(el.dataset.px); if(!v) return;
+    if(!P.armed){ toast("Press BUY or SELL first, then click a price"); return; }
+    P.T.follow = false; P.T.price = v; renderTicket(); toolRedraw(); preview(0);
+  });
+  bookStats(t);
+}
+function bookStats(t){
+  const el = $("#bkStats"); if(!el || !t || !cur || t.s !== cur.s) return;
+  const tk = cur.tick, ch = t.pc ? t.ltp - t.pc : null;
+  const cells = [["Open", fmt(t.o, tk)], ["High", fmt(t.h, tk)], ["Low", fmt(t.l, tk)], ["Prev close", fmt(t.pc, tk)],
+    ["Avg price", fmt(t.atp, tk)], ["Volume", t.vol != null ? (+t.vol).toLocaleString("en-IN") : "–"],
+    ["Last qty", t.ltq ?? "–"], ["Change", ch != null ? `<span class="${cls(ch)}">${ch > 0 ? "+" : ""}${fmt(ch, tk)} (${(100 * ch / t.pc).toFixed(2)}%)</span>` : "–"]];
+  el.innerHTML = cells.map(([k, v]) => `<div><span>${k}</span><span>${v}</span></div>`).join("");
 }
 
 /* ---------------------------------------------------------------- rules (Settings) */

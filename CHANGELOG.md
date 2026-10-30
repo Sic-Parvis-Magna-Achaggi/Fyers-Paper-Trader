@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.5.0 — 30 Oct 2026 — Volume and order book
+
+Added
+- Volume strip under the candles (green / red with the candle), built from Fyers' history and kept live
+  from the day's running volume; on / off in Chart settings (⚙)
+- Book tab in the trade panel: the chart contract's top 5 bid / ask levels with quantities, order counts
+  and depth bars, total buy vs sell quantity with a ratio bar, and the day's open, high, low, previous
+  close, average price, volume, last traded quantity and change
+- With BUY or SELL pressed, click a price in the book to put the tool's entry there (limit or stop, as
+  when dragging)
+- The order book streams from Fyers only while the Book tab is open (it doesn't count against the
+  data-request limits); if the stream is quiet, a slow backup check (every 6 s) fills in
+
+Changed
+- Picking a panel tab scrolls it into view
+
 ## v0.4.3 — 30 Oct 2026 — Last line and chart settings
 
 Added

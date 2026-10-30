@@ -1,4 +1,4 @@
-# Paper trading: how it works (v0.4.3)
+# Paper trading: how it works (v0.5.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -40,6 +40,16 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
   - Right-click one (or long-press on a phone) to pin or unpin it.
 - Timeframes Fyers doesn't serve directly are built from smaller candles, starting at the session open (09:00 for MCX).
 - **⛶ or F** maximises the chart inside the browser window, so your tabs stay one click away. **Shift+F** gives real full screen. When maximised, **P** (or Panel) slides the trade panel in, its **✕** hides it, and **Esc** goes back to the normal view.
+
+## Volume and the order book
+
+- **Volume** is shown in a strip under the candles. Turn it off in Chart settings (⚙).
+- **Book tab** (trade panel) shows the chart contract's order book:
+  - the top 5 bid and ask levels, with quantity, number of orders and depth bars;
+  - total buy vs sell quantity, with a ratio bar;
+  - the day's open, high, low, previous close, average price, volume, last traded quantity and change.
+
+  With BUY or SELL pressed, click a price in the book to put the entry there. The book streams only while the tab is open.
 
 ## Saved on the server
 

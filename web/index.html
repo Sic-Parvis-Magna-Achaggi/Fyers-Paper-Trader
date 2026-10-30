@@ -98,6 +98,26 @@ section.chartwrap{display:grid;grid-template-rows:auto minmax(0,1fr);min-width:0
 #tfPick .row2{display:flex;gap:6px;margin-top:8px}
 #tfPick .row2 input{padding:4px 8px;font-size:12px}
 #tfPick .row2 button{padding:4px 10px;font-size:12px;white-space:nowrap}
+/* order book */
+#bookBox{margin-top:8px;font-size:12px}
+.bk-h{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
+.bk-h .mono{font-weight:500}
+.bk{display:grid;grid-template-columns:38px 1fr 1fr 1fr 1fr 38px;font-family:var(--mono);font-size:12px}
+.bk > div{padding:3px 4px;position:relative}
+.bk .hd{color:var(--muted);font-family:var(--sans);font-size:11px;border-bottom:1px solid var(--line)}
+.bk .q{text-align:right}
+.bk .bp{color:var(--up);text-align:right;cursor:pointer;font-weight:500} .bk .ap{color:var(--down);cursor:pointer;font-weight:500}
+.bk .bp:hover,.bk .ap:hover{text-decoration:underline}
+.bk .bar{position:absolute;top:2px;bottom:2px;opacity:.16;border-radius:2px}
+.bk .bq .bar{right:0;background:var(--up)} .bk .aq .bar{left:0;background:var(--down)}
+.bk .o{color:var(--muted);text-align:center}
+.bk-tot{display:flex;justify-content:space-between;margin-top:8px;font-family:var(--mono)}
+.bk-ratio{height:6px;border-radius:3px;background:var(--down);overflow:hidden;margin-top:4px}
+.bk-ratio > div{height:100%;background:var(--up)}
+.bk-stats{display:grid;grid-template-columns:1fr 1fr;gap:3px 12px;margin-top:10px}
+.bk-stats div{display:flex;justify-content:space-between}
+.bk-stats span:first-child{color:var(--muted)}
+.bk-stats span:last-child{font-family:var(--mono)}
 /* chart settings popover */
 #cfgPick{position:absolute;right:10px;top:42px;z-index:31;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;width:330px;max-height:calc(100% - 60px);overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.35);font-size:12.5px}
 #cfgPick .cfgh{display:flex;align-items:center;margin-bottom:6px}
@@ -349,11 +369,12 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
         <span>Trail SL</span><input id="trSlR" inputmode="decimal"><button id="trSl">off</button></div>
       <div class="acts"><button id="bBeAll">BE all</button><button id="bCloseAll">Close all</button></div>
 
-      <div id="ptabs"><button data-t="pos" class="on" id="tabPos">Positions</button><button data-t="ord" id="tabOrd">Orders</button><button data-t="hist">History</button><button data-t="ev">Log</button></div>
+      <div id="ptabs"><button data-t="pos" class="on" id="tabPos">Positions</button><button data-t="ord" id="tabOrd">Orders</button><button data-t="hist">History</button><button data-t="book">Book</button><button data-t="ev">Log</button></div>
       <div id="p_pos"><div id="posList"></div></div>
       <div id="p_ord" class="hide"><div id="ordList"></div></div>
       <div id="p_hist" class="hide"><div id="histList"></div></div>
       <div id="p_ev" class="hide"><div id="evList"></div></div>
+      <div id="p_book" class="hide"><div id="bookBox"><div class="empty">Open a chart to see its order book.</div></div></div>
     </section>
   </main>
 </div>
@@ -546,6 +567,7 @@ function connectWS(){
     if(m.tick) onTick(m.tick);
     if(m.feed) feedPill(m.feed);
     if(m.paper) paperUpdate(m.paper, m.events);
+    if(m.depth) renderBook(m.depth);
   };
   ws.onclose = ev => {
     ws = null;
@@ -556,7 +578,7 @@ function connectWS(){
 function sendWant(){
   if(!ws || ws.readyState !== 1) return;
   const want = [...new Set([...(cur ? [cur.s] : []), ...wantSymbols(), ...watch.map(w => w.s)])].slice(0, 20);
-  ws.send(JSON.stringify({want}));
+  ws.send(JSON.stringify({want, depth: bookSymbol()}));
 }
 function onTick(t){
   last[t.s] = t;
@@ -573,6 +595,7 @@ function onTick(t){
     $("#cMeta").textContent = (t.bid != null ? `Bid ${fmt(t.bid, cur.tick)} · Ask ${fmt(t.ask, cur.tick)} · ` : "") + (t.src === "poll" ? "polled" : "live");
     liveBar(t);
     bidAsk(t);
+    bookStats(t);
   }
 }
 
@@ -583,7 +606,7 @@ function cssVar(n){ return getComputedStyle(document.documentElement).getPropert
 const CHART_DEFAULTS = {up:"#22a06b", down:"#e2483d", bg:"", grid:true,
   bidC:"#a3abb8", bidS:0, bidOn:true, askC:"#e2483d", askS:0, askOn:true, lastC:"#e0b341", lastS:2, lastOn:true,
   entryC:"", entryS:2, slC:"#e2483d", slS:0, tpC:"#22a06b", tpS:0, beC:"#4f8cff", beS:1, orderC:"#4f8cff", orderS:2,
-  toolC:"#4f8cff", toolS:0, lossZ:"#e2483d", profitZ:"#22a06b", zoneA:20};
+  toolC:"#4f8cff", toolS:0, lossZ:"#e2483d", profitZ:"#22a06b", zoneA:20, volOn:true};
 function chartCfg(){ return {...CHART_DEFAULTS, ...(prefGet("chart", {}) || {})}; }
 function cfgColor(k){ const c = chartCfg()[k]; return c || cssVar(k === "entryC" ? "--text" : "--bg"); }
 function buildChart(){
@@ -603,7 +626,20 @@ function buildChart(){
   // MT5-style quote lines: bid, ask and the last traded price (the candle's close), each with its price on the scale
   const mk = () => series.createPriceLine({price:0, color:"#888", lineWidth:1, lineStyle:0, axisLabelVisible:false, lineVisible:false, title:""});
   bidLine = mk(); askLine = mk(); lastLine = mk();
+  // volume in a strip under the candles
+  volSeries = chart.addHistogramSeries({priceFormat:{type:"volume"}, priceScaleId:"vol", lastValueVisible:false, priceLineVisible:false});
+  chart.priceScale("vol").applyOptions({scaleMargins:{top:0.82, bottom:0}, visible:false});
+  volLayout();
 }
+let volSeries = null, volCum = null;
+function volLayout(){
+  const on = chartCfg().volOn;
+  volSeries.applyOptions({visible: on});
+  series.priceScale().applyOptions({scaleMargins: on ? {top:0.08, bottom:0.22} : {top:0.08, bottom:0.08}});
+}
+function volColor(b){ const C = chartCfg(); return rgbaHex(b.close >= b.open ? C.up : C.down, 0.45); }
+function rgbaHex(hex, a){ const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(hex || ""); if(!m) return hex;
+  return `rgba(${parseInt(m[1], 16)},${parseInt(m[2], 16)},${parseInt(m[3], 16)},${a})`; }
 let bidLine = null, askLine = null, lastLine = null, lastQuote = null;
 function textOn(hex){ const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(hex || ""); if(!m) return "#fff";
   const [r, g, b] = [m[1], m[2], m[3]].map(x => parseInt(x, 16)); return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? "#0f1216" : "#fff"; }
@@ -623,6 +659,8 @@ function applyChartCfg(){
   if(!chart) return;
   const C = chartCfg();
   series.applyOptions({upColor:C.up, downColor:C.down, wickUpColor:C.up, wickDownColor:C.down});
+  volLayout();
+  if(volSeries) volSeries.setData(series.data().map(b => ({time:b.time, value:(volData[b.time] || 0), color:volColor(b)})));
   chart.applyOptions({layout:{background:{type:"solid", color:C.bg || cssVar("--bg")}}, grid:{horzLines:{visible:!!C.grid, color:cssVar("--line")}}});
   if(lastQuote && cur && lastQuote.s === cur.s) bidAsk(lastQuote);
   if(typeof drawLines === "function") drawLines();
@@ -648,7 +686,8 @@ function renderCfg(){
     <div class="cr" style="grid-template-columns:1fr 150px"><span>Zone strength</span><input type="range" min="5" max="50" data-k="zoneA" value="${C.zoneA}"></div>
     <div class="sec">Chart</div>
     <div class="cr"><span>Background</span><input type="color" data-k="bg" value="${hex("bg")}"><span class="muted" style="font-size:11px">${C.bg ? "" : "theme"}</span><span></span></div>
-    <div class="cr"><span>Grid lines</span><span></span><span></span><input type="checkbox" data-k="grid" ${C.grid ? "checked" : ""}></div>`;
+    <div class="cr"><span>Grid lines</span><span></span><span></span><input type="checkbox" data-k="grid" ${C.grid ? "checked" : ""}></div>
+    <div class="cr"><span>Volume strip</span><span></span><span></span><input type="checkbox" data-k="volOn" ${C.volOn ? "checked" : ""}></div>`;
   $("#cfgBody").innerHTML = h;
   $("#cfgBody").querySelectorAll("[data-k]").forEach(el => el.addEventListener("input", () => {
     const k = el.dataset.k, cfg = {...(prefGet("chart", {}) || {})};
@@ -705,6 +744,7 @@ async function openSymbol(row){
   $("#cLtp").textContent = last[row.s] ? fmt(last[row.s].ltp, row.tick) : "";
   $("#cMeta").textContent = "";
   if(bidLine) for(const l of [bidLine, askLine, lastLine]) l.applyOptions({lineVisible:false, axisLabelVisible:false, title:""});
+  volCum = null;
   sendWant();
   loadHistory();
   paperOnSymbol(row);
@@ -723,16 +763,20 @@ async function loadHistory(){
     return;
   }
   histRetry = 0;
-  let bars = (j.candles || []).map(c => ({time:c[0] + IST, open:c[1], high:c[2], low:c[3], close:c[4]}));
+  let bars = (j.candles || []).map(c => ({time:c[0] + IST, open:c[1], high:c[2], low:c[3], close:c[4], vol:c[5] || 0}));
   if(plan.agg){
     const out = [];
     for(const b of bars){
       const k = bucket(b.time, plan), o = out[out.length - 1];
-      if(!o || o.time !== k) out.push({time:k, open:b.open, high:b.high, low:b.low, close:b.close});
-      else { o.high = Math.max(o.high, b.high); o.low = Math.min(o.low, b.low); o.close = b.close; }
+      if(!o || o.time !== k) out.push({time:k, open:b.open, high:b.high, low:b.low, close:b.close, vol:b.vol});
+      else { o.high = Math.max(o.high, b.high); o.low = Math.min(o.low, b.low); o.close = b.close; o.vol += b.vol; }
     }
     bars = out;
   }
+  volData = {}; for(const b of bars) volData[b.time] = b.vol;
+  volCum = null;
+  volSeries.setData(bars.map(b => ({time:b.time, value:b.vol, color:volColor(b)})));
+  bars = bars.map(b => ({time:b.time, open:b.open, high:b.high, low:b.low, close:b.close}));
   series.setData(bars);
   series.applyOptions({priceFormat:{type:"price", precision:(String(cur.tick).split(".")[1]||"").length, minMove:cur.tick || 0.01}});
   lastBar = bars.length ? {...bars[bars.length - 1]} : null;
@@ -742,7 +786,7 @@ async function loadHistory(){
   if(last[cur.s]) bidAsk(last[cur.s]);
   drawLines();
 }
-let curPlan = null, histRetry = 0;
+let curPlan = null, histRetry = 0, volData = {};
 function liveBar(t){
   if(!series || !t.ltp || !curPlan) return;
   const tt = Number(t.t) || Math.floor(Date.now()/1000), ts = tt + IST;
@@ -751,9 +795,13 @@ function liveBar(t){
   if(!curPlan.agg && curPlan.t.min && lastBar && Math.floor(lastBar.time / 86400) === Math.floor(ts / 86400) && ts >= lastBar.time)
     b = lastBar.time + Math.floor((ts - lastBar.time) / curPlan.sec) * curPlan.sec;
   if(lastBar && b < lastBar.time) return;
-  if(!lastBar || b > lastBar.time) lastBar = {time:b, open:t.ltp, high:t.ltp, low:t.ltp, close:t.ltp};
-  else { lastBar.high = Math.max(lastBar.high, t.ltp); lastBar.low = Math.min(lastBar.low, t.ltp); lastBar.close = t.ltp; }
+  // volume: Fyers sends today's running total, so a candle's volume is the growth of that total
+  let dv = 0;
+  if(t.vol != null){ if(volCum != null && t.vol >= volCum) dv = t.vol - volCum; volCum = t.vol; }
+  if(!lastBar || b > lastBar.time){ lastBar = {time:b, open:t.ltp, high:t.ltp, low:t.ltp, close:t.ltp}; volData[b] = dv; }
+  else { lastBar.high = Math.max(lastBar.high, t.ltp); lastBar.low = Math.min(lastBar.low, t.ltp); lastBar.close = t.ltp; volData[b] = (volData[b] || 0) + dv; }
   series.update({...lastBar});
+  if(volSeries) volSeries.update({time:b, value:volData[b] || 0, color:volColor(lastBar)});
   $("#chartMsg").classList.add("hide");
 }
 
@@ -907,8 +955,9 @@ function setFull(on, real){
   $("#bFull").textContent = on ? "✕" : "⛶"; $("#bFull").title = on ? "Back to normal view (F or Esc)" : "Maximise the chart in this window (F · Shift+F = full screen)";
 }
 function togglePanel(){
-  if(document.body.classList.contains("chartfs")){ document.body.classList.toggle("fspanel"); return; }   // in full screen the panel slides over the chart
-  document.body.classList.toggle("nopanel"); prefSet("nopanel", document.body.classList.contains("nopanel"));
+  if(document.body.classList.contains("chartfs")) document.body.classList.toggle("fspanel");   // when maximised the panel slides over the chart
+  else { document.body.classList.toggle("nopanel"); prefSet("nopanel", document.body.classList.contains("nopanel")); }
+  sendWant();
 }
 $("#bFull").onclick = () => setFull(!document.body.classList.contains("chartfs"));
 $("#bPanel").onclick = togglePanel;

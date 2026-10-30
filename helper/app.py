@@ -508,6 +508,8 @@ async def ws(socket: WebSocket):
                 continue
             if isinstance(msg, dict) and isinstance(msg.get("want"), list):
                 feed.want(client, msg["want"])
+            if isinstance(msg, dict) and "depth" in msg:
+                feed.set_depth(client, msg["depth"])
 
     async def writer():
         while True:
