@@ -1,6 +1,25 @@
-# Paper trading: how it works (v0.12.0)
+# Paper trading: how it works (v0.13.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
+
+## Logging in, users and security
+
+- **Login** is your username and password, then a 6-digit code from your authenticator app (Google Authenticator, Microsoft Authenticator, Authy or similar). Lost your phone? Type one of your recovery codes instead of the app code; each works once.
+- **First login** (and the first login after this update, as user **admin** with your old page password): you scan a QR code into the app, type the code it shows, and save the 10 recovery codes shown once.
+- **Settings → Security:** change your name or password, get new recovery codes, move 2FA to a new phone, see every device you're logged in on (log any out, or everywhere else), and recent activity.
+- **A fresh code is asked again** (valid 5 minutes) for sensitive actions: adding or changing users, new recovery codes, moving 2FA, editing charge rates.
+- **Lockout:** 5 wrong passwords or codes lock that user for 15 minutes. Sessions end after 48 hours without use and after 7 days at most.
+- **Users (admin only, Settings → Users):** add a user with a temporary password. They choose their own password and set up 2FA at first login, then enter their own Fyers app in their Settings for prices. You can disable / enable a user, reset their 2FA (lost phone) or give them a new temporary password. Other users are paper-only; live trading will be the admin's only.
+- **Everything is per user:** Fyers app and login, watchlist, chart set-up, Pine scripts, paper accounts. Charge rates are shared; only the admin edits them.
+- **Lost phone and recovery codes (admin):** on the server console, in `/home/helper/app`, run `sudo -u helper /home/helper/venv/bin/python -m helper.users rescue admin`. It prints a temporary password; log in with it and set up 2FA again.
+
+## Paper accounts
+
+- **The switcher** at the top shows the account you're looking at and its balance. Pick another to switch; the whole app (chart lines, ticket, Trades, History, Account, Log) follows it.
+- **+ New account…** (in the switcher, or the Account page): a name, starting capital, and default rules or a copy of another account's rules and trailing.
+- Each account has its own balance, rules, trailing defaults, positions, orders and history. All of them keep running on the server (stops, targets, trailing, square-off), whichever one you're looking at.
+- **Rename, archive, restore** on the Account page. Archiving needs the account flat (no positions or orders) and keeps its trades. You always keep at least one account.
+- **Reset** (Account page) starts the account you're looking at again; its old trades are archived on the server.
 
 ## Markets
 
@@ -17,8 +36,8 @@ The top bar has **Chart · Trades · History · Book · Account · Log**. The ch
 - **Trades:** all open positions and pending orders in tables. Click any price to change it; set Trail BE / Trail SL per trade; BE, close, cancel. BE all, Cancel all orders and Close all at the top.
 - **History:** filters, stats (net, win rate, profit factor, average R, expectancy, drawdown, streaks...), an equity curve, daily P&L, results by contract and by exit, and each trade's charges. Download the filtered list as CSV.
 - **Book:** up to 4 order books side by side.
-- **Account:** the account's figures, rules, trailing defaults, reset and the charges in use.
-- **Log:** everything the paper account did, plus the helper's own log.
+- **Account:** the account's figures, your paper accounts (new, rename, archive), rules, trailing defaults, reset and the charges in use.
+- **Log:** everything the paper account did, the helper's own log, and **Security** (your logins, 2FA and password changes).
 
 ## The long / short tool on the chart (like the MT5 EA)
 
@@ -117,7 +136,7 @@ Candles are saved on the server and in your browser.
 
 ## Saved on the server
 
-Your Pine scripts and the indicators on your chart (with their inputs), your watchlist, pinned timeframes, last chart, theme, panel on/off, ticket defaults (risk mode and amount, product, R) and remembered stop distances are saved on the server. Your rules and trailing settings have been saved there since v0.2.0. Any device, after any login, opens the same set-up.
+Everything here is per user. Your Pine scripts and the indicators on your chart (with their inputs), your watchlist, pinned timeframes, last chart, theme, panel on/off, ticket defaults (risk mode and amount, product, R) and remembered stop distances are saved on the server. Rules and trailing settings are saved per paper account. Any device, after any login, opens the same set-up.
 
 ## Every ₹ figure is net
 
@@ -196,7 +215,7 @@ When BE-T has already moved the stop to break-even, a Trail SL of N R behind the
 
 - **History:** every closed trade, with the exit reason (tp, sl, be, trail sl, manual, square-off, expiry). Tap a trade for its full charge breakdown, first stop, risk, and best / worst price.
 - **Download CSV:** one row per trade, with every charge in its own column.
-- Trades are stored on the server in `/home/helper/data/paper_trades.json`. **Reset** archives them and starts a fresh account.
+- Trades are stored on the server in `/home/helper/data/u/<user>/a/<account>/paper_trades.json`. **Reset** archives them and starts that account again.
 
 ## Not yet
 

@@ -9,8 +9,10 @@ _lock = threading.Lock()
 
 
 def path(name: str) -> Path:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    return DATA_DIR / name
+    """A file in the data folder; names may have sub-folders (u/<user>/a/<account>/paper.json)."""
+    p = DATA_DIR / name
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return p
 
 
 def load(name: str, default=None):

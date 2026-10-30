@@ -20,7 +20,7 @@ See `Server_Details.md`. In short: droplet `fyers-helper` in Bangalore, reserved
    sudo -u helper GIT_SSH_COMMAND="ssh -i /home/helper/.ssh/deploy_key -o IdentitiesOnly=yes" git clone git@github.com:Sic-Parvis-Magna-Achaggi/Fyers-Paper-Trader.git /home/helper/app && bash /home/helper/app/server/install.sh
    ```
 
-3. It ends by printing the web address and a **setup code**. Open the address, enter the code and choose your password.
+3. It ends by printing the web address and a **setup code**. Open the address, enter the code, choose your username and password, then set up two-factor login with an authenticator app.
 
 ## Updates
 
@@ -39,7 +39,7 @@ Upload a new zip to GitHub and it's live within about a minute. The version show
 | Helper log | `journalctl -u fyers-helper -n 100 --no-pager` |
 | Update log | `journalctl -u fyers-update -n 50 --no-pager` |
 | Restart the helper | `systemctl restart fyers-helper` |
-| Forgot the page password | `rm /home/helper/data/auth.json && systemctl restart fyers-helper && sleep 3 && cat /home/helper/data/SETUP_CODE.txt`, then set a new one on the page (Fyers settings are kept) |
+| Forgot the password, or lost the 2FA phone and recovery codes | `cd /home/helper/app && sudo -u helper /home/helper/venv/bin/python -m helper.users rescue admin` prints a temporary password; log in with it, choose a new one and set up 2FA again (everything else is kept). Other users: Settings → Users on the page |
 
 ## Where things live on the server
 
@@ -47,5 +47,5 @@ Upload a new zip to GitHub and it's live within about a minute. The version show
 | --- | --- |
 | `/home/helper/app` | The code (a copy of the GitHub repo) |
 | `/home/helper/venv` | Python packages |
-| `/home/helper/data` | Settings, password hash, Fyers token, symbol list, and later trades and the journal. Only `helper` can read it |
+| `/home/helper/data` | Users (`users.json`), the security log (`audit.jsonl`), the encryption key (`secret.key`), symbol lists, and each user's files in `u/<user>/` (Fyers app, candles, scripts, paper accounts in `a/<account>/`). Only `helper` can read it. Back up `secret.key` with the rest: without it the Fyers secrets must be entered again |
 | `/etc/caddy/Caddyfile` | Web server: HTTPS, forwards to the helper on 127.0.0.1:8000 |

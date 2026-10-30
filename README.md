@@ -2,7 +2,7 @@
 
 A trade manager for Fyers that works like the MT5 LiveTrader EA: risk-based sizing, draggable entry/SL/TP, trailing, daily loss guards and a journal. The order is paper trading first, then live. Instruments come in this order: MCX, then NIFTY/BANKNIFTY, then stocks.
 
-It runs on our own server and serves its own page, so there is nothing to install on any laptop or phone. Open the bookmark, type the password, done.
+It runs on our own server and serves its own page, so there is nothing to install on any laptop or phone. Open the bookmark, log in with your username, password and a 2FA code, done.
 
 **Address:** https://68-183-245-178.sslip.io
 
@@ -51,7 +51,7 @@ See `docs/Paper_Trading_Guide.md`.
 
 ## Version 0.1.0: plumbing
 
-- Page password, the daily Fyers login, MCX search and option chain, watchlist, and live candlestick charts.
+- Users with two-factor login (authenticator app + recovery codes), several paper accounts per user, the daily Fyers login, MCX search and option chain, watchlist, and live candlestick charts.
 - Auto-update from GitHub.
 
 Next: the journal in the app, with Telegram screenshots.
@@ -60,7 +60,7 @@ Next: the journal in the app, with Telegram screenshots.
 
 | Folder | What |
 | --- | --- |
-| `helper/` | The Python server (FastAPI). `app.py` has the routes; `fyers_link.py` handles Fyers login and data; `feed.py` handles live prices; `symbols.py` handles the contract list; `auth.py` handles the page password; `paper.py` is the paper engine; `charges.py` holds every charge |
+| `helper/` | The Python server (FastAPI). `app.py` has the routes; `fyers_link.py` handles Fyers login and data; `feed.py` handles live prices; `symbols.py` handles the contract list; `users.py` handles users, 2FA, sessions, encryption and the security log; `rt.py` runs each user's Fyers link, price feed and paper accounts; `paper.py` is the paper engine; `charges.py` holds every charge |
 | `web/` | The page (`index.html`), the trade panel (`paper.js`), Pine Script (`pine.js`, `pine_worker.js`) and bundled libraries in `vendor/`: Lightweight Charts (Apache-2.0), PineTS (AGPL-3.0), CodeMirror 5 (MIT) |
 | `server/` | Install and auto-update scripts, the service files and the Caddy config |
 | `docs/` | Project brief, server details, setup guide |
@@ -72,5 +72,5 @@ Upload the new files to this repo. The server picks them up within a minute. See
 ## Security
 
 - No secrets are kept in this repo.
-- The Fyers App ID and Secret, the daily Fyers token and the page password hash stay on the server in `/home/helper/data`, readable only by the `helper` user.
+- Each user's Fyers App ID and Secret and daily Fyers token, and the password hashes and 2FA secrets, stay on the server in `/home/helper/data`, readable only by the `helper` user. Secrets and tokens are encrypted with a key kept in the same folder (`secret.key`).
 - The server's GitHub key is read-only.

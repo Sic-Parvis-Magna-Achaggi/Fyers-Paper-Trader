@@ -1,5 +1,46 @@
 # Changelog
 
+## v0.13.0 — 30 Oct 2026 — Users with two-factor login, and several paper accounts
+
+**After this update:** open the page and log in with username **admin** and your existing page password.
+You'll be asked to set up two-factor login (scan a QR code with Google Authenticator, Microsoft
+Authenticator, Authy or similar), then shown 10 recovery codes once: save them somewhere safe. Your
+trades, rules, scripts, chart set-up and Fyers app are all kept (moved into your user and a paper account
+called "Main").
+
+Added
+- **Users.** Settings → Users (admin only): add a user with a temporary password; disable / enable, reset
+  their 2FA (lost phone) or give a new temporary password. A new user chooses their own password and sets
+  up 2FA at first login. Each user has their own Fyers app (for prices), chart set-up, Pine scripts and
+  paper accounts. Other users are paper-only; live trading will be the admin's only.
+- **Two-factor login for everyone**, the admin included: password, then a 6-digit code from an
+  authenticator app. 10 one-time recovery codes for a lost phone (typed with or without the dashes).
+- **Security** in Settings: your name, change password, new recovery codes, move 2FA to a new phone,
+  every device you're logged in on (log out any of them, or everywhere else), and recent activity.
+- **Sensitive actions ask for a fresh 2FA code** (valid 5 minutes): adding or changing users, new
+  recovery codes, moving 2FA, editing charge rates.
+- **Login protection:** 5 wrong attempts lock the user for 15 minutes; 20 failures from one address in
+  15 minutes block that address for 15 minutes. Sessions end after 48 hours idle and 7 days at most.
+- **Encrypted secrets:** each user's Fyers App Secret and daily token are stored encrypted on the server.
+- **Security log:** logins, failures, lockouts, password and 2FA changes, users and accounts changed,
+  charge edits. Yours in Settings and on Log → Security; the admin sees everyone's in Settings → Users.
+- **Several paper accounts.** A switcher in the top bar (name and balance). **+ New account**: name,
+  starting capital, and default rules or a copy of another account's rules and trailing. Each account has
+  its own balance, rules, trailing defaults, positions, orders and history, and keeps running on the
+  server whichever one you're looking at. Rename and archive / restore on the Account page.
+- Server console rescue if the admin loses both phone and recovery codes:
+  `sudo -u helper /home/helper/venv/bin/python -m helper.users rescue admin` (run in /home/helper/app).
+
+Changed
+- Login is now username + password + code (was a single page password).
+- Charges: only the admin can edit rates or mark Fyers' page as reviewed.
+- Data on the server moved into `data/u/<user>/` and `data/u/<user>/a/<account>/` (done automatically,
+  once). The old `auth.json` is renamed `auth.json.migrated`.
+- Requirements: adds `cryptography` (installed by the update service automatically).
+
+Fixed
+- On a phone, with the trade panel closed, the chart and watchlist used only two-thirds of the width.
+
 ## v0.12.0 — 30 Oct 2026 — Charges you can edit, and a daily check of Fyers' charges page
 
 Added

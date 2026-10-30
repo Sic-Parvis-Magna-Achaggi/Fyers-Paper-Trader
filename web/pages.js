@@ -379,11 +379,13 @@ function pgBookStats(s){
 function pgAccount(){
   const box = pgq("#pg_account"); if(!box || !P.snap) return;
   const a = P.snap.acct, r = P.snap.rules, t = P.snap.trail;
-  box.innerHTML = `<div class="pg-head"><h2>Paper account</h2><span class="tag">SIM</span><span class="sp"></span></div>
+  const an = ((S.accounts || []).find(x => x.id === ACCT) || {}).name || "Paper account";
+  box.innerHTML = `<div class="pg-head"><h2>${esc(an)}</h2><span class="tag">PAPER</span><span class="sp"></span></div>
     <div class="pg-cards" id="pgAcctCards2"></div>
     <div class="pg-cards">${[["Started with", rs(a.start)], ["Highest balance", rs(a.peak)], ["Daily floor", a.daily_floor != null ? rs(a.daily_floor) : "off"], ["Max-loss floor", a.max_floor != null ? `${rs(a.max_floor)} <span class="muted">(${esc(r.max_mode)})</span>` : "off"],
       ["Closed trades", a.trades], ["Net, all time", `<span class="${cls(a.net_total)}">${rs(a.net_total)}</span>`], ["Charges, all time", rs(a.charges_total)],
       ["Win rate / PF", `${a.win_rate != null ? a.win_rate + "%" : "–"} / ${a.pf ?? "–"}`]].map(([k, v]) => `<div class="pgc"><span>${k}</span><b>${v}</b></div>`).join("")}</div>
+    <div class="pg-card" id="acctMgr"></div>
     <div class="pg-split">
       <div class="pg-card"><h3 class="pg-h3" style="margin-top:0">Rules</h3><p class="help">Checked before every order, as in LiveTrader.</p><div id="pgRules" class="pg-rules"></div>
         <div class="btns"><button class="primary" id="pgRulesSave">Save rules</button></div><div id="pgRulesMsg"></div></div>
@@ -395,7 +397,7 @@ function pgAccount(){
           <div class="f2"><div><label>Capital (₹)</label><input id="pgRsCap" value="${r.size}" inputmode="decimal"></div><div><label>Type RESET</label><input id="pgRsConfirm" autocomplete="off"></div></div>
           <div class="btns"><button class="danger" id="pgRsGo">Reset paper account</button></div><div id="pgRsMsg"></div></div>
         <div class="pg-card" id="pgChargesCard"><div style="display:flex;align-items:center;gap:8px"><h3 class="pg-h3" style="margin:0;flex:1">Charges used</h3>
-          <button class="sm" id="pgChEdit">Edit rates</button><button class="sm ghost" id="pgChCheck" title="Compare with Fyers' charges page now">Check Fyers' page</button></div>
+          <button class="sm admin-only" id="pgChEdit">Edit rates</button><button class="sm ghost admin-only" id="pgChCheck" title="Compare with Fyers' charges page now">Check Fyers' page</button></div>
           <div id="pgChWatch"></div><div id="pgChEditor" class="hide"></div><div id="pgCharges"></div></div>
       </div></div>`;
   pgAcctCards("#pgAcctCards2");
@@ -412,6 +414,7 @@ function pgAccount(){
   };
   loadCharges("#pgCharges");
   pgChargesEdit();
+  acctRefresh().then(acctMgrRender);
 }
 
 /* ------------------------------------------------------------------ charges: your own edits, and the daily check of Fyers' page */
@@ -431,7 +434,8 @@ async function pgChargesEdit(j){
     <div class="btns"><button class="primary" id="pgChSave">Save rates</button><button id="pgChDefaults">Back to built-in rates</button></div><div id="pgChMsg"></div>`;
   pgq("#pgChEdit").onclick = () => { ed.classList.toggle("hide"); pgq("#pgChEdit").textContent = ed.classList.contains("hide") ? "Edit rates" : "Close editor"; };
   const save = async body => {
-    const r = await api("/api/charges/save", {body});
+    const r = await stepUp(() => api("/api/charges/save", {body}));
+    if(r.error === "cancelled") return;
     if(r.ok){ loadCharges("#pgCharges"); loadCharges(); const open = !ed.classList.contains("hide"); await pgChargesEdit(); if(open){ ed.classList.remove("hide"); pgq("#pgChEdit").textContent = "Close editor"; } }
     pgq("#pgChMsg").textContent = r.ok ? "Saved. Every figure now uses these rates." : r.error; pgq("#pgChMsg").className = r.ok ? "ok-msg" : "err";
   };
@@ -453,13 +457,14 @@ function pgChargeWatch(c){
     el.innerHTML = `<div class="chwarn"><b>Fyers' charges page has changed</b> since you last reviewed it (noticed ${when(c.changed_at)}).
       Check the lines below; if a rate changed, use <b>Edit rates</b>, then mark it reviewed.
       <div class="chdiff mono">${(c.diff || []).map(d => `<div class="${d[0] === "+" ? "up" : "down"}">${esc(d)}</div>`).join("") || "(no line-by-line detail)"}</div>
-      <div class="btns"><a class="btnlink" href="${esc(c.url || "https://fyers.in/charges-list")}" target="_blank" rel="noopener">Open Fyers' page</a><button class="primary" id="pgChReviewed">Mark as reviewed</button></div></div>`;
+      <div class="btns"><a class="btnlink" href="${esc(c.url || "https://fyers.in/charges-list")}" target="_blank" rel="noopener">Open Fyers' page</a><button class="primary admin-only" id="pgChReviewed">Mark as reviewed</button></div></div>`;
     pgq("#pgChReviewed").onclick = async () => { const r = await api("/api/charges/reviewed", {body: {}}); if(r.ok) pgChargeWatch(r.check); };
   } else el.innerHTML = `<p class="help" style="margin:6px 0">Fyers' charges page is checked about once a day; last check ${when(c.checked)}${c.error ? ` <span class="warnc">(couldn't read it: ${esc(c.error)})</span>` : ", no change"}.
     A change is never applied by itself: you'll see what changed here and decide.</p>`;
 }
 /* a pill in the top bar while a change waits for review */
 function chargePill(c){
+  if(!document.body.classList.contains("is-admin")) c = null;      // only the admin reviews and edits charges
   let p = pgq("#pCharges");
   if(c && c.changed){
     if(!p){ p = document.createElement("button"); p.id = "pCharges"; p.className = "pill warnpill"; p.textContent = "Charges changed: review";
@@ -475,7 +480,7 @@ async function pgLog(reload){
   if(!box.dataset.built){
     box.dataset.built = "1";
     box.innerHTML = `<div class="pg-head"><h2>Log</h2><span class="sp"></span>
-        <div class="seg" id="pgLogF"><button data-f="all" class="on">Everything</button><button data-f="trades">Trades</button><button data-f="warn">Warnings</button><button data-f="system">System</button></div>
+        <div class="seg" id="pgLogF"><button data-f="all" class="on">Everything</button><button data-f="trades">Trades</button><button data-f="warn">Warnings</button><button data-f="system">System</button><button data-f="security">Security</button></div>
         <input id="pgLogQ" placeholder="Search…" autocomplete="off" style="width:200px"><button id="pgLogR" class="ghost" title="Refresh">↻</button></div>
       <div class="tblw"><table class="tbl" id="pgLogT"></table></div>`;
     pgq("#pgLogF").querySelectorAll("button").forEach(b => b.onclick = () => { PG.logF = b.dataset.f; pgq("#pgLogF").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); pgLogRender(); });
@@ -484,9 +489,11 @@ async function pgLog(reload){
     clearInterval(PG.logTimer); PG.logTimer = setInterval(() => { if(PG.page === "log") pgLog(true); }, 10000);
   }
   if(reload || !PG.logs){
-    const [e, l] = await Promise.all([api("/api/paper/events"), api("/api/logs")]);
+    const [e, l, sc] = await Promise.all([api("/api/paper/events"), api("/api/logs"), api("/api/security")]);
     PG.logs = [...(e.ok ? e.events.map(x => ({t: x.t, kind: "trades", lvl: x.lvl === "warn" ? "warn" : "info", src: "paper", msg: x.msg})) : []),
-      ...(l.ok ? l.lines.filter(x => x.src !== "paper").map(x => ({t: x.t, kind: "system", lvl: /WARN|ERROR|CRIT/.test(x.lvl) ? "warn" : "info", src: x.src, msg: x.msg})) : [])].sort((a, b) => b.t - a.t);
+      ...(l.ok ? l.lines.filter(x => x.src !== "paper").map(x => ({t: x.t, kind: "system", lvl: /WARN|ERROR|CRIT/.test(x.lvl) ? "warn" : "info", src: x.src, msg: x.msg})) : []),
+      ...(sc.ok ? sc.audit.map(x => ({t: x.t, kind: "security", lvl: /fail|wrong|locked|refused|disabled/i.test(x.event) ? "warn" : "info", src: "security",
+        msg: x.event + (x.detail ? " - " + x.detail : "") + (x.ip ? " (" + x.ip + ")" : "")})) : [])].sort((a, b) => b.t - a.t);
   }
   pgLogRender();
 }

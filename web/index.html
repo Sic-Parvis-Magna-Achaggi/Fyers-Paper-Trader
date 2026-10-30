@@ -411,12 +411,40 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
   main{grid-template-rows:minmax(420px,1fr) auto;overflow:auto}
 }
 @media (max-width:760px){
-  main{grid-template-columns:1fr;grid-template-rows:minmax(340px,55vh) auto auto;overflow:auto}
+  main,body.nopanel:not(.chartfs) main{grid-template-columns:1fr;grid-template-rows:minmax(340px,55vh) auto auto;overflow:auto}
   section.chartwrap{grid-row:1} #panel{grid-row:2;overflow:visible;min-height:max-content} aside{grid-row:3;min-height:320px}
   aside{border-right:0;border-top:1px solid var(--line)}
   header{padding:8px 12px}
   #pBudget,#pClock{display:none}
 }
+
+/* security: gates, 2FA set-up, step-up code, sessions, users, accounts */
+.card.wide{max-width:460px}
+.card .ghost[data-back]{width:100%;margin-top:6px}
+input.big{font-size:22px;letter-spacing:4px;text-align:center;padding:10px;margin-top:6px}
+.steps{margin:6px 0;padding-left:20px;font-size:13px;color:var(--muted)}
+.qr{background:#fff;border-radius:8px;padding:8px;width:220px;height:220px;margin:6px auto 4px}
+.qr svg{width:100%;height:100%;display:block}
+.sel{user-select:all;color:var(--text);word-break:break-all}
+.rcodes{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin:10px 0;font-size:15px}
+.chk{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;color:var(--text)}
+.chk input{width:auto}
+#codeAsk{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
+#codeAsk.hide{display:none}
+#codeAsk .ca{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px;width:100%;max-width:340px}
+#codeAsk .btns button{flex:1}
+#drawer h4{font-size:12px;margin:16px 0 4px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.sess>div,.urow,.arow{display:flex;align-items:center;gap:8px;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px}
+.sess>div>span{min-width:0}
+.ubtns{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.urow .tag,.arow .tag{margin-left:4px}
+.tag.down{color:var(--down)}
+.arow.arch{opacity:.6}
+.audit{font-size:12px;max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:var(--panel2)}
+.audit>div{padding:2px 0}
+.inl{display:grid;gap:6px;align-items:center}
+#acctSel{width:auto;max-width:240px;padding:4px 8px;font-size:13px}
+body:not(.is-admin) .admin-only{display:none!important}
 </style>
 </head>
 <body data-page="chart">
@@ -424,26 +452,49 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
 <!-- first run -->
 <div id="vSetup" class="gate hide"><form class="card" id="fSetup">
   <h1>Set up your helper</h1>
-  <p>Enter the setup code shown on the server, then choose the password you'll use to open this page from any device.</p>
+  <p>Enter the setup code shown on the server, then choose your username and password. Two-factor login comes next.</p>
   <label>Setup code</label><input id="sCode" class="mono" autocomplete="off" autocapitalize="characters">
-  <label>New password (10+ characters)</label><input id="sPw" type="password" autocomplete="new-password">
+  <label>Username</label><input id="sUser" autocomplete="username" autocapitalize="none" value="admin">
+  <label>Password (10+ characters, upper and lower case and a number)</label><input id="sPw" type="password" autocomplete="new-password">
   <label>Repeat password</label><input id="sPw2" type="password" autocomplete="new-password">
-  <button class="primary">Save password</button><div class="err" id="sErr"></div>
+  <button class="primary">Continue</button><div class="err" id="sErr"></div>
 </form></div>
 
-<!-- login -->
+<!-- login: password -->
 <div id="vLogin" class="gate hide"><form class="card" id="fLogin">
   <h1>Fyers Trade Manager</h1>
-  <p>Enter your password.</p>
+  <label>Username</label><input id="lUser" autocomplete="username" autocapitalize="none">
   <label>Password</label><input id="lPw" type="password" autocomplete="current-password">
-  <button class="primary">Open</button><div class="err" id="lErr"></div>
+  <button class="primary">Next</button><div class="err" id="lErr"></div>
 </form></div>
+
+<!-- login: the 2FA code -->
+<div id="vCode" class="gate hide"><form class="card" id="fCode">
+  <h1>Two-factor code</h1>
+  <p>Open your authenticator app and type the 6-digit code for <b>Trade Manager</b>. Lost your phone? Type one of your recovery codes instead.</p>
+  <input id="cCode" class="mono big" autocomplete="one-time-code" autocapitalize="none" maxlength="16" placeholder="123456">
+  <button class="primary">Log in</button><div class="err" id="cErr"></div>
+  <button type="button" class="ghost" data-back>Back</button>
+</form></div>
+
+<!-- login: replace a temporary password -->
+<div id="vNewPw" class="gate hide"><form class="card" id="fNewPw">
+  <h1>Choose your password</h1>
+  <p>You logged in with a temporary password. Choose your own now: 10+ characters, upper and lower case and a number.</p>
+  <label>New password</label><input id="nPw" type="password" autocomplete="new-password">
+  <label>Repeat password</label><input id="nPw2" type="password" autocomplete="new-password">
+  <button class="primary">Save and continue</button><div class="err" id="nErr"></div>
+</form></div>
+
+<!-- login: first 2FA set-up -->
+<div id="v2fa" class="gate hide"><div class="card wide" id="c2fa"></div></div>
 
 <!-- main -->
 <div id="app" class="hide">
   <header>
     <span class="brand">Trade Manager</span>
     <nav id="nav"><button data-pg="chart" class="on">Chart</button><button data-pg="trades">Trades <span class="nb hide" id="nbTrades"></span></button><button data-pg="history">History</button><button data-pg="book">Book</button><button data-pg="account">Account</button><button data-pg="log">Log</button></nav>
+    <select id="acctSel" title="Paper account"></select>
     <span class="pill" id="pFyers"><span class="dot"></span><span>Fyers</span></span>
     <button class="primary hide" id="bFyersLogin">Log in to Fyers</button>
     <span class="pill" id="pFeed" title="Live price feed"><span class="dot"></span><span>Prices</span></span>
@@ -601,11 +652,13 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
     <div class="btns"><button id="bReset">Reset</button></div>
     <div class="ok-msg" id="rsMsg"></div>
 
-    <h3>Page password</h3>
-    <label>Current password</label><input id="pOld" type="password" autocomplete="current-password">
-    <label>New password</label><input id="pNew" type="password" autocomplete="new-password">
-    <div class="btns"><button id="bPw">Change password</button><button id="bLogout">Log out of this page</button></div>
-    <div class="ok-msg" id="pwMsg"></div>
+    <h3>Security</h3>
+    <div id="secBox"></div>
+
+    <div id="usersSec" class="hide">
+      <h3>Users</h3>
+      <div id="usersBox"></div>
+    </div>
 
     <h3>Display</h3>
     <div class="seg" id="theme"><button data-t="">Auto</button><button data-t="dark">Dark</button><button data-t="light">Light</button></div>
@@ -621,6 +674,8 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
 <script src="/static/paper.js?v=__V__"></script>
 <script src="/static/pine.js?v=__V__"></script>
 <script src="/static/pages.js?v=__V__"></script>
+<script src="/vendor/qrcode/qrcode.js?v=__V__"></script>
+<script src="/static/security.js?v=__V__"></script>
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
@@ -681,10 +736,12 @@ const sym = {};                          // symbol -> master row
 
 async function api(path, opt = {}){
   const o = {credentials:"same-origin", headers:{}};
+  if(typeof ACCT !== "undefined" && ACCT) o.headers["X-Acct"] = ACCT;
   if(opt.body !== undefined){ o.method = "POST"; o.headers["Content-Type"] = "application/json"; o.body = JSON.stringify(opt.body); }
   const r = await fetch(path, o);
   let j = {}; try{ j = await r.json(); }catch(e){}
-  if(r.status === 401 && !path.startsWith("/api/login") && !path.startsWith("/api/setup")){ showGate(); }
+  if(r.status === 401 && !path.startsWith("/api/login") && !path.startsWith("/api/setup") && !path.startsWith("/api/security/confirm")){ showGate(); }
+  j.status = r.status;
   if(!r.ok && j.ok === undefined) j.ok = false;
   if(!r.ok && !j.error) j.error = j.detail || ("HTTP " + r.status);
   return j;
@@ -696,29 +753,16 @@ function setDot(el, cls, text){ el.querySelector(".dot").className = "dot " + (c
 
 /* ---------------------------------------------------------------- gates */
 function showGate(){
-  $("#app").classList.add("hide");
-  if(S.setup_done === false){ $("#vSetup").classList.remove("hide"); $("#vLogin").classList.add("hide"); $("#sCode").focus(); }
-  else { $("#vLogin").classList.remove("hide"); $("#vSetup").classList.add("hide"); $("#lPw").focus(); }
+  gateShow(S.setup_done === false ? "#vSetup" : "#vLogin");
   if(ws){ ws.onclose = null; ws.close(); ws = null; }
 }
-$("#fSetup").onsubmit = async e => {
-  e.preventDefault(); $("#sErr").textContent = "";
-  if($("#sPw").value !== $("#sPw2").value){ $("#sErr").textContent = "The passwords don't match."; return; }
-  const j = await api("/api/setup", {body:{code:$("#sCode").value, password:$("#sPw").value}});
-  if(!j.ok){ $("#sErr").textContent = j.error; return; }
-  boot();
-};
-$("#fLogin").onsubmit = async e => {
-  e.preventDefault(); $("#lErr").textContent = "";
-  const j = await api("/api/login", {body:{password:$("#lPw").value}});
-  if(!j.ok){ $("#lErr").textContent = j.error; return; }
-  $("#lPw").value = ""; boot();
-};
 
 /* ---------------------------------------------------------------- state */
 async function refreshState(){
   S = await api("/api/state");
   if(!S.session){ showGate(); return false; }
+  acctSetup();
+  document.body.classList.toggle("is-admin", (S.user || {}).role === "admin");
   const f = S.fyers || {};
   const pf = $("#pFyers");
   if(!f.configured){ setDot(pf, "warn", "Fyers app not set up"); }
@@ -757,14 +801,14 @@ $("#bFyersLogin2").onclick = fyersLogin;
 function connectWS(){
   if(ws) return;
   ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
-  ws.onopen = () => { wsTry = 0; sendWant(); };
+  ws.onopen = () => { wsTry = 0; if(ACCT) ws.send(JSON.stringify({acct: ACCT})); sendWant(); };
   ws.onmessage = ev => {
     const m = JSON.parse(ev.data);
     if(m.tick) onTick(m.tick);
     if(m.feed) feedPill(m.feed);
-    if(m.paper) paperUpdate(m.paper, m.events);
+    if(m.paper && (!m.acct || m.acct === ACCT)) paperUpdate(m.paper, m.events);
     if(m.depth){ renderBook(m.depth); pagesDepth(m.depth); }
-    if(m.charges){ chargePill(m.charges); toast("Fyers' charges page has changed: review it on the Account page"); }
+    if(m.charges && (S.user || {}).role === "admin"){ chargePill(m.charges); toast("Fyers' charges page has changed: review it on the Account page"); }
   };
   ws.onclose = ev => {
     ws = null;
@@ -1450,7 +1494,7 @@ $("#cExp").onchange = () => showChain($("#cU").value, $("#cExp").value);
 $("#cU").onkeydown = e => { if(e.key === "Enter") showChain($("#cU").value, 0, ""); };
 
 /* ---------------------------------------------------------------- settings drawer */
-function openDrawer(){ $("#drawer").classList.add("open"); loadLogs(); }
+function openDrawer(){ $("#drawer").classList.add("open"); loadLogs(); secRender(); }
 $("#bSettings").onclick = openDrawer;
 $("#bClose").onclick = () => $("#drawer").classList.remove("open");
 $("#bCopy").onclick = async () => { try{ await navigator.clipboard.writeText($("#redir").value); toast("Copied"); }catch(e){ $("#redir").select(); } };
@@ -1461,13 +1505,6 @@ $("#bSaveApp").onclick = async () => {
   $("#appSecret").value = ""; $("#appMsg").textContent = "Saved. Now press Log in to Fyers.";
   refreshState();
 };
-$("#bPw").onclick = async () => {
-  const j = await api("/api/password", {body:{old:$("#pOld").value, new:$("#pNew").value}});
-  $("#pwMsg").textContent = j.ok ? "Password changed. Other devices will need to log in again." : j.error;
-  $("#pwMsg").className = j.ok ? "ok-msg" : "err";
-  if(j.ok){ $("#pOld").value = $("#pNew").value = ""; }
-};
-$("#bLogout").onclick = async () => { await api("/api/logout", {body:{}}); location.reload(); };
 document.querySelectorAll("#theme button").forEach(b => {
   b.classList.toggle("on", (prefGet("theme","")) === b.dataset.t);
   b.onclick = () => {
@@ -1577,7 +1614,7 @@ async function boot(){
   document.body.classList.toggle("nopanel", !!prefGet("nopanel", false));
   applyTheme();
   if(prefGet("pineOpen", false)) setTimeout(() => peOpen(null), 300);   // the Pine Editor was open last time
-  $("#vSetup").classList.add("hide"); $("#vLogin").classList.add("hide"); $("#app").classList.remove("hide");
+  gateHideAll(); $("#app").classList.remove("hide");
   const p = new URLSearchParams(location.search);
   if(p.get("fyers") === "ok") toast("Logged in to Fyers");
   if(p.get("fyers") === "error") toast("Fyers login failed: " + (p.get("msg") || ""));

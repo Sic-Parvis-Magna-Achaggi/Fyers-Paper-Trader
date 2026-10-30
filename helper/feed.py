@@ -1,4 +1,4 @@
-"""Live prices: one Fyers data socket shared by every open page.
+"""Live prices: one Fyers data socket per user (on that user's own Fyers login), shared by their open pages.
 
 The page tells us which symbols it wants; we keep the union subscribed on the Fyers socket and pass
 each tick to the pages that asked for it. If the socket isn't up, a slow quote poll (every 3 s) keeps
@@ -9,7 +9,7 @@ import logging
 import threading
 import time
 
-from . import fyers_link, store
+from . import store
 
 log = logging.getLogger("feed")
 
@@ -19,10 +19,13 @@ class Client:
         self.queue: asyncio.Queue = asyncio.Queue(maxsize=500)
         self.symbols: set = set()
         self.depth: set = set()         # symbols whose order books this page shows (Book tab or Book page)
+        self.acct = None                # the paper account this page shows (its snapshots come here)
 
 
 class Feed:
-    def __init__(self):
+    def __init__(self, link=None, label: str = ""):
+        self.link = link                # this user's FyersLink
+        self.label = label
         self.loop = None
         self.clients: set = set()
         self.sock = None
@@ -41,7 +44,7 @@ class Feed:
     # ------------------------------------------------------------ page side
     def start(self, loop):
         self.loop = loop
-        loop.create_task(self._watchdog())
+        self._wd = loop.create_task(self._watchdog())
 
     def add(self) -> Client:
         c = Client()
@@ -86,7 +89,7 @@ class Feed:
             try:
                 u |= set(self.extra())
             except Exception as e:
-                log.warning("engine symbols: %s", e)
+                log.warning(self._tag() + "engine symbols: %s", e)
         return sorted(u)[:95]                     # Standard plan: 100 symbols on the data socket
 
     def _offer(self, c: Client, msg: dict):
@@ -95,10 +98,19 @@ class Feed:
         except asyncio.QueueFull:
             pass
 
-    def broadcast(self, msg: dict):
-        """Send a message to every open page (call on the event loop)."""
+    def broadcast(self, msg: dict, acct=None):
+        """Send a message to this user's open pages - only those showing `acct` when given (call on the event loop)."""
         for c in list(self.clients):
-            self._offer(c, msg)
+            if acct is None or c.acct == acct:
+                self._offer(c, msg)
+
+    def _tag(self):
+        return f"[{self.label}] " if self.label else ""
+
+    def stop(self):
+        self._close_socket()
+        if getattr(self, "_wd", None):
+            self._wd.cancel()
 
     def _fanout(self, tick: dict):
         if self.on_tick:
@@ -153,20 +165,20 @@ class Feed:
 
     def _on_connect(self):
         self.sock_up = True
-        log.info("Price feed connected")
+        log.info(self._tag() + "Price feed connected")
         self.subscribed = []
         self.dsubscribed = []
         self._resync()
 
     def _on_close(self, msg):
         self.sock_up = False
-        log.warning("Price feed closed: %s", msg)
+        log.warning(self._tag() + "Price feed closed: %s", msg)
 
     def _on_error(self, msg):
-        log.warning("Price feed error: %s", msg)
+        log.warning(self._tag() + "Price feed error: %s", msg)
 
     def _ensure_socket(self):
-        tok = fyers_link.token()
+        tok = self.link.token()
         if not tok:
             if self.sock:
                 self._close_socket()
@@ -175,11 +187,11 @@ class Feed:
             return
         self._close_socket()
         from fyers_apiv3.FyersWebsocket import data_ws
-        app_id = fyers_link.settings().get("app_id")
-        log.info("Opening the price feed")
+        app_id = self.link.settings().get("app_id")
+        log.info(self._tag() + "Opening the price feed")
         self.sock_token = tok
         self.sock = data_ws.FyersDataSocket(
-            access_token=f"{app_id}:{tok}", log_path=str(store.path("")), litemode=False, write_to_file=False,
+            access_token=f"{app_id}:{tok}", log_path=str(store.path(self.link.dir + "socketlog/x").parent), litemode=False, write_to_file=False,
             reconnect=True, on_connect=self._on_connect, on_close=self._on_close, on_error=self._on_error,
             on_message=self._on_message)
         self.sock.connect()
@@ -216,7 +228,7 @@ class Feed:
                     if want:
                         self.sock.subscribe(symbols=want, data_type="SymbolUpdate")
                     self.subscribed = want
-                    log.info("Streaming %s", ", ".join(want))
+                    log.info(self._tag() + "Streaming %s", ", ".join(want))
                 if dwant != self.dsubscribed:              # order book only while a page has the Book tab open
                     gone = [x for x in self.dsubscribed if x not in dwant]
                     new = [x for x in dwant if x not in self.dsubscribed]
@@ -226,7 +238,7 @@ class Feed:
                         self.sock.subscribe(symbols=new, data_type="DepthUpdate")
                     self.dsubscribed = dwant
             except Exception as e:
-                log.warning("Price feed subscribe failed: %s", e)
+                log.warning(self._tag() + "Price feed subscribe failed: %s", e)
 
     # ------------------------------------------------------------ fallback + housekeeping
     async def _watchdog(self):
@@ -239,17 +251,17 @@ class Feed:
             dwant = self.wanted_depth()
             now = time.time()
             # order book fallback: one REST call every 6 s (books take turns), only if the socket isn't delivering depth
-            if dwant and fyers_link.token() and now - self.last_depth_at > 15 and now - last_dpoll > 6:
+            if dwant and self.link.token() and now - self.last_depth_at > 15 and now - last_dpoll > 6:
                 last_dpoll = now
                 self._dturn = (getattr(self, "_dturn", -1) + 1) % len(dwant)
                 try:
-                    d = await self.loop.run_in_executor(None, fyers_link.depth, dwant[self._dturn])
+                    d = await self.loop.run_in_executor(None, self.link.depth, dwant[self._dturn])
                     if d:
                         self.publish_depth(d)
                 except Exception as e:
                     log.debug("depth poll failed: %s", e)
             want = self.wanted()
-            if not want or not fyers_link.token():
+            if not want or not self.link.token():
                 continue
             if not self.sock or not self.sock_up:
                 self._resync()
@@ -267,7 +279,7 @@ class Feed:
 
     def _poll(self, symbols: list) -> list:
         out = []
-        for s, v in fyers_link.quotes(symbols).items():
+        for s, v in self.link.quotes(symbols).items():
             if v.get("lp") is not None:
                 out.append({"s": s, "ltp": v.get("lp"), "bid": v.get("bid"), "ask": v.get("ask"),
                             "t": v.get("tt") or int(time.time()), "vol": v.get("volume"), "src": "poll"})
@@ -276,7 +288,6 @@ class Feed:
     def status(self) -> dict:
         return {"socket": self.sock_up, "streaming": self.subscribed, "depth": self.dsubscribed, "last_tick_age": (
             round(time.time() - self.last_tick_at, 1) if self.last_tick_at else None),
-            "data_budget": fyers_link.data_budget.status()}
+            "data_budget": self.link.data_budget.status()}
 
 
-feed = Feed()

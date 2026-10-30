@@ -95,7 +95,10 @@ class Refused(Exception):
 
 
 class Paper:
-    def __init__(self):
+    def __init__(self, folder: str = "", link=None, name: str = ""):
+        self.dir = folder                # "u/<user>/a/<account>/" - every file of this account lives there
+        self.link = link                 # the user's Fyers connection (margin look-ups)
+        self.name = name
         self.prices: dict = {}           # symbol -> last tick {ltp, bid, ask, t}
         self.margin_cache: dict = {}     # (symbol, side, product) -> (ts, margin per lot)
         self.on_change = None            # callback(event_text | None) set by the app
@@ -107,8 +110,8 @@ class Paper:
 
     # ------------------------------------------------------------ storage
     def load(self):
-        s = store.load("paper.json")
-        self.rules = {**DEFAULT_RULES, **store.load("paper_rules.json")}
+        s = store.load(self.dir + "paper.json")
+        self.rules = {**DEFAULT_RULES, **store.load(self.dir + "paper_rules.json")}
         self.acct = s.get("acct") or {"start": self.rules["size"], "realized": 0.0, "peak": self.rules["size"],
                                       "created": now(), "cycle": 1}
         self.day = s.get("day") or {}
@@ -118,16 +121,16 @@ class Paper:
         self.trail = {**DEFAULT_TRAIL, **(s.get("trail") or {})}
         self.ticket = {**DEFAULT_TICKET, **(s.get("ticket") or {})}
         self.events = s.get("events") or []
-        self.history = store.load("paper_trades.json", [])
+        self.history = store.load(self.dir + "paper_trades.json", [])
 
     def save(self):
-        store.save("paper.json", {"acct": self.acct, "day": self.day, "positions": self.positions,
+        store.save(self.dir + "paper.json", {"acct": self.acct, "day": self.day, "positions": self.positions,
                                   "orders": self.orders, "seq": self.seq, "trail": self.trail, "ticket": self.ticket,
                                   "events": self.events[-500:]})
         self._dirty_at = 0.0
 
     def save_history(self):
-        store.save("paper_trades.json", self.history)
+        store.save(self.dir + "paper_trades.json", self.history)
 
     def _id(self, prefix):
         self.seq += 1
@@ -136,7 +139,7 @@ class Paper:
     def event(self, msg, lvl="info"):
         self.events.append({"t": now(), "msg": msg, "lvl": lvl})
         self.events = self.events[-500:]
-        (log.warning if lvl == "warn" else log.info)(msg)
+        (log.warning if lvl == "warn" else log.info)("%s%s", f"[{self.dir.strip('/')}] " if self.dir else "", msg)
 
     def changed(self, msg=None, lvl="info"):
         if msg:
@@ -267,9 +270,10 @@ class Paper:
         hit = self.margin_cache.get(key)
         if hit and now() - hit[0] < 600:
             return
-        from . import fyers_link
+        if not self.link:
+            return
         try:
-            m = fyers_link.margin(row["s"], row.get("lot") or 1, side, product)
+            m = self.link.margin(row["s"], row.get("lot") or 1, side, product)
             if m > 0:
                 self.margin_cache[key] = (now(), m)
         except Exception as e:
@@ -1005,7 +1009,7 @@ class Paper:
             raise Refused("size must be above 0")
         size_changed = r["size"] != self.rules["size"]
         self.rules = r
-        store.save("paper_rules.json", r)
+        store.save(self.dir + "paper_rules.json", r)
         if size_changed and not self.positions and not self.orders and not self.history:
             self.acct.update(start=r["size"], peak=r["size"])
             self.day = {}
@@ -1070,16 +1074,15 @@ class Paper:
                      "cycle": self.acct.get("cycle", 1) + 1}
         self.day = {}
         self.rules["size"] = capital
-        store.save("paper_rules.json", self.rules)
+        store.save(self.dir + "paper_rules.json", self.rules)
         self.history_archive()
         self._symbols_changed()
         self.changed(f"Paper account reset to ₹{capital:,.0f}")
 
     def history_archive(self):
         if self.history:
-            store.save(f"paper_trades_until_{time.strftime('%Y%m%d_%H%M%S')}.json", self.history)
+            store.save(self.dir + f"paper_trades_until_{time.strftime('%Y%m%d_%H%M%S')}.json", self.history)
         self.history = []
         self.save_history()
 
 
-engine = Paper()
