@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.13.2 — 31 Oct 2026 — Test kit and handoff notes (no change to the app)
+
+Added
+- `tests/`: the test kit used before every release. It runs the real helper with Fyers faked (candles, quotes,
+  margin, a live price stream) and includes the route check, the square-off engine test and the browser test of
+  login, 2FA, users and accounts. See `tests/README.md`. Nothing in it runs on the server.
+- `docs/Handoff.md`: where the project stands, how the code is laid out, and the next job, so a new chat can
+  pick up from the repo.
+- `docs/Roadmap.md`: the agreed live-mode design (a real stop at Fyers that the trail moves, the server watching
+  with the bid / ask rule, targets held by the server, what happens if the server or Fyers lags or goes down,
+  overnight stops).
+
 ## v0.13.1 — 31 Oct 2026 — Intraday square-off 5 minutes before Fyers, product switch on the chart
 
 Added

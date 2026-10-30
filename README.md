@@ -60,6 +60,7 @@ Next: the journal in the app, with Telegram screenshots.
 
 | Folder | What |
 | --- | --- |
+| `tests/` | The test kit (fake Fyers feed, route check, engine and browser tests); not used on the server. See `tests/README.md` |
 | `helper/` | The Python server (FastAPI). `app.py` has the routes; `fyers_link.py` handles Fyers login and data; `feed.py` handles live prices; `symbols.py` handles the contract list; `users.py` handles users, 2FA, sessions, encryption and the security log; `rt.py` runs each user's Fyers link, price feed and paper accounts; `paper.py` is the paper engine; `charges.py` holds every charge |
 | `web/` | The page (`index.html`), the trade panel (`paper.js`), Pine Script (`pine.js`, `pine_worker.js`) and bundled libraries in `vendor/`: Lightweight Charts (Apache-2.0), PineTS (AGPL-3.0), CodeMirror 5 (MIT) |
 | `server/` | Install and auto-update scripts, the service files and the Caddy config |
