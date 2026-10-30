@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.15.0 — 31 Oct 2026 — Chart types, with indicators on every type
+
+Added
+- **Chart types** (the button after the timeframes, saved on the server): Candles, Hollow candles, Bars (OHLC), Line,
+  Area, Heikin-Ashi, Renko, Range bars and Line break.
+  - Renko: box by ATR (default 14) or fixed points per underlying; built from closes or from highs and lows;
+    optional wicks; a reversal needs two boxes (traditional).
+  - Range bars: range by ATR or fixed points. Line break: 3 lines (settable).
+  - Renko, range bars and line break are built from the timeframe's candles (1m for the finest) and get the time of
+    the candle each bar formed in; the candle timer is off for them.
+- **Indicators on every chart type.** Volume, built-in indicators and Pine scripts run on the bars the chart shows,
+  as on TradingView (an RSI on Heikin-Ashi uses Heikin-Ashi closes; on Renko, one value per brick), line up bar for
+  bar on the candles and in their own panes, and follow live prices (several new bricks in one tick included).
+- Bid, ask, last, trade lines and every ₹ figure stay real prices on every type; the long / short tool, zones and
+  position bars work on every type.
+- Chart settings: a colour for the line / area chart.
+- **Tests:** `tests/ctype_test.js` (the transforms, with hand-worked numbers) and `tests/charttypes_flow.js`
+  (browser: every type with Volume and two Pine scripts, alignment, the SMA checked against the chart's own closes,
+  live ticks, the trade tool on Renko).
+
+Changed
+- Switching chart type or theme redraws at once from the candles already loaded (no reload, no empty chart).
+- `web/vendor/lightweight-charts.standalone.production.js` (5.2.1, the latest): one guard added so the volume
+  histogram's hover check returns "no hit" instead of throwing "Value is null" when it has no first visible value
+  (a library bug; it showed as an occasional console error with the mouse over the chart). Noted in the file.
+
+Roadmap
+- Candle types moved up to item 2 and ticked; footprint / delta (order flow) stays open.
+
 ## v0.14.0 — 31 Oct 2026 — Live mode (the admin only): real orders at Fyers with the stop at Fyers
 
 Added

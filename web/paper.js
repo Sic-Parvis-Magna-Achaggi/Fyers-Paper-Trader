@@ -448,7 +448,7 @@ function zoneList(){
     const bs = basisSym();
     if(bs === cur.s){
       const e = basisNow(), sl = slNow(), tp = tpNow(), p = P.plan;
-      if(e != null) out.push({tool: true, entry: e, sl, tp, x0: lastBar ? lastBar.time : null,
+      if(e != null) out.push({tool: true, entry: e, sl, tp, x0: dispLast() ? dispLast().time : null,
         slTxt: p && (p.risk != null || p.risk_1lot != null) ? `${p.risk_estimated ? "≈" : ""}${rsS(-(p.risk ?? p.risk_1lot))}${p.risk == null ? " (1 lot)" : ""}` : "",
         tpTxt: p && p.reward != null ? `${p.risk_estimated ? "≈" : ""}${rsS(p.reward)}${p.rr != null ? " · " + p.rr + "R" : ""}` : ""});
     }
@@ -457,7 +457,7 @@ function zoneList(){
     const bs = p.basis === "underlying" ? p.ref : p.s;
     if(bs !== cur.s) continue;
     const e = p.basis === "underlying" ? p.basis_entry : p.avg;
-    out.push({entry: e, sl: p.sl, tp: p.tp, x0: curPlan ? bucket(p.opened + IST, curPlan) : null,
+    out.push({entry: e, sl: p.sl, tp: p.tp, x0: curPlan ? dispTimeAt(bucket(p.opened + IST, curPlan)) : null,
       slTxt: p.at_sl != null ? (p.est ? "≈" : "") + rsS(p.at_sl) : "", tpTxt: p.at_tp != null ? (p.est ? "≈" : "") + rsS(p.at_tp) : ""});
   }
   return out;

@@ -263,6 +263,14 @@ a.btnlink{border:1px solid var(--line);border-radius:6px;padding:6px 12px;color:
 #pineIn .pir input[type=color]{width:44px;height:26px;padding:0;border:1px solid var(--line);border-radius:4px;background:none}
 #pineIn .pir textarea{width:180px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;color:inherit;font:inherit}
 #pineIn .pif{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--line)}
+#ctPick{position:absolute;right:10px;top:42px;z-index:31;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;width:300px;max-height:calc(100% - 60px);overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.35);font-size:12.5px}
+#ctPick .cfgh{display:flex;align-items:center;margin-bottom:6px} #ctPick .cfgh b{flex:1}
+#ctPick .ctl{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+#ctPick .ctl button{text-align:left;padding:5px 8px;font-size:12.5px}
+#ctPick .ctl button.on{border-color:var(--accent);color:var(--accent)}
+#ctPick .sec{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:12px 0 4px}
+#ctPick .cr{display:grid;grid-template-columns:1fr 130px;gap:6px;align-items:center;margin:4px 0}
+#ctPick .cr input,#ctPick .cr select{padding:3px 6px;font-size:12.5px}
 #indPick{position:absolute;right:10px;top:42px;z-index:31;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;width:320px;max-height:calc(100% - 60px);overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.35);font-size:12.5px}
 #indPick .cfgh{display:flex;align-items:center;margin-bottom:6px}
 #indPick .cfgh b{flex:1}
@@ -547,6 +555,7 @@ body:not(.is-admin) .admin-only{display:none!important}
         <span class="spacer" style="flex:1"></span>
         <div class="tf" id="tf"></div>
         <button class="tfmore" id="bTf" title="All timeframes and custom">▾</button>
+        <button class="ghost fsb" id="bCt" title="Chart type: candles, Heikin-Ashi, Renko, range bars...">Candles</button>
         <button class="ghost fsb" id="bPine" title="Pine Editor: write and save your own indicators">Pine</button>
         <button class="ghost fsb" id="bInd" title="Indicators">ƒx</button>
         <button class="ghost fsb" id="bCfg" title="Chart settings: colours and line styles">⚙</button>
@@ -562,6 +571,10 @@ body:not(.is-admin) .admin-only{display:none!important}
       <div id="indPick" class="hide">
         <div class="cfgh"><b>Indicators</b><button class="ghost" id="indClose">✕</button></div>
         <div id="indBody"></div>
+      </div>
+      <div id="ctPick" class="hide">
+        <div class="cfgh"><b>Chart type</b><button class="ghost" id="ctClose">✕</button></div>
+        <div id="ctBody"></div>
       </div>
       <div id="cfgPick" class="hide">
         <div class="cfgh"><b>Chart settings</b><button class="ghost" id="cfgClose">✕</button></div>
@@ -690,6 +703,7 @@ body:not(.is-admin) .admin-only{display:none!important}
 </div>
 
 <script>window.APP_V = "__V__";</script>
+<script src="/static/ctype.js?v=__V__"></script>
 <script src="/static/paper.js?v=__V__"></script>
 <script src="/static/pine.js?v=__V__"></script>
 <script src="/static/pages.js?v=__V__"></script>
@@ -869,12 +883,12 @@ const CHART_DEFAULTS = {up:"#22a06b", down:"#e2483d", bg:"", grid:true,
   bidC:"#a3abb8", bidS:0, bidOn:true, askC:"#e2483d", askS:0, askOn:true, lastC:"#e0b341", lastS:2, lastOn:true,
   entryC:"", entryS:2, slC:"#e2483d", slS:0, tpC:"#22a06b", tpS:0, beC:"#4f8cff", beS:1, orderC:"#4f8cff", orderS:2,
   toolC:"#4f8cff", toolS:0, lossZ:"#e2483d", profitZ:"#22a06b", zoneA:20, volOn:true, timerOn:true,
-  btnCorner:"tl", btnX:8, btnY:8};
+  btnCorner:"tl", btnX:8, btnY:8, lineC:"#4f8cff"};
 function chartCfg(){ return {...CHART_DEFAULTS, ...(prefGet("chart", {}) || {})}; }
 function cfgColor(k){ const c = chartCfg()[k]; return c || cssVar(k === "entryC" ? "--text" : "--bg"); }
 function buildChart(){
   const el = $("#chart");
-  if(chart){ chart.remove(); }
+  if(chart){ try{ chart.applyOptions({autoSize:false}); }catch(e){} chart.remove(); }   // (stops its resize watcher first)
   const C = chartCfg();
   chart = LightweightCharts.createChart(el, {
     autoSize: true,
@@ -885,8 +899,8 @@ function buildChart(){
     timeScale:{borderColor:cssVar("--line"), timeVisible:true, secondsVisible:false, rightOffset:24},
     crosshair:{mode:0}
   });
-  series = chart.addSeries(LightweightCharts.CandlestickSeries, {upColor:C.up, downColor:C.down, borderVisible:false,
-    wickUpColor:C.up, wickDownColor:C.down, priceLineVisible:false, lastValueVisible:false});
+  series = makeSeries(C);
+  DISP = []; volData = {};                     // nothing (no indicator, no Pine run) works on the old chart's bars
   series.priceScale().applyOptions({scaleMargins:{top:0.08, bottom:0.08}});
   // MT5-style quote lines: bid, ask and the last traded price (the candle's close), each with its price on the scale
   const mk = () => series.createPriceLine({price:0, color:"#888", lineWidth:1, lineStyle:0, axisLabelVisible:false, lineVisible:false, title:""});
@@ -900,13 +914,97 @@ function buildChart(){
   el.addEventListener("mouseup", () => setTimeout(indSaveHeights, 50));
 }
 let volSeries = null, volCum = null, legendHover = false;
+
+/* ---------------------------------------------------------------- chart types (web/ctype.js)
+   RAW: the real candles (time-based), kept up to date by the history load and live ticks. DISP: what the chart
+   shows after the chart type (Heikin-Ashi, Renko...). Volume, indicators and Pine scripts all run on DISP, so they
+   line up with the bars on screen. Prices on the chart (bid / ask / last, your trade lines) are always real prices. */
+let RAW = [], DISP = [], CT_SIZE = null;
+function ctCfg(){ return {...CT.DEFAULTS, ...(prefGet("ctype", {}) || {})}; }
+function ctType(){ const t = ctCfg().type; return CT.TYPES.some(x => x[0] === t) ? t : "candles"; }
+function ctKey(){ const r = cur && sym[cur.s]; return (r && r.u) || (cur && cur.s) || ""; }
+function ctOpts(){
+  const c = ctCfg(), t = ctType(), k = ctKey(), tick = (cur && cur.tick) || 0.05;
+  if(CT_SIZE == null && RAW.length){
+    if(t === "renko") CT_SIZE = CT.size(RAW, c.renkoMode, (c.renkoBox || {})[k], c.renkoAtr, tick);
+    if(t === "range") CT_SIZE = CT.size(RAW, c.rangeMode, (c.rangeSize || {})[k], c.rangeAtr, tick);
+  }
+  return {...c, box: CT_SIZE, range: CT_SIZE};
+}
+function dispBars(){ return DISP; }
+function dispLast(){ return DISP.length ? DISP[DISP.length - 1] : null; }
+/* a real time -> the time of the bar on the chart it falls in (Renko / range / line break bars have their own times) */
+function dispTimeAt(t){
+  if(t == null || CT.timeBased(ctType()) || !DISP.length) return t;
+  let lo = 0, hi = DISP.length - 1;
+  if(t < DISP[0].time) return DISP[0].time;
+  while(lo < hi){ const m = (lo + hi + 1) >> 1; if(DISP[m].time <= t) lo = m; else hi = m - 1; }
+  return DISP[lo].time;
+}
+function makeSeries(C){
+  const t = ctType(), base = {priceLineVisible:false, lastValueVisible:false};
+  if(t === "line") return chart.addSeries(LightweightCharts.LineSeries, {...base, color:C.lineC, lineWidth:2});
+  if(t === "area") return chart.addSeries(LightweightCharts.AreaSeries, {...base, lineColor:C.lineC, lineWidth:2,
+    topColor:rgbaHex(C.lineC, 0.35), bottomColor:rgbaHex(C.lineC, 0.02)});
+  if(t === "bars") return chart.addSeries(LightweightCharts.BarSeries, {...base, upColor:C.up, downColor:C.down, thinBars:false});
+  const boxes = t === "renko" && !ctCfg().renkoWicks || t === "lb";
+  return chart.addSeries(LightweightCharts.CandlestickSeries, {...base, upColor:C.up, downColor:C.down, borderVisible:t === "hollow" || boxes,
+    borderUpColor:C.up, borderDownColor:C.down, wickUpColor:C.up, wickDownColor:C.down, wickVisible:!boxes});
+}
+function seriesColors(C){
+  const t = ctType();
+  if(t === "line") return {color:C.lineC};
+  if(t === "area") return {lineColor:C.lineC, topColor:rgbaHex(C.lineC, 0.35), bottomColor:rgbaHex(C.lineC, 0.02)};
+  if(t === "bars") return {upColor:C.up, downColor:C.down};
+  return {upColor:C.up, downColor:C.down, wickUpColor:C.up, wickDownColor:C.down, borderUpColor:C.up, borderDownColor:C.down};
+}
+function rgbaHex(hex, a){ const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(hex || ""); return m ? `rgba(${parseInt(m[1], 16)},${parseInt(m[2], 16)},${parseInt(m[3], 16)},${a})` : hex; }
+/* one display bar as the chart's series wants it (i: its place in DISP, for hollow candles' colour) */
+function serOne(i){
+  const t = ctType(), b = DISP[i];
+  if(t === "line" || t === "area") return {time:b.time, value:b.close};
+  const o = {time:b.time, open:b.open, high:b.high, low:b.low, close:b.close};
+  if(t === "hollow"){                         // hollow when it closed up; coloured by the close against the previous close
+    const C = chartCfg(), pc = i ? DISP[i - 1].close : b.open, col = b.close >= pc ? C.up : C.down;
+    Object.assign(o, {color: b.close >= b.open ? "rgba(0,0,0,0)" : col, borderColor: col, wickColor: col});
+  }
+  return o;
+}
+function volPoint(b){ return {time:b.time, value:b.vol || 0, color:volColor(b)}; }
+/* RAW -> DISP -> the chart, all of it */
+function dispSet(){
+  DISP = CT.transform(RAW, ctType(), ctOpts());
+  volData = {}; for(const b of DISP) volData[b.time] = b.vol || 0;
+  series.setData(DISP.map((b, i) => serOne(i)));
+  if(volSeries) volSeries.setData(DISP.map(volPoint));
+}
+/* the live candle changed: update only the bars that changed on the chart (one, or a few new Renko bricks) */
+function dispLive(){
+  const t = ctType();
+  let nd;
+  if(t === "candles" || t === "hollow" || t === "bars" || t === "line" || t === "area"){
+    const L = RAW[RAW.length - 1], b = {time:L.time, open:L.open, high:L.high, low:L.low, close:L.close, vol:L.vol || 0};
+    nd = DISP.slice(); if(nd.length && nd[nd.length - 1].time === b.time) nd[nd.length - 1] = b; else nd.push(b);
+  } else nd = CT.transform(RAW, t, ctOpts());
+  const k = DISP.length - 1;
+  if(!DISP.length){ DISP = nd; dispSet(); indData(); return; }
+  if(nd.length < DISP.length || (k > 0 && nd[k - 1].time !== DISP[k - 1].time)){ DISP = nd; dispSet(); indData(); return; }
+  DISP = nd;
+  for(let i = Math.max(0, k); i < DISP.length; i++){
+    const b = DISP[i];
+    volData[b.time] = b.vol || 0;
+    series.update(serOne(i));
+    if(volSeries) volSeries.update(volPoint(b));
+    if(INDS.length) indTick(b);
+  }
+}
 /* volume under the candles, in the candle pane (Chart settings tick box) */
 function volLayout(){
   const on = chartCfg().volOn;
   if(on && !volSeries){
     volSeries = chart.addSeries(LightweightCharts.HistogramSeries, {priceFormat:{type:"volume"}, priceScaleId:"volov", lastValueVisible:false, priceLineVisible:false}, 0);
     chart.priceScale("volov", 0).applyOptions({scaleMargins:{top:0.82, bottom:0}, visible:false});
-    if(series && series.data().length) volSeries.setData(series.data().map(b => ({time:b.time, value:(volData[b.time] || 0), color:volColor(b)})));
+    if(series && DISP.length) volSeries.setData(DISP.map(volPoint));
   } else if(!on && volSeries){ chart.removeSeries(volSeries); volSeries = null; }
   series.priceScale().applyOptions({scaleMargins: on ? {top:0.08, bottom:0.22} : {top:0.08, bottom:0.08}});
 }
@@ -1013,9 +1111,9 @@ function legendPlace(){
 }
 function legendFill(param){
   if(!series || !cur) return;
-  const tick = cur.tick, t = param && param.time != null ? param.time : (lastBar ? lastBar.time : null);
+  const dl = dispLast(), tick = cur.tick, t = param && param.time != null ? param.time : (dl ? dl.time : null);
   if(t == null) return;
-  const bar = (param && param.seriesData && param.seriesData.get(series)) || series.data().find(b => b.time === t) || lastBar;
+  const bar = DISP.find(b => b.time === t) || dl;
   const l0 = $("#lgd0");
   if(l0 && bar){
     const ch = bar.close - bar.open, col = ch >= 0 ? "up" : "down";
@@ -1073,7 +1171,7 @@ document.addEventListener("DOMContentLoaded", () => $("#chart").addEventListener
 function indData(skipPine){
   if(!series) return;
   setTimeout(() => legendFill(null), 0);
-  const bars = series.data();
+  const bars = DISP;
   for(const r of INDS){
     if(r.cfg.type === "pine"){ if(!skipPine) pineRun(r); continue; }
     if(r.cfg.type === "volume"){
@@ -1174,9 +1272,10 @@ function bidAsk(t){
 function applyChartCfg(){
   if(!chart) return;
   const C = chartCfg();
-  series.applyOptions({upColor:C.up, downColor:C.down, wickUpColor:C.up, wickDownColor:C.down});
+  series.applyOptions(seriesColors(C));
+  if(ctType() === "hollow") series.setData(DISP.map((b, i) => serOne(i)));
   volLayout();
-  if(volSeries) volSeries.setData(series.data().map(b => ({time:b.time, value:(volData[b.time] || 0), color:volColor(b)})));
+  if(volSeries) volSeries.setData(DISP.map(volPoint));
   indData();
   chart.applyOptions({layout:{background:{type:"solid", color:C.bg || cssVar("--bg")}}, grid:{horzLines:{visible:!!C.grid, color:cssVar("--line")}}});
   if(lastQuote && cur && lastQuote.s === cur.s) bidAsk(lastQuote);
@@ -1209,6 +1308,7 @@ function renderCfg(){
   h += `<div class="sec">Candles</div>
     <div class="cr"><span>Up</span><input type="color" data-k="up" value="${C.up}"><span></span><span></span></div>
     <div class="cr"><span>Down</span><input type="color" data-k="down" value="${C.down}"><span></span><span></span></div>
+    <div class="cr"><span>Line / area chart</span><input type="color" data-k="lineC" value="${C.lineC}"><span></span><span></span></div>
     <div class="sec">Risk / reward zones</div>
     <div class="cr"><span>Loss zone</span><input type="color" data-k="lossZ" value="${C.lossZ}"><span></span><span></span></div>
     <div class="cr"><span>Profit zone</span><input type="color" data-k="profitZ" value="${C.profitZ}"><span></span><span></span></div>
@@ -1232,6 +1332,51 @@ function renderCfg(){
     prefSet("chart", cfg); applyChartCfg();
   }));
 }
+/* the chart type menu (web/ctype.js does the work) */
+function ctLabel(){
+  const b = $("#bCt"); if(!b) return;
+  const t = ctType(), short = {candles:"Candles", hollow:"Hollow", bars:"Bars", line:"Line", area:"Area", ha:"Heikin-Ashi", renko:"Renko", range:"Range", lb:"Line break"}[t];
+  b.textContent = short + ((t === "renko" || t === "range") && CT_SIZE ? " " + fmt(CT_SIZE, cur && cur.tick) : t === "lb" ? " " + (ctCfg().lbLines || 3) : "");
+  b.classList.toggle("on", t !== "candles");
+}
+function ctSave(changes, rebuild = true){
+  prefSet("ctype", {...(prefGet("ctype", {}) || {}), ...changes});
+  if(rebuild){ buildChart(); if(RAW.length) showRaw(); else loadHistory(); }
+  renderCt(); ctLabel();
+}
+function renderCt(){
+  const c = ctCfg(), t = ctType(), k = ctKey(), tick = (cur && cur.tick) || 0.05;
+  let h = `<div class="ctl">${CT.TYPES.map(([v, n]) => `<button data-ct="${v}" class="${v === t ? "on" : ""}">${n}</button>`).join("")}</div>`;
+  if(t === "renko") h += `<div class="sec">Renko</div>
+    <div class="cr"><span>Box size</span><select id="ctRM"><option value="atr" ${c.renkoMode !== "fixed" ? "selected" : ""}>ATR</option><option value="fixed" ${c.renkoMode === "fixed" ? "selected" : ""}>Fixed points</option></select></div>
+    ${c.renkoMode === "fixed" ? `<div class="cr"><span>Points (${esc(k)})</span><input id="ctRB" class="mono" inputmode="decimal" value="${(c.renkoBox || {})[k] ?? (CT_SIZE || "")}"></div>`
+      : `<div class="cr"><span>ATR length</span><input id="ctRA" class="mono" inputmode="numeric" value="${c.renkoAtr}"></div>`}
+    <div class="cr"><span>Built from</span><select id="ctRS"><option value="close" ${c.renkoSrc !== "hl" ? "selected" : ""}>Closes</option><option value="hl" ${c.renkoSrc === "hl" ? "selected" : ""}>Highs and lows</option></select></div>
+    <div class="cr"><span>Wicks</span><input type="checkbox" id="ctRW" ${c.renkoWicks ? "checked" : ""} style="justify-self:start"></div>`;
+  if(t === "range") h += `<div class="sec">Range bars</div>
+    <div class="cr"><span>Range</span><select id="ctGM"><option value="atr" ${c.rangeMode !== "fixed" ? "selected" : ""}>ATR</option><option value="fixed" ${c.rangeMode === "fixed" ? "selected" : ""}>Fixed points</option></select></div>
+    ${c.rangeMode === "fixed" ? `<div class="cr"><span>Points (${esc(k)})</span><input id="ctGB" class="mono" inputmode="decimal" value="${(c.rangeSize || {})[k] ?? (CT_SIZE || "")}"></div>`
+      : `<div class="cr"><span>ATR length</span><input id="ctGA" class="mono" inputmode="numeric" value="${c.rangeAtr}"></div>`}`;
+  if(t === "lb") h += `<div class="sec">Line break</div><div class="cr"><span>Lines to break</span><input id="ctLN" class="mono" inputmode="numeric" value="${c.lbLines}"></div>`;
+  if(t === "renko" || t === "range") h += `<p class="help" style="margin:6px 0 0">Now ${fmt(CT_SIZE, tick)} points on this chart${(t === "renko" ? c.renkoMode : c.rangeMode) === "fixed" ? "" : " (ATR of the candles loaded, fixed until you reload)"}. Built from the timeframe's candles: pick 1m for the finest ${t === "renko" ? "bricks" : "bars"}. The candle timer is off: these bars don't follow the clock.</p>`;
+  h += `<p class="help" style="margin:8px 0 0">Volume, indicators and your Pine scripts run on the bars the chart shows${t === "ha" ? " (Heikin-Ashi values)" : t === "renko" ? " (one value per brick)" : ""}, as on TradingView. Bid, ask, last and your trade lines are always real prices.</p>`;
+  $("#ctBody").innerHTML = h;
+  $("#ctBody").querySelectorAll("[data-ct]").forEach(b => b.onclick = () => ctSave({type: b.dataset.ct}));
+  const on = (id, fn) => { const el = $(id); if(el) el.onchange = () => fn(el); };
+  const pos = v => { const n = parseFloat(String(v).replace(/,/g, "")); return n > 0 ? n : null; };
+  on("#ctRM", el => ctSave({renkoMode: el.value}));
+  on("#ctGM", el => ctSave({rangeMode: el.value}));
+  on("#ctRA", el => { const n = pos(el.value); if(n) ctSave({renkoAtr: Math.round(n)}); });
+  on("#ctGA", el => { const n = pos(el.value); if(n) ctSave({rangeAtr: Math.round(n)}); });
+  on("#ctRB", el => { const n = pos(el.value); if(n) ctSave({renkoBox: {...(c.renkoBox || {}), [k]: n}}); });
+  on("#ctGB", el => { const n = pos(el.value); if(n) ctSave({rangeSize: {...(c.rangeSize || {}), [k]: n}}); });
+  on("#ctRS", el => ctSave({renkoSrc: el.value}));
+  on("#ctRW", el => ctSave({renkoWicks: el.checked}));
+  on("#ctLN", el => { const n = pos(el.value); if(n) ctSave({lbLines: Math.max(1, Math.min(10, Math.round(n)))}); });
+}
+$("#bCt").onclick = e => { e.stopPropagation(); renderCt(); $("#ctPick").classList.toggle("hide"); $("#cfgPick").classList.add("hide"); $("#tfPick").classList.add("hide"); $("#indPick").classList.add("hide"); };
+$("#ctClose").onclick = () => $("#ctPick").classList.add("hide");
+document.addEventListener("click", e => { if(!e.target.closest("#ctPick,#bCt")) $("#ctPick").classList.add("hide"); });
 $("#bCfg").onclick = e => { e.stopPropagation(); renderCfg(); $("#cfgPick").classList.toggle("hide"); $("#tfPick").classList.add("hide"); $("#indPick").classList.add("hide"); };
 $("#cfgClose").onclick = () => $("#cfgPick").classList.add("hide");
 $("#cfgReset").onclick = () => { prefSet("chart", {}); renderCfg(); applyChartCfg(); };
@@ -1328,18 +1473,24 @@ function aggBars(rows, plan){
   return bars;
 }
 function renderCandles(rows, plan){
-  let bars = aggBars(rows, plan);
-  volData = {}; for(const b of bars) volData[b.time] = b.vol;
+  RAW = aggBars(rows, plan);
   volCum = null;
-  if(volSeries) volSeries.setData(bars.map(b => ({time:b.time, value:b.vol, color:volColor(b)})));
-  bars = bars.map(b => ({time:b.time, open:b.open, high:b.high, low:b.low, close:b.close}));
-  series.setData(bars);
+  showRaw();
+}
+/* draw RAW on the chart as the chart type says (also straight after the chart is rebuilt for a new chart type or
+   theme, so there's no moment with an empty chart) */
+function showRaw(){
+  if(!series || !cur) return;
+  CT_SIZE = null;                              // Renko box / range size: worked out again for these candles
+  dispSet();
+  chart.timeScale().scrollToRealTime();        // (the bar count can change a lot between chart types)
   indData();                                   // indicators follow the new candles (timeframe / contract change)
   series.applyOptions({priceFormat:{type:"price", precision:(String(cur.tick).split(".")[1]||"").length, minMove:cur.tick || 0.01}});
-  lastBar = bars.length ? {...bars[bars.length - 1]} : null;
+  lastBar = RAW.length ? RAW[RAW.length - 1] : null;
+  ctLabel(); candleTimer(); setTimeout(legendPlace, 60);   // indicator labels to the tops of their (new) panes
   const msg = $("#chartMsg");
-  msg.classList.toggle("hide", bars.length > 0);
-  if(!bars.length) msg.textContent = "No candles for this range yet.";
+  msg.classList.toggle("hide", RAW.length > 0);
+  if(!RAW.length) msg.textContent = "No candles for this range yet.";
   chart.timeScale().scrollToRealTime();
   if(last[cur.s]) bidAsk(last[cur.s]);
   drawLines();
@@ -1347,17 +1498,14 @@ function renderCandles(rows, plan){
 /* new candles on top of what's on the chart: the candles are redrawn (quick), but indicators only run on the
    new part - Pine scripts update their live bar, a new bar re-runs them once */
 function applyNewCandles(rows, plan){
-  const bars = aggBars(rows, plan), old = series.data();
+  const bars = aggBars(rows, plan), old = RAW;
   if(!old.length || !bars.length || bars[0].time !== old[0].time && bars.length < old.length){ renderCandles(rows, plan); return; }
-  volData = {}; for(const b of bars) volData[b.time] = b.vol;
   const live = lastBar && lastBar.time > bars[bars.length - 1].time ? {...lastBar} : null;   // a bar the ticks started that the server hasn't got yet
-  series.setData(bars.map(b => ({time:b.time, open:b.open, high:b.high, low:b.low, close:b.close})));
-  if(volSeries) volSeries.setData(bars.map(b => ({time:b.time, value:b.vol, color:volColor(b)})));
-  if(live){ series.update(live); volData[live.time] = volData[live.time] || 0; }
-  const L = live || bars[bars.length - 1];
-  lastBar = {time:L.time, open:L.open, high:L.high, low:L.low, close:L.close};
+  RAW = live ? bars.concat([live]) : bars;
+  lastBar = RAW[RAW.length - 1];
+  dispSet();
   indData(true);                                // built-in indicators (Volume) recompute; Pine scripts:
-  if(INDS.length) indTick(lastBar);             // only the new part
+  if(INDS.length && dispLast()) indTick(dispLast());   // only the new part
 }
 async function loadHistory(){
   if(!cur) return;
@@ -1391,7 +1539,7 @@ async function loadHistory(){
     renderCandles(fresh, plan);
   }
 }
-let curPlan = null, histRetry = 0, volData = {};
+let curPlan = null, histRetry = 0, volData = {};   // volData: volume per bar on the chart (DISP)
 function liveBar(t){
   if(!series || !t.ltp || !curPlan) return;
   const tt = Number(t.t) || Math.floor(Date.now()/1000), ts = tt + IST;
@@ -1403,11 +1551,9 @@ function liveBar(t){
   // volume: Fyers sends today's running total, so a candle's volume is the growth of that total
   let dv = 0;
   if(t.vol != null){ if(volCum != null && t.vol >= volCum) dv = t.vol - volCum; volCum = t.vol; }
-  if(!lastBar || b > lastBar.time){ lastBar = {time:b, open:t.ltp, high:t.ltp, low:t.ltp, close:t.ltp}; volData[b] = dv; }
-  else { lastBar.high = Math.max(lastBar.high, t.ltp); lastBar.low = Math.min(lastBar.low, t.ltp); lastBar.close = t.ltp; volData[b] = (volData[b] || 0) + dv; }
-  series.update({...lastBar});
-  if(volSeries) volSeries.update({time:b, value:volData[b] || 0, color:volColor(lastBar)});
-  if(INDS.length) indTick(lastBar);
+  if(!lastBar || b > lastBar.time){ lastBar = {time:b, open:t.ltp, high:t.ltp, low:t.ltp, close:t.ltp, vol:dv}; RAW.push(lastBar); }
+  else { lastBar.high = Math.max(lastBar.high, t.ltp); lastBar.low = Math.min(lastBar.low, t.ltp); lastBar.close = t.ltp; lastBar.vol = (lastBar.vol || 0) + dv; }
+  dispLive();
   if(!legendHover) legendFill(null);
   $("#chartMsg").classList.add("hide");
 }
@@ -1536,7 +1682,7 @@ function applyTheme(){
   const t = prefGet("theme", "");
   document.querySelectorAll("#theme button").forEach(x => x.classList.toggle("on", t === x.dataset.t));
   if(t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
-  if(chart){ buildChart(); loadHistory(); }
+  if(chart){ buildChart(); if(RAW.length) showRaw(); else loadHistory(); }
 }
 async function loadLogs(){
   const j = await api("/api/logs"); const box = $("#logs"); box.innerHTML = "";
@@ -1588,6 +1734,7 @@ function sessRange(){
 function candleTimer(){
   const el = $("#ctimer");
   if(!el || !chart || !cur || !curPlan || !lastBar){ if(el) el.classList.add("hide"); return; }
+  if(!CT.timeBased(ctType())){ el.classList.add("hide"); $("#cTimer").textContent = ""; return; }   // Renko / range / line break
   const ts = Date.now() / 1000 + IST, day = Math.floor(ts / 86400) * 86400;
   const [s0, s1] = sessRange(), open = day + s0 * 60, close = day + s1 * 60;
   let txt;

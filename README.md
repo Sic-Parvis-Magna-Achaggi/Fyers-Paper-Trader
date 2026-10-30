@@ -6,6 +6,11 @@ It runs on our own server and serves its own page, so there is nothing to instal
 
 **Address:** https://68-183-245-178.sslip.io
 
+## Version 0.15.0: chart types
+
+- **Heikin-Ashi, Renko, range bars, line break,** plus hollow candles, bars, line and area (the button after the timeframes).
+- **Indicators work on every type:** Volume and your Pine scripts run on the bars the chart shows, as on TradingView. Prices and trade lines stay real.
+
 ## Version 0.14.0: live trading (the admin only)
 
 - **Turn an account Live** (Account page): orders go to Fyers on your login, from the server's IP 134.209.159.171 (whitelist it in your Fyers API app first).

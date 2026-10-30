@@ -95,7 +95,7 @@ async function pineNeed(n){
   return bars.map(b => ({open: b.open, high: b.high, low: b.low, close: b.close, volume: b.vol, openTime: (b.time - 19800) * 1000, closeTime: (b.time - 19800 + plan.sec) * 1000 - 1}));
 }
 function pineCandles(maxBars){
-  const d = series ? series.data() : [], n = Math.min(d.length, maxBars || PINE_BARS), off = d.length - n, sec = tfPlan(tf).sec;
+  const d = series ? dispBars() : [], n = Math.min(d.length, maxBars || PINE_BARS), off = d.length - n, sec = tfPlan(tf).sec;
   const candles = [], times = [];
   for(let i = off; i < d.length; i++){ const b = d[i], ms = (b.time - 19800) * 1000;
     candles.push({open: b.open, high: b.high, low: b.low, close: b.close, volume: volData[b.time] || 0, openTime: ms, closeTime: ms + sec * 1000 - 1}); times.push(b.time); }
@@ -183,7 +183,7 @@ function pineDrop(sid){ try{ pineW && pineW.postMessage({op: "drop", sid}); }cat
 function pineTimes(P, res){
   P.times = (res.times || []).map(ms => Math.round(ms / 1000) + 19800);
   P.n = P.times.length;
-  const d = series.data(), t0 = P.times[0];
+  const d = dispBars(), t0 = P.times[0];
   let lo = 0, hi = d.length - 1;
   while(lo < hi){ const m = (lo + hi) >> 1; if(d[m].time < t0) lo = m + 1; else hi = m; }
   P.off = d.length && d[lo].time === t0 ? lo : Math.max(0, d.length - P.n);
@@ -194,14 +194,14 @@ async function pineTick(r){
   const P = r.pine; if(!P || r.dead || r.cfg.hidden || !series) return;
   if(!P.sid || !P.res){ if(!P.running) pineRun(r); return; }
   if(r.cfg.update === "close"){                 // "on candle close": one full run per new bar, nothing in between
-    const d = series.data();
+    const d = dispBars();
     if(d.length && d[d.length - 1].time > P.times[P.n - 1] && !P.running) pineRun(r);
     return;
   }
   if(P.running || P.ticking){ P.tickDirty = true; return; }
   const gap = Math.max(250, 2 * (P.tms || 0)), wait = gap - (Date.now() - (P.lastTick || 0));
   if(wait > 0){ if(!P.tickTimer) P.tickTimer = setTimeout(() => { P.tickTimer = null; pineTick(r); }, wait); return; }
-  const last = P.times[P.n - 1], d = series.data(), sec = tfPlan(tf).sec, bars = [];
+  const last = P.times[P.n - 1], d = dispBars(), sec = tfPlan(tf).sec, bars = [];
   for(let i = d.length - 1; i >= 0 && d[i].time >= last; i--){ const b = d[i], ms = (b.time - 19800) * 1000;
     bars.unshift({open: b.open, high: b.high, low: b.low, close: b.close, volume: volData[b.time] || 0, openTime: ms, closeTime: ms + sec * 1000 - 1}); }
   if(!bars.length){ pineRun(r); return; }
@@ -294,9 +294,9 @@ function pineApply(r, res, sc){
   }
   for(const [name, s] of Object.entries(P.series)) if(!keep.has(name)){ try{ chart.removeSeries(s.api); }catch(e){} r.series = r.series.filter(x => x !== s.api); delete P.series[name]; }
   // barcolor: a second candle series over the chart's own, carrying only the coloured bars
-  if(barc && r.overlay){
+  if(barc && r.overlay && CT.ohlc(ctType())){           // (no candles to colour on a line / area chart)
     const api = pineSeries(r, "__barcolor__", "candle", {visible: true, lastValueVisible: false, priceLineVisible: false, borderVisible: true});
-    const byT = new Map(series.data().map(b => [b.time, b]));
+    const byT = new Map(dispBars().map(b => [b.time, b]));
     api.setData(P.times.map((t, i) => { const b = byT.get(t), c = barc[i]; return b && c ? {time: t, open: b.open, high: b.high, low: b.low, close: b.close, color: pcol(c), borderColor: pcol(c), wickColor: pcol(c)} : {time: t}; }));
   } else if(P.series.__barcolor__){ try{ chart.removeSeries(P.series.__barcolor__.api); }catch(e){} delete P.series.__barcolor__; }
   P.draw = res.drawings || {};
@@ -354,7 +354,7 @@ class PineDraw {
     const LX = (x, xloc) => x == null ? null : X(xloc === "bt" ? tl(x) : P.off + x);
     const vr = ts.getVisibleLogicalRange() || {from: 0, to: 0};
     const sp = Math.max(1, (X(P.off + 1) ?? 1) - (X(P.off) ?? 0));
-    const bars = series.data();
+    const bars = dispBars();
     return {P, X, Y, LX, tl, vr, sp, bars};
   }
   bg(ctx, size){

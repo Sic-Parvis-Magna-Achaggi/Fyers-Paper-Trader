@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 31 Oct 2026, version **0.14.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 31 Oct 2026, version **0.15.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -11,7 +11,7 @@ an old zip. Every release: changelog text, a one-line commit message, the versio
 updated; `tests/routes_check.py` passes; the guide updated when behaviour changes; the project copies of the guide
 and roadmap updated too.
 
-## How the code is laid out (v0.14)
+## How the code is laid out (v0.15)
 
 - `helper/app.py`: FastAPI routes. Login is username + password + TOTP code; sensitive routes need a fresh code
   (HTTP 428, the page asks and retries). `X-Acct` header picks the paper account.
@@ -34,6 +34,13 @@ and roadmap updated too.
 - `helper/fyers_link.py` (Fyers REST, per user, with request budgets), `helper/feed.py` (live prices per user),
   `helper/paper.py` (paper engine: fills, stops, BE, trailing, guards, square-off), `helper/charges.py`,
   `helper/charges_watch.py`, `helper/symbols.py`, `helper/candles.py`.
+- `web/ctype.js`: chart types (Heikin-Ashi, Renko, range bars, line break...) as pure functions, tested in Node.
+  In `web/index.html` the chart keeps `RAW` (the real candles, from history and live ticks) and `DISP` (what's shown,
+  `CT.transform(RAW)`); `dispSet()` draws all of it, `dispLive()` only what a tick changed. Everything that reads
+  the chart's bars (Volume, indicators, Pine via `dispBars()`, the legend) uses `DISP`; prices and trade lines are
+  real. `dispTimeAt(t)` maps a real time to the bar it falls in (Renko etc.).
+- `web/vendor/lightweight-charts.standalone.production.js` is 5.2.1 with one patch (the histogram hover guard,
+  noted at the top of the file): keep it if the library is ever updated, unless the new version fixes the bug.
 - `web/index.html` (main page and chart), `web/paper.js` (ticket, chart tool, positions), `web/pages.js` (Trades,
   History, Book, Account, Log pages), `web/pine.js` + `web/pine_worker.js` (Pine Script, PineTS), `web/security.js`
   (login gates, 2FA set-up, step-up, Security and Users settings, account switcher), `web/live.js` (LIVE badge, KILL,
@@ -72,10 +79,16 @@ before it's sent; an order Fyers didn't confirm is looked up by tag, never re-se
 booked once per Fyers order id (`L["filled"]`); any open app order that nothing is waiting for is cancelled
 (`_stray`); an exit is never larger than what Fyers holds; MCX exits wait for the stop's cancel to be confirmed.
 
+## Chart types (v0.15.0)
+
+Done and tested (`tests/ctype_test.js`, `tests/charttypes_flow.js`). Indicators run on the displayed bars, as on
+TradingView. If the owner wants indicators on the real candles under a Heikin-Ashi / Renko chart, that's a per-
+indicator option to add (not built).
+
 ## Next job
 
-1. The owner's first real trade: whitelist 134.209.159.171 (order permission), turn on Live, 1 lot on MCX.
-   Fix whatever that shows.
+1. The owner's first real trade (Monday at the earliest): whitelist 134.209.159.171 (order permission), turn on
+   Live, 1 lot on MCX. Fix whatever that shows.
 2. Compare the app's charges with what Fyers deducted (roadmap item 1, last part).
-3. Telegram alerts (roadmap item 2), then the journal, candle types, saved layouts, multi-charts and the mobile
-   version (roadmap items 3-7, in that order).
+3. Footprint / delta (roadmap item 2, its second part), then Telegram alerts, the journal, saved layouts,
+   multi-charts and the mobile version (roadmap items 3-7, in that order).

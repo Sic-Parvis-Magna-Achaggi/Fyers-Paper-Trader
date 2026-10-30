@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.14.0)
+# Paper and live trading: how it works (v0.15.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -127,6 +127,23 @@ The top bar has **Chart · Trades · History · Book · Account · Log**. The ch
   - Right-click one (or long-press on a phone) to pin or unpin it.
 - Timeframes Fyers doesn't serve directly are built from smaller candles, starting at the session open (09:00 for MCX).
 - **⛶ or F** maximises the chart inside the browser window, so your tabs stay one click away. **Shift+F** gives real full screen. When maximised, **P** (or Panel) slides the trade panel in, its **✕** hides it, and **Esc** goes back to the normal view.
+
+## Chart types
+
+The button after the timeframes (it shows the current type, e.g. **Candles**, **Renko 11**) picks how the chart draws the candles. Your choice is saved on the server, so every device opens the same way.
+
+| Type | What it shows |
+| --- | --- |
+| Candles, Hollow candles, Bars (OHLC), Line, Area | The real candles, drawn differently. Hollow: a candle that closed up is hollow, coloured by its close against the previous close. Line / area colour: Chart settings (⚙). |
+| Heikin-Ashi | Smoothed candles at the same times: close = (open + high + low + close) / 4, open = the middle of the previous Heikin-Ashi candle. |
+| Renko | Bricks of one size. A new brick when price moves a box past the last one; a reversal needs two boxes. Box: ATR (default 14, worked out from the candles loaded, then fixed until you reload) or fixed points, saved per underlying (one for CRUDEOIL, another for NIFTY). Built from the closes, or from each candle's high and low; wicks optional. |
+| Range bars | Each bar spans the same range (high − low); a new bar starts when price goes beyond it. Range: ATR or fixed points. |
+| Line break | A new line when the close passes the highs (or lows) of the last 3 lines (settable). |
+
+- **Renko, range bars and line break** are built from the timeframe's candles: pick **1m** for the finest bricks. They don't follow the clock, so the candle timer is off and the time axis shows when each brick formed.
+- **Indicators work on every type.** Volume, the built-in indicators and your Pine scripts run on the bars the chart shows, as on TradingView: on Heikin-Ashi an RSI uses the Heikin-Ashi closes; on Renko there's one value per brick. They line up bar for bar, on the candles and in their own panes, and follow live prices.
+- **Prices stay real.** Bid, ask, last, your entry / SL / TP lines and every ₹ figure use real prices, whatever the chart type. (A Heikin-Ashi close isn't a price you can trade at.)
+- The long / short tool and the position bars work on every type.
 
 ## Candle timer
 
@@ -267,6 +284,7 @@ When BE-T has already moved the stop to break-even, a Trail SL of N R behind the
 
 ## Not yet
 
+- Footprint / delta (order flow).
 - Comparing the charges the app counts with what Fyers actually deducted (live).
 - Telegram alerts if the server stops responding during a live trade (next).
 - The journal inside the app, and Telegram screenshots.
