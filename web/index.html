@@ -99,8 +99,10 @@ section.chartwrap{display:grid;grid-template-rows:auto minmax(0,1fr);min-width:0
 #tfPick .row2 input{padding:4px 8px;font-size:12px}
 #tfPick .row2 button{padding:4px 10px;font-size:12px;white-space:nowrap}
 /* candle timer: sits on the price scale just under the current price, like TradingView */
-#ctimer{position:absolute;z-index:5;font-family:var(--mono);font-size:11px;line-height:16px;text-align:center;
-  background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:3px;pointer-events:none;padding:0 2px}
+#ctimer{position:absolute;z-index:8;font-family:var(--mono);font-size:12px;font-weight:600;line-height:18px;text-align:center;
+  background:var(--accent);color:#fff;border-radius:3px;pointer-events:none;padding:0 2px;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+#cTimer{flex:0 0 auto;font-family:var(--mono);font-size:12px;padding:2px 8px;border-radius:999px;background:var(--chip);color:var(--text);white-space:nowrap}
+#cTimer:empty{display:none}
 /* order book */
 #bookBox{margin-top:8px;font-size:12px}
 .bk-h{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
@@ -316,8 +318,8 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
       <div class="charthead">
         <span class="sym" id="cSym">No symbol</span>
         <span class="ltp" id="cLtp"></span>
+        <span id="cTimer" title="Time left in the current candle"></span>
         <span class="meta" id="cMeta"></span>
-        <span class="meta mono" id="cTimer" title="Time left in the current candle"></span>
         <span class="spacer" style="flex:1"></span>
         <div class="tf" id="tf"></div>
         <button class="tfmore" id="bTf" title="All timeframes and custom">▾</button>
@@ -1003,7 +1005,7 @@ function candleTimer(){
     if(!curPlan.t.min) txt = "close " + txt;
   }
   if(!chartCfg().timerOn){ el.classList.add("hide"); $("#cTimer").textContent = ""; return; }
-  $("#cTimer").textContent = txt === "closed" ? "market closed" : (curPlan.t.min ? "candle closes in " : "") + txt;
+  $("#cTimer").textContent = txt === "closed" ? "market closed" : "⏱ " + txt;
   // under the bid / ask / last labels on the price scale. The chart pushes labels that are close together
   // apart, so allow for the whole stack
   const q = lastQuote && lastQuote.s === cur.s ? lastQuote : null;
@@ -1011,7 +1013,7 @@ function candleTimer(){
     .filter(v => v != null).map(v => series.priceToCoordinate(v)).filter(v => v != null).sort((a, b) => a - b);
   if(!ys.length){ el.classList.add("hide"); return; }
   const near = ys.filter(y => ys[ys.length - 1] - y < 18 * ys.length).length;
-  let aw = 60; try{ aw = chart.priceScale("right").width(); }catch(e){}
+  let aw = 60; try{ aw = chart.priceScale("right").width() || 60; }catch(e){}
   const box = $("#chart");
   el.textContent = txt;
   el.style.width = (aw - 4) + "px";

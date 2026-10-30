@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.5.3 — 30 Oct 2026 — Candle timer easier to see
+
+Changed
+- The countdown now sits right next to the price in the chart's top bar ("⏱ 1:42") so it's never cut
+  off when the bar is crowded
+- The countdown on the price scale is a bold blue tag instead of a small grey one
+
+Fixed
+- For the first second after opening a chart, the price-scale countdown could be placed off the edge
+
 ## v0.5.2 — 30 Oct 2026 — Trailing made visible
 
 Added
