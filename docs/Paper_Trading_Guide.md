@@ -1,4 +1,4 @@
-# Paper trading: how it works (v0.13.2)
+# Paper trading: how it works (v0.13.3)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 

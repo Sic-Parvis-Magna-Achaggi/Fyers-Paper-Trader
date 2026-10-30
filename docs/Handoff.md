@@ -1,7 +1,7 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 31 Oct 2026, version **0.13.2**. Read this, `docs/Roadmap.md` (what's next, with the agreed live-mode
-design), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
+Updated 31 Oct 2026, version **0.13.3**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
 
@@ -33,6 +33,10 @@ and roadmap updated too.
 - **admin** = the owner (live trading will be the owner's only). Other users are paper-only, each with their own
   Fyers app for prices (SEBI / Fyers static-IP rules; see the roadmap).
 - Still open with Fyers support: whether a second user's app may fetch market data from this server's IP.
+
+## Project instructions
+
+`docs/Project_Instructions.md` is the text of this project's instructions in claude.ai (the owner pastes it there).
 
 ## Next job
 

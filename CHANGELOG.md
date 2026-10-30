@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.13.3 — 31 Oct 2026 — Roadmap as a ticked task list, project instructions (no change to the app)
+
+Added
+- `docs/Project_Instructions.md`: the project instructions for claude.ai, brought up to date (users and 2FA,
+  live mode for the owner only, the test kit, square-off, order limits) and with a ROADMAP section: new tasks go
+  into the roadmap as soon as they're agreed, and finished ones are ticked with their version.
+
+Changed
+- `docs/Roadmap.md` is now the one task list: open tasks marked [ ] in the agreed order, small follow-ups, and a
+  Done section listing every version from v0.1.0, each ticked.
+- `docs/Handoff.md` points to the project instructions.
+
 ## v0.13.2 — 31 Oct 2026 — Test kit and handoff notes (no change to the app)
 
 Added
