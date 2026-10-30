@@ -134,6 +134,64 @@ section.chartwrap{display:grid;grid-template-rows:auto minmax(0,1fr) auto;min-wi
 .lgd .lk{color:var(--muted);margin-right:3px}
 .lgd b{font-family:var(--sans);font-weight:600;margin-right:4px}
 /* indicators popover */
+/* full pages (Trades, History, Book, Account, Log) */
+#nav{display:flex;gap:2px;margin-left:14px}
+#nav button{background:transparent;border:0;border-radius:6px;color:var(--muted);padding:5px 10px;font-size:13px;position:relative}
+#nav button:hover{color:var(--text);background:var(--panel2)}
+#nav button.on{color:var(--text);background:var(--panel2);box-shadow:inset 0 -2px 0 var(--accent)}
+#nav .nb{font-size:10px;background:var(--accent);color:#fff;border-radius:8px;padding:0 5px;margin-left:3px;font-family:var(--mono)}
+#pages{overflow:auto;min-height:0;padding:16px 20px 40px;background:var(--bg)}
+body:not([data-page="chart"]) main{display:none!important}
+.pg{max-width:1500px;margin:0 auto}
+.pg-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.pg-head h2{margin:0;font-size:18px;font-weight:600}
+.pg-head .sp{flex:1}
+.pg-head select,.pg-head input{width:auto}
+.pg-h3{font-size:13px;font-weight:600;margin:18px 0 6px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.pg-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:10px}
+.pgc{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:2px}
+.pgc > span{font-size:11.5px;color:var(--muted)}
+.pgc b{font-family:var(--mono);font-weight:500;font-size:14px}
+.tblw{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+table.tbl{border-collapse:collapse;width:100%;font-size:12.5px}
+table.tbl th{text-align:left;font-weight:500;color:var(--muted);font-size:11.5px;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--panel2);position:sticky;top:0}
+table.tbl td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.tbl tr:last-child td{border-bottom:0}
+table.tbl tbody tr:hover{background:color-mix(in srgb,var(--panel2) 70%,transparent)}
+table.tbl .r{text-align:right}
+table.tbl .nw,.nw{white-space:nowrap}
+table.tbl .sm,.sm{font-size:11.5px}
+table.tbl td.ed{cursor:pointer;text-decoration:underline dotted var(--muted);text-underline-offset:3px}
+table.tbl td.ed:hover{color:var(--accent)}
+table.tbl tr.hr{cursor:pointer}
+table.tbl tr.hd td{background:var(--panel2)}
+table.tbl tr.warnrow td{color:var(--warn)}
+table.tbl button{padding:2px 8px;font-size:11.5px}
+table.tbl button.tg.on{background:var(--accent);border-color:var(--accent);color:#fff}
+table.tbl button.x:hover{border-color:var(--down);color:var(--down)}
+table.tbl input.rr{width:40px;padding:2px 4px;font-size:11.5px;font-family:var(--mono);text-align:center;margin-left:3px;display:inline-block}
+table.tbl .psym{color:inherit;text-decoration:none} table.tbl .psym:hover{color:var(--accent)}
+button.danger{background:transparent;border-color:var(--down);color:var(--down)}
+button.danger:hover{background:var(--down);color:#fff}
+a.btnlink{border:1px solid var(--line);border-radius:6px;padding:6px 12px;color:inherit;text-decoration:none;font-size:13px;background:var(--panel2)}
+.pg-filters{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.pg-filters select,.pg-filters input{width:auto;padding:5px 8px;font-size:12.5px}
+.pg-charts{display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:6px}
+.pg-ct{font-size:12px;color:var(--muted);margin:2px 0 4px}
+.pg-chart{height:240px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.pg-split{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+.pg-card .trail{grid-template-columns:auto 60px 64px auto 60px 64px;justify-content:start;gap:8px}
+.pg-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px}
+.pg-rules{display:grid;grid-template-columns:1fr 1fr;gap:0 18px;align-items:start}
+.pg-rules label{margin-top:10px}
+.pg-detail{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.pg-books{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:12px}
+.pg-book{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.pg-book .bk-h{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.pg-book .bk-h .sp{flex:1}
+.pg-book .psym{color:inherit;text-decoration:none;font-weight:600} .pg-book .psym:hover{color:var(--accent)}
+#ptabs .pfull{flex:0 0 auto;padding:7px 8px}
+@media (max-width:900px){ .pg-charts,.pg-split,.pg-detail,.pg-rules{grid-template-columns:1fr} #nav{margin-left:6px;overflow-x:auto} #nav button{padding:5px 7px} #pages{padding:12px} }
 /* Pine Editor + Pine scripts on the chart */
 #pineDock{display:flex;flex-direction:column;height:320px;min-height:120px;background:var(--panel);border-top:2px solid var(--accent);position:relative;min-width:0}
 #pdGrip{position:absolute;left:0;right:0;top:-5px;height:8px;cursor:ns-resize;z-index:3}
@@ -352,7 +410,7 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
 }
 </style>
 </head>
-<body>
+<body data-page="chart">
 
 <!-- first run -->
 <div id="vSetup" class="gate hide"><form class="card" id="fSetup">
@@ -376,6 +434,7 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
 <div id="app" class="hide">
   <header>
     <span class="brand">Trade Manager</span>
+    <nav id="nav"><button data-pg="chart" class="on">Chart</button><button data-pg="trades">Trades <span class="nb hide" id="nbTrades"></span></button><button data-pg="history">History</button><button data-pg="book">Book</button><button data-pg="account">Account</button><button data-pg="log">Log</button></nav>
     <span class="pill" id="pFyers"><span class="dot"></span><span>Fyers</span></span>
     <button class="primary hide" id="bFyersLogin">Log in to Fyers</button>
     <span class="pill" id="pFeed" title="Live price feed"><span class="dot"></span><span>Prices</span></span>
@@ -389,12 +448,13 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
       <div class="tabs"><button data-tab="watch" class="on">Watchlist</button><button data-tab="find">Find</button><button data-tab="chain">Options</button></div>
       <div class="pane" id="tWatch"><div id="watchList"></div></div>
       <div class="pane hide" id="tFind">
-        <input id="q" placeholder="Search MCX: crudeoil, gold nov, natgas 250 ce" autocomplete="off">
-        <div class="seg" id="kind"><button data-k="" class="on">All</button><button data-k="FUT">Futures</button><button data-k="OPT">Options</button></div>
+        <input id="q" placeholder="nifty, reliance, sensex 80000 ce, crudeoil, usdinr" autocomplete="off">
+        <div class="seg" id="exf"><button data-x="" class="on">All</button><button data-x="NSE">NSE</button><button data-x="BSE">BSE</button><button data-x="MCX">MCX</button></div>
+        <div class="seg" id="kind"><button data-k="" class="on">All</button><button data-k="EQ">Stocks</button><button data-k="IDX">Index</button><button data-k="FUT">Fut</button><button data-k="OPT">Opt</button></div>
         <div id="results"></div>
       </div>
       <div class="pane hide" id="tChain">
-        <label style="margin-top:0">Underlying</label><input id="cU" placeholder="CRUDEOIL" class="mono" autocomplete="off">
+        <label style="margin-top:0">Underlying</label><input id="cU" placeholder="NIFTY, BANKNIFTY, SENSEX, RELIANCE, CRUDEOIL" class="mono" autocomplete="off">
         <label>Expiry</label><select id="cExp"></select>
         <div id="chainBox"></div>
       </div>
@@ -486,7 +546,7 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
         <span>Trail SL</span><input id="trSlR" inputmode="decimal"><button id="trSl">off</button></div>
       <div class="acts"><button id="bBeAll">BE all</button><button id="bCloseAll">Close all</button></div>
 
-      <div id="ptabs"><button data-t="pos" class="on" id="tabPos">Positions</button><button data-t="ord" id="tabOrd">Orders</button><button data-t="hist">History</button><button data-t="book">Book</button><button data-t="ev">Log</button></div>
+      <div id="ptabs"><button data-t="pos" class="on" id="tabPos">Positions</button><button data-t="ord" id="tabOrd">Orders</button><button data-t="hist">History</button><button data-t="book">Book</button><button data-t="ev">Log</button><button class="pfull" data-goto="trades" title="Open as a full page">⤢</button></div>
       <div id="p_pos"><div id="posList"></div></div>
       <div id="p_ord" class="hide"><div id="ordList"></div></div>
       <div id="p_hist" class="hide"><div id="histList"></div></div>
@@ -494,6 +554,13 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
       <div id="p_book" class="hide"><div id="bookBox"><div class="empty">Open a chart to see its order book.</div></div></div>
     </section>
   </main>
+  <section id="pages" class="hide">
+    <div class="pg hide" id="pg_trades"></div>
+    <div class="pg hide" id="pg_history"></div>
+    <div class="pg hide" id="pg_book"></div>
+    <div class="pg hide" id="pg_account"></div>
+    <div class="pg hide" id="pg_log"></div>
+  </section>
 </div>
 
 <!-- settings drawer -->
@@ -544,6 +611,7 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
 <script>window.APP_V = "__V__";</script>
 <script src="/static/paper.js?v=__V__"></script>
 <script src="/static/pine.js?v=__V__"></script>
+<script src="/static/pages.js?v=__V__"></script>
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
@@ -686,7 +754,7 @@ function connectWS(){
     if(m.tick) onTick(m.tick);
     if(m.feed) feedPill(m.feed);
     if(m.paper) paperUpdate(m.paper, m.events);
-    if(m.depth) renderBook(m.depth);
+    if(m.depth){ renderBook(m.depth); pagesDepth(m.depth); }
   };
   ws.onclose = ev => {
     ws = null;
@@ -696,11 +764,12 @@ function connectWS(){
 }
 function sendWant(){
   if(!ws || ws.readyState !== 1) return;
-  const want = [...new Set([...(cur ? [cur.s] : []), ...wantSymbols(), ...watch.map(w => w.s)])].slice(0, 20);
-  ws.send(JSON.stringify({want, depth: bookSymbol()}));
+  const want = [...new Set([...(cur ? [cur.s] : []), ...wantSymbols(), ...pagesWant(), ...watch.map(w => w.s)])].slice(0, 20);
+  ws.send(JSON.stringify({want, depth: pagesDepthWant() || bookSymbol()}));
 }
 function onTick(t){
   last[t.s] = t;
+  pagesTick(t);
   setDot($("#pFeed"), t.src === "poll" ? "warn" : "ok", t.src === "poll" ? "Polling" : "Live");
   document.querySelectorAll(`[data-px="${CSS.escape(t.s)}"]`).forEach(el => {
     const prev = parseFloat(el.dataset.v);
@@ -1134,7 +1203,7 @@ async function openSymbol(row){
   sym[row.s] = row;
   cur = {s:row.s, d:row.d, tick:row.tick, lot:row.lot, mult:row.mult, sess:row.sess};
   prefSet("cur", cur);
-  $("#cSym").textContent = row.s.replace("MCX:", "");
+  $("#cSym").textContent = symLabel(row.s);
   $("#cLtp").textContent = last[row.s] ? fmt(last[row.s].ltp, row.tick) : "";
   $("#cMeta").textContent = "";
   if(bidLine) for(const l of [bidLine, askLine, lastLine]) l.applyOptions({lineVisible:false, axisLabelVisible:false, title:""});
@@ -1211,10 +1280,11 @@ document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
 function rowEl(r, {inWatch} = {}){
   sym[r.s] = r;
   const el = document.createElement("div"); el.className = "row";
-  const kind = r.f === "FUT" ? "FUT" : r.o || r.f;
+  const kind = {FUT: "FUT", EQ: "Stock", IDX: "Index", OTHER: "Other"}[r.f] || r.o || r.f;
   el.innerHTML = `<div class="name"><div></div><div class="sub"></div></div><span class="px" data-px=""></span>`;
-  el.querySelector(".name div").textContent = r.s.replace("MCX:", "");
-  el.querySelector(".sub").textContent = `${kind}${r.exp ? " · " + expStr(r.exp) : ""} · lot ${r.lot} × ${r.mult}`;
+  el.querySelector(".name div").textContent = symLabel(r.s);
+  el.querySelector(".sub").textContent = `${kind}${r.exp ? " · " + expStr(r.exp) : ""}${r.f === "IDX" ? "" : r.f === "EQ" ? "" : ` · lot ${r.lot}${r.mult > 1 ? " × " + r.mult : ""}`}`
+    + (r.f === "EQ" || r.f === "IDX" ? ` · ${r.d && r.d !== r.s ? r.d : ""}` : "");
   const px = el.querySelector(".px"); px.dataset.px = r.s;
   if(last[r.s]) px.textContent = fmt(last[r.s].ltp, r.tick);
   el.onclick = () => openSymbol(r);
@@ -1222,16 +1292,16 @@ function rowEl(r, {inWatch} = {}){
   if(inWatch){ x.textContent = "×"; x.title = "Remove"; x.onclick = e => { e.stopPropagation(); watch = watch.filter(w => w.s !== r.s); prefSet("watch", watch); renderWatch(); sendWant(); }; }
   else { x.textContent = "+"; x.title = "Add to watchlist"; x.onclick = e => { e.stopPropagation(); addWatch(r); }; }
   el.append(x);
-  if(r.f === "FUT" && !inWatch){
+  if((r.f === "FUT" || r.f === "IDX" || r.f === "EQ") && !inWatch){
     const o = document.createElement("button"); o.className = "x"; o.textContent = "Opt"; o.title = "Option chain";
-    o.onclick = e => { e.stopPropagation(); showChain(r.u); }; el.append(o);
+    o.onclick = e => { e.stopPropagation(); showChain(r.f === "FUT" ? r.u : r.s, 0, r.x); }; el.append(o);
   }
   return el;
 }
 function addWatch(r){
   if(watch.some(w => w.s === r.s)) return toast("Already in the watchlist");
   if(watch.length >= 15) return toast("Watchlist is full (15)");
-  watch.push(r); prefSet("watch", watch); renderWatch(); sendWant(); toast("Added " + r.s.replace("MCX:", ""));
+  watch.push(r); prefSet("watch", watch); renderWatch(); sendWant(); toast("Added " + symLabel(r.s));
 }
 function renderWatch(){
   const box = $("#watchList"); box.innerHTML = "";
@@ -1240,25 +1310,33 @@ function renderWatch(){
   if(!watch.length){ box.innerHTML = `<div class="empty">Nothing here yet. Use Find, then + to add contracts.</div>`; return; }
   for(const w of watch) box.append(rowEl(w, {inWatch:true}));
 }
-let kind = "", qTimer = null;
+let kind = "", exf = "", qTimer = null;
 document.querySelectorAll("#kind button").forEach(b => b.onclick = () => {
   kind = b.dataset.k; document.querySelectorAll("#kind button").forEach(x => x.classList.toggle("on", x === b)); search();
 });
+document.querySelectorAll("#exf button").forEach(b => b.onclick = () => {
+  exf = b.dataset.x; document.querySelectorAll("#exf button").forEach(x => x.classList.toggle("on", x === b)); search();
+});
+/* MCX contracts show without "MCX:" (as before); NSE / BSE keep the exchange, so NSE and BSE listings can be told apart */
+function symLabel(s){ return String(s || "").replace(/^MCX:/, ""); }
 $("#q").oninput = () => { clearTimeout(qTimer); qTimer = setTimeout(search, 200); };
 async function search(){
   const q = $("#q").value.trim(), box = $("#results");
   if(q.length < 2){ box.innerHTML = `<div class="empty">Type at least 2 letters.</div>`; return; }
-  const j = await api(`/api/symbols?q=${encodeURIComponent(q)}&kind=${kind}`);
+  const j = await api(`/api/symbols?q=${encodeURIComponent(q)}&kind=${kind}&ex=${exf}`);
   box.innerHTML = "";
   if(!j.ok || !j.rows.length){ box.innerHTML = `<div class="empty">${j.ok ? "No matching contracts." : j.error}</div>`; return; }
   for(const r of j.rows) box.append(rowEl(r));
 }
 
 /* option chain */
-async function showChain(u, exp){
+let chainEx = "";
+async function showChain(u, exp, ex){
   document.querySelector('.tabs button[data-tab="chain"]').click();
+  if(ex !== undefined) chainEx = ex || "";
+  const j = await api(`/api/chain?u=${encodeURIComponent(u.includes(":") ? u : u.toUpperCase())}&exp=${exp||0}&ex=${chainEx}`);
+  u = j.u || u; chainEx = j.ex || chainEx;
   $("#cU").value = u;
-  const j = await api(`/api/chain?u=${encodeURIComponent(u.toUpperCase())}&exp=${exp||0}`);
   const sel = $("#cExp"); sel.innerHTML = "";
   for(const e of j.expiries || []){ const o = document.createElement("option"); o.value = e; o.textContent = expStr(e); sel.append(o); }
   sel.value = j.exp;
@@ -1267,9 +1345,9 @@ async function showChain(u, exp){
   const strikes = {};
   for(const r of j.rows){ (strikes[r.k] = strikes[r.k] || {})[r.o] = r; sym[r.s] = r; }
   const ks = Object.keys(strikes).map(Number).sort((a,b) => a-b);
-  // nearest strike to the future's last price, when we have it
-  const fut = watch.concat(Object.values(sym)).find(r => r.u === u.toUpperCase() && r.f === "FUT" && last[r.s]);
-  const ref = fut ? last[fut.s].ltp : null;
+  // nearest strike to the index / stock (or else the future), when we have its price
+  const live = [j.spot, j.fut].find(s => s && last[s]) || (watch.concat(Object.values(sym)).find(r => r.u === u && r.f === "FUT" && last[r.s]) || {}).s;
+  const ref = live ? last[live].ltp : null;
   const atm = ref ? ks.reduce((a,b) => Math.abs(b-ref) < Math.abs(a-ref) ? b : a) : null;
   const t = document.createElement("table"); t.className = "chain";
   t.innerHTML = `<thead><tr><th>Call</th><th>Strike</th><th>Put</th></tr></thead><tbody></tbody>`;
@@ -1292,7 +1370,7 @@ async function showChain(u, exp){
   if(atm){ const a = t.querySelector("tr.atm"); a && a.scrollIntoView({block:"center"}); }
 }
 $("#cExp").onchange = () => showChain($("#cU").value, $("#cExp").value);
-$("#cU").onkeydown = e => { if(e.key === "Enter") showChain($("#cU").value); };
+$("#cU").onkeydown = e => { if(e.key === "Enter") showChain($("#cU").value, 0, ""); };
 
 /* ---------------------------------------------------------------- settings drawer */
 function openDrawer(){ $("#drawer").classList.add("open"); loadLogs(); }
@@ -1430,7 +1508,8 @@ async function boot(){
   if(!(S.fyers||{}).configured) openDrawer();
   buildChart(); tfButtons(); renderWatch();
   await paperInit();
-  if(cur){ $("#cSym").textContent = cur.s.replace("MCX:", ""); loadHistory();
+  pagesStart();                                // #trades, #history ... in the address opens that page
+  if(cur){ $("#cSym").textContent = symLabel(cur.s); loadHistory();
     api("/api/symbol?s=" + encodeURIComponent(cur.s)).then(j => { if(j.ok){ sym[j.row.s] = j.row; paperOnSymbol(j.row); } }); }
   connectWS();
 }

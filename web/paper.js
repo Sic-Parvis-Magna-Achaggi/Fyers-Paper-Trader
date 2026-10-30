@@ -34,6 +34,7 @@ function paperUpdate(s, events){
   for(const e of events || []) toast(e);
   renderAcct(); renderTrail(); renderPositions(); renderOrders(); renderEvents(); drawLines();
   if(events && events.length && P.tab === "hist") loadTrades();
+  if(typeof pagesPaper === "function") pagesPaper(events);
   if(!P.ticketLoaded && s.ticket){ Object.assign(P.T, {mode: s.ticket.mode, risk_pct: s.ticket.risk_pct, risk_amt: s.ticket.risk_amt,
     lots: s.ticket.lots, product: s.ticket.product, tp_r: s.ticket.tp_r}); P.ticketLoaded = true; renderTicket(); }
   if(document.querySelector("#drawer.open") && !P.rulesShown){ renderRules(); }
@@ -105,6 +106,7 @@ function paperOnSymbol(row){
 }
 function arm(side){
   if(!P.T.s){ toast("Open a contract's chart first"); return; }
+  if((tkRow() || {}).f === "IDX"){ toast("An index can't be traded - open its futures or options"); return; }
   if(P.armed && P.T.side === side){ disarm(); return; }
   const flip = P.armed && P.T.side !== side;
   P.T.side = side; P.armed = true;
@@ -120,7 +122,7 @@ function toMarket(){ P.T.follow = true; P.T.price = null; renderTicket(); toolRe
 function renderTicket(){
   const row = tkRow(), T = P.T;
   $("#tkSym").textContent = row ? short(row.s) : "No contract";
-  $("#tkInfo").textContent = row ? `lot ${row.lot} × ${row.mult} · tick ${row.tick}` : "";
+  $("#tkInfo").textContent = row ? (row.f === "IDX" ? "index: chart only, can't be traded" : `${row.x || ""} · lot ${row.lot}${row.mult > 1 ? " × " + row.mult : ""} · tick ${row.tick}`) : "";
   for(const [id, s] of [["#bBuy", 1], ["#bSell", -1], ["#cBuy", 1], ["#cSell", -1]]) $(id).classList.toggle("on", P.armed && T.side === s);
   $("#tkBody").classList.toggle("hide", !P.armed);
   $("#tkHint").classList.toggle("hide", P.armed);
@@ -139,7 +141,11 @@ function renderTicket(){
   $("#tkTpR").disabled = T.basis === "underlying";
   setv("#tkSize", T.mode === "pct" ? T.risk_pct : T.mode === "amt" ? T.risk_amt : T.lots);
   $("#tkSizeUnit").textContent = T.mode === "pct" ? "% of balance" : T.mode === "amt" ? "₹ at risk (net)" : "lots";
-  $("#tkProd").value = T.product;
+  // stocks: Intraday or Delivery (CNC); derivatives: Intraday or Carry (NRML)
+  const stock = row && (row.f === "EQ" || row.f === "OTHER"), want = stock ? "CNC" : "MARGIN";
+  const pe = $("#tkProd"); if(pe.dataset.k !== want){ pe.dataset.k = want;
+    pe.innerHTML = `<option value="INTRADAY">Intraday</option><option value="${want}">${stock ? "Delivery (CNC)" : "Carry (NRML)"}</option>`; }
+  pe.value = T.product === "INTRADAY" ? "INTRADAY" : want;
   const note = $("#tkBasisNote");
   if(T.basis === "underlying"){
     const onIt = cur && cur.s === T.ref;
@@ -179,7 +185,7 @@ function placeLabel(p){
 }
 function breakdown(c, title){
   if(!c) return "";
-  const names = {brokerage: "Brokerage", exchange: "Exchange txn", clearing: "Clearing", tax: c.tax_name || "CTT/STT", stamp: "Stamp duty", sebi: "SEBI fee", ipft: "IPFT", gst: "GST 18%"};
+  const names = {brokerage: "Brokerage", exchange: "Exchange txn", clearing: "Clearing", tax: c.tax_name || "CTT/STT", stamp: "Stamp duty", sebi: "SEBI fee", ipft: "IPFT", gst: "GST 18%", dp: "DP (delivery sell)"};
   return `<div class="bdt">${esc(title)}${c.value ? ` · value ${rs(c.value)}` : ""}</div>` +
     Object.entries(names).filter(([k]) => c[k]).map(([k, n]) => `<div><span>${n}</span><span>${rs(c[k])}</span></div>`).join("") +
     `<div class="tot"><span>Total</span><span>${rs(c.total)}</span></div>`;
@@ -795,37 +801,41 @@ const RULES = [
   ["max_open_risk_pct", "Max open risk %", "Everything open at its stop, % of balance; 0 = off"],
   ["max_trades", "Max trades a day", "Pending orders count; 0 = no limit"],
   ["sl_required", "Stop loss required", "", [true, false]],
-  ["squareoff", "Intraday square-off (IST)", "Intraday positions close at this time, HH:MM; empty = off"],
-  ["expiry_exit", "Expiry-day exit (IST)", "Positions in contracts expiring today close at this time; empty = off"],
+  ["squareoff", "MCX intraday square-off (IST)", "Intraday positions close at this time, HH:MM; empty = off"],
+  ["expiry_exit", "MCX expiry-day exit (IST)", "Positions in contracts expiring today close at this time; empty = off"],
+  ["squareoff_eq", "NSE / BSE intraday square-off (IST)", "Stocks and F&O on Intraday close at this time (Fyers squares off from about 15:15)"],
+  ["expiry_exit_eq", "NSE / BSE expiry-day exit (IST)", "F&O expiring today close at this time"],
+  ["squareoff_cd", "Currency intraday square-off (IST)", ""],
+  ["expiry_exit_cd", "Currency expiry-day exit (IST)", ""],
   ["stale_sec", "Stale price (seconds)", "Market orders are refused when the last price is older"],
   ["be_buffer_ticks", "BE buffer (ticks)", "Extra ticks beyond break-even + costs when a stop moves to BE (BE, BE all, Trail BE)"],
 ];
-function renderRules(){
-  if(!P.snap) return;
-  P.rulesShown = true;
+function renderRules(sel = "#rulesForm"){
+  if(!P.snap || !$(sel)) return;
+  if(sel === "#rulesForm") P.rulesShown = true;
   const r = P.snap.rules;
-  $("#rulesForm").innerHTML = RULES.map(([k, label, help, opts]) => `<label>${label}</label>` +
+  $(sel).innerHTML = RULES.map(([k, label, help, opts]) => `<div class="rf"><label>${label}</label>` +
     (opts ? `<select data-k="${k}">${opts.map(o => `<option value="${o}" ${String(r[k]) === String(o) ? "selected" : ""}>${o === true ? "required" : o === false ? "optional" : o}</option>`).join("")}</select>`
           : `<input data-k="${k}" value="${esc(r[k])}" ${typeof r[k] === "number" ? 'inputmode="decimal"' : ""}>`) +
-    (help ? `<div class="help">${help}</div>` : "")).join("");
+    (help ? `<div class="help">${help}</div>` : "") + `</div>`).join("");
 }
-async function saveRules(){
+async function saveRules(sel = "#rulesForm", msgSel = "#rulesMsg"){
   const body = {};
-  document.querySelectorAll("#rulesForm [data-k]").forEach(el => {
+  document.querySelectorAll(sel + " [data-k]").forEach(el => {
     const k = el.dataset.k; let v = el.value;
     if(k === "sl_required") v = v === "true";
-    else if(!["max_mode", "day_from", "squareoff", "expiry_exit"].includes(k)) v = num(v);
+    else if(!["max_mode", "day_from", "squareoff", "expiry_exit", "squareoff_eq", "expiry_exit_eq", "squareoff_cd", "expiry_exit_cd"].includes(k)) v = num(v);
     body[k] = v;
   });
   const j = await papi("rules", body);
-  $("#rulesMsg").textContent = j.ok ? "Saved." : j.error; $("#rulesMsg").className = j.ok ? "ok-msg" : "err";
-  P.rulesShown = false; renderRules();
+  $(msgSel).textContent = j.ok ? "Saved." : j.error; $(msgSel).className = j.ok ? "ok-msg" : "err";
+  if(sel === "#rulesForm"){ P.rulesShown = false; renderRules(); } else renderRules(sel);
 }
-async function loadCharges(){
-  const j = await api("/api/charges"); if(!j.ok) return;
-  $("#chargeTbl").innerHTML = `<div class="help">${esc(j.as_of)}. Percentages are of ${"the order's value (options: the premium)"}.</div>` +
-    j.rows.map(r => `<div class="ct"><b>${esc(r.segment)}</b>` + ["brokerage", "exchange", "clearing", "tax", "stamp", "sebi", "ipft", "gst"]
-      .map(k => `<div><span>${{brokerage: "Brokerage", exchange: "Exchange txn", clearing: "Clearing", tax: "CTT / STT", stamp: "Stamp duty", sebi: "SEBI fee", ipft: "IPFT", gst: "GST"}[k]}</span><span>${esc(r[k])}</span></div>`).join("") + `</div>`).join("");
+async function loadCharges(sel = "#chargeTbl"){
+  const j = await api("/api/charges"); if(!j.ok || !$(sel)) return;
+  $(sel).innerHTML = `<div class="help">${esc(j.as_of)}. Percentages are of ${"the order's value (options: the premium)"}.</div>` +
+    j.rows.map(r => `<div class="ct"><b>${esc(r.segment)}</b>` + ["brokerage", "exchange", "clearing", "tax", "stamp", "sebi", "ipft", "gst", "dp"].filter(k => r[k] && r[k] !== "-")
+      .map(k => `<div><span>${{brokerage: "Brokerage", exchange: "Exchange txn", clearing: "Clearing", tax: "CTT / STT", stamp: "Stamp duty", sebi: "SEBI fee", ipft: "IPFT", gst: "GST", dp: "DP charge"}[k]}</span><span>${esc(r[k])}</span></div>`).join("") + `</div>`).join("");
 }
 function wireSettings(){
   $("#bRules").onclick = saveRules;

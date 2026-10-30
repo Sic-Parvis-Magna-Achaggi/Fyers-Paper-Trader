@@ -37,8 +37,12 @@ DEFAULT_RULES = {
     "sl_required": True,
     "stale_sec": 90,          # refuse market orders when the last price is older (market closed)
     "be_buffer_ticks": 0,     # extra ticks beyond break-even + costs when moving a stop to BE (LiveTrader: BE buffer)
-    "squareoff": "23:15",     # INTRADAY positions are closed at this IST time ("" = off)
-    "expiry_exit": "22:45",   # positions in contracts expiring today are closed at this IST time ("" = off)
+    "squareoff": "23:15",     # MCX: INTRADAY positions are closed at this IST time ("" = off)
+    "expiry_exit": "22:45",   # MCX: positions in contracts expiring today are closed at this IST time ("" = off)
+    "squareoff_eq": "15:15",  # NSE / BSE stocks and F&O, intraday
+    "expiry_exit_eq": "15:00",
+    "squareoff_cd": "16:45",  # currency, intraday
+    "expiry_exit_cd": "12:00",
 }
 DEFAULT_TICKET = {"mode": "pct", "risk_pct": 1.0, "risk_amt": 250.0, "lots": 1, "product": "INTRADAY", "tp_r": 2.0}
 DEFAULT_TRAIL = {"be_on": False, "be_r": 1.0, "sl_on": False, "sl_r": 1.0}
@@ -119,7 +123,7 @@ class Paper:
     def save(self):
         store.save("paper.json", {"acct": self.acct, "day": self.day, "positions": self.positions,
                                   "orders": self.orders, "seq": self.seq, "trail": self.trail, "ticket": self.ticket,
-                                  "events": self.events[-60:]})
+                                  "events": self.events[-500:]})
         self._dirty_at = 0.0
 
     def save_history(self):
@@ -131,7 +135,7 @@ class Paper:
 
     def event(self, msg, lvl="info"):
         self.events.append({"t": now(), "msg": msg, "lvl": lvl})
-        self.events = self.events[-60:]
+        self.events = self.events[-500:]
         (log.warning if lvl == "warn" else log.info)(msg)
 
     def changed(self, msg=None, lvl="info"):
@@ -145,11 +149,13 @@ class Paper:
     def balance(self) -> float:
         return round(self.acct["start"] + self.acct["realized"], 2)
 
-    def row(self, sym):
+    def row(self, sym, product=None):
+        """The contract's master row; with a product, a copy that carries it (stock charges differ for
+        intraday and delivery)."""
         r = symbols.get(sym)
         if not r:
             raise Refused(f"unknown contract {sym}")
-        return r
+        return {**r, "prod": product} if product else r
 
     def px(self, sym):
         return self.prices.get(sym) or {}
@@ -169,7 +175,7 @@ class Paper:
         return self.fill_price(pos["s"], -pos["side"]) or pos["avg"]
 
     def pos_net(self, pos, exit_px) -> dict:
-        r = self.row(pos["s"])
+        r = self.row(pos["s"], pos["product"])
         return charges.net_at(r, pos["side"], pos["qty"], pos["avg"], exit_px, paid=pos["paid"])
 
     def open_net(self) -> float:
@@ -216,7 +222,7 @@ class Paper:
 
     def pos_risk(self, pos) -> float:
         """Net loss (positive) if this position's stop is hit now; at its current loss if it has no stop."""
-        r = self.row(pos["s"])
+        r = self.row(pos["s"], pos["product"])
         if pos.get("sl") is None and pos.get("floor") is None:
             return max(0.0, -self.pos_net(pos, self.exit_mark(pos))["net"])
         candidates = []
@@ -230,7 +236,7 @@ class Paper:
         return max(0.0, -charges.net_at(r, pos["side"], pos["qty"], pos["avg"], ex, paid=pos["paid"])["net"])
 
     def order_risk(self, o) -> float:
-        r = self.row(o["s"])
+        r = self.row(o["s"], o["product"])
         if o.get("sl") is None:
             return 0.0
         ex = self.est_exit_at(r, o["side"], o["price"], o["sl"], o["basis"], o.get("ref_price"), o.get("delta"))
@@ -276,10 +282,21 @@ class Paper:
              mode (pct/amt/lots), risk_pct, risk_amt, lots, product"""
         self.roll_day()
         R = self.rules
-        row = self.row(req["s"])
+        row0 = self.row(req["s"])
         side = 1 if int(req.get("side", 1)) > 0 else -1
         typ = req.get("type", "market")
         product = req.get("product") or "INTRADAY"
+        if row0["f"] == "IDX":
+            raise Refused("an index can't be traded - pick its futures or options")
+        # stocks: Intraday or Delivery (CNC); derivatives: Intraday or Carry (NRML)
+        if row0["f"] in ("EQ", "OTHER"):
+            product = "CNC" if product in ("CNC", "MARGIN") else "INTRADAY"
+            held = next((x for x in self.positions if x["s"] == row0["s"] and x["product"] == "CNC"), None)
+            if product == "CNC" and side < 0 and not (held and held["side"] > 0):
+                raise Refused("a delivery (CNC) sell needs shares you hold - use Intraday to short")
+        elif product == "CNC":
+            product = "MARGIN"
+        row = {**row0, "prod": product}
         lot = row.get("lot") or 1
         basis = req.get("basis") if row["f"] == "OPT" and req.get("basis") == "underlying" else "self"
         out = {"s": row["s"], "side": side, "type": typ, "product": product, "basis": basis, "notes": [],
@@ -459,7 +476,7 @@ class Paper:
         p = self.plan(req, place=True)
         if p.get("blocked"):
             raise Refused(p["blocked"])
-        side, row = p["side"], self.row(p["s"])
+        side, row = p["side"], self.row(p["s"], p["product"])
         existing = next((x for x in self.positions if x["s"] == p["s"] and x["product"] == p["product"]), None)
         if existing and existing["side"] != side:
             raise Refused("you have an opposite position in this contract - close it first")
@@ -484,7 +501,7 @@ class Paper:
     def fill(self, plan: dict, price: float, how: str):
         """Open a position, or add to one, at `price` (own price)."""
         self.roll_day()
-        row = self.row(plan["s"])
+        row = self.row(plan["s"], plan["product"])
         side, qty = plan["side"], plan["qty"]
         c = charges.order(row, side, qty, price)
         pos = next((x for x in self.positions if x["s"] == plan["s"] and x["product"] == plan["product"]), None)
@@ -527,7 +544,7 @@ class Paper:
                      f"@ {price} ({how}), charges ₹{c['total']:.2f}")
 
     def close(self, pos, price: float, reason: str):
-        row = self.row(pos["s"])
+        row = self.row(pos["s"], pos["product"])
         c = charges.order(row, -pos["side"], pos["qty"], price)
         allc = charges.add(pos["charges"], c)
         g = charges.gross(row, pos["side"], pos["qty"], pos["avg"], price)
@@ -587,7 +604,7 @@ class Paper:
 
     def modify_pos(self, pid, sl="keep", tp="keep"):
         pos = self.find_pos(pid)
-        row = self.row(pos["s"])
+        row = self.row(pos["s"], pos["product"])
         btick = self.row(pos["ref"]).get("tick") if pos["basis"] == "underlying" else row.get("tick")
         udir = self._udir(pos, row)
         bpx = self.basis_px(pos) or pos["basis_entry"]
@@ -636,7 +653,7 @@ class Paper:
         o = next((x for x in self.orders if x["id"] == oid), None)
         if not o:
             raise Refused("that order is already gone")
-        row = self.row(o["s"])
+        row = self.row(o["s"], o["product"])
         if price != "keep":
             price = charges.round_tick(float(price), row.get("tick"))
             ltp = float(self.px(o["s"]).get("ltp") or 0)
@@ -665,13 +682,13 @@ class Paper:
     def _be_price(self, pos):
         """Like LiveTrader's BreakEvenPrice: the exit price where closing nets >= 0 after every charge already
         paid on the entries and every charge the exit would pay, plus the BE buffer, on the profitable tick."""
-        row = self.row(pos["s"])
+        row = self.row(pos["s"], pos["product"])
         return charges.breakeven(row, pos["side"], pos["qty"], pos["avg"], paid=pos["paid"],
                                  buffer_ticks=int(self.rules.get("be_buffer_ticks") or 0))
 
     def _set_be(self, pos, why):
         """Move the stop to where closing pays back every charge. Underlying stops get an own-price floor."""
-        row = self.row(pos["s"])
+        row = self.row(pos["s"], pos["product"])
         be = self._be_price(pos)
         mark = self.exit_mark(pos)
         if pos["side"] * (mark - be) <= 0:
@@ -750,7 +767,7 @@ class Paper:
         return True
 
     def _check_pos(self, pos) -> bool:
-        row = self.row(pos["s"])
+        row = self.row(pos["s"], pos["product"])
         own = self.px(pos["s"])
         if not own.get("ltp"):
             return False
@@ -823,6 +840,15 @@ class Paper:
             self.changed(f"{self.short(pos['s'])}: stop now {pos.get('sl')}" + (f", floor {pos['floor']}" if pos.get("floor") else ""))
         return moved
 
+    def _times(self, row: dict, s: str) -> tuple:
+        """(intraday square-off, expiry-day exit) for this contract's market."""
+        ex = row.get("x") or s.split(":", 1)[0]
+        if ex == "MCX" or (row.get("g") == "COM"):
+            return self.rules["squareoff"], self.rules["expiry_exit"]
+        if row.get("g") == "CD":
+            return self.rules.get("squareoff_cd"), self.rules.get("expiry_exit_cd")
+        return self.rules.get("squareoff_eq"), self.rules.get("expiry_exit_eq")
+
     def housekeeping(self):
         """Every few seconds: new day, intraday square-off, expiry-day exit, and saving best/worst prices."""
         self.roll_day()
@@ -834,9 +860,10 @@ class Paper:
             why = None
             if pos.get("warned") and self.fresh(pos["s"]):
                 pos.pop("warned", None)
-            if self.rules["squareoff"] and pos["product"] == "INTRADAY" and hm >= self.rules["squareoff"] and t.hour >= 9:
+            sq, ex_t = self._times(row, pos["s"])
+            if sq and pos["product"] == "INTRADAY" and hm >= sq and t.hour >= 9:
                 why = "square-off"
-            if self.rules["expiry_exit"] and row.get("exp") and ist(row["exp"]).date() == today and hm >= self.rules["expiry_exit"]:
+            if ex_t and row.get("exp") and ist(row["exp"]).date() == today and hm >= ex_t:
                 why = "expiry"
             if why:
                 if self.fresh(pos["s"]):
@@ -846,7 +873,8 @@ class Paper:
                     self.changed(f"{self.short(pos['s'])}: due for {why} but there's no live price", "warn")
         for o in list(self.orders):
             row = symbols.get(o["s"]) or {}
-            if row.get("exp") and ist(row["exp"]).date() == today and self.rules["expiry_exit"] and hm >= self.rules["expiry_exit"]:
+            ex_t = self._times(row, o["s"])[1]
+            if row.get("exp") and ist(row["exp"]).date() == today and ex_t and hm >= ex_t:
                 self.cancel(o["id"], quiet=True)
                 self.changed(f"Cancelled {self.short(o['s'])} order: contract expires today")
         if self._dirty_at and now() - self._dirty_at > 10:
@@ -873,7 +901,7 @@ class Paper:
             self.on_symbols()
 
     def pos_view(self, pos) -> dict:
-        row = self.row(pos["s"])
+        row = self.row(pos["s"], pos["product"])
         mark = self.exit_mark(pos)
         n = self.pos_net(pos, mark)
         v = {k: pos.get(k) for k in ("id", "s", "side", "product", "qty", "avg", "sl", "tp", "floor", "basis", "ref",
@@ -915,7 +943,7 @@ class Paper:
         return v
 
     def order_view(self, o) -> dict:
-        row = self.row(o["s"])
+        row = self.row(o["s"], o["product"])
         v = dict(o)
         v["ltp"] = self.px(o["s"]).get("ltp")
         v["risk"] = round(self.order_risk(o), 2)
@@ -964,7 +992,7 @@ class Paper:
                     raise Refused(f"{k} can't be negative")
                 if isinstance(d, int):
                     v = int(v)
-            elif k in ("squareoff", "expiry_exit"):
+            elif k in ("squareoff", "expiry_exit", "squareoff_eq", "expiry_exit_eq", "squareoff_cd", "expiry_exit_cd"):
                 v = str(v or "").strip()
                 if v and not (len(v) == 5 and v[2] == ":" and v[:2].isdigit() and v[3:].isdigit()):
                     raise Refused(f"{k}: use HH:MM, e.g. 23:15")

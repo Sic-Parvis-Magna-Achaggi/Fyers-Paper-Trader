@@ -18,7 +18,7 @@ class Client:
     def __init__(self):
         self.queue: asyncio.Queue = asyncio.Queue(maxsize=500)
         self.symbols: set = set()
-        self.depth = None               # symbol whose order book this page shows (Book tab open)
+        self.depth: set = set()         # symbols whose order books this page shows (Book tab or Book page)
 
 
 class Feed:
@@ -59,14 +59,24 @@ class Feed:
             if s in self.last:
                 self._offer(c, {"tick": self.last[s]})
 
-    def set_depth(self, c: Client, symbol):
-        c.depth = symbol if isinstance(symbol, str) and ":" in symbol else None
+    def set_depth(self, c: Client, symbols):
+        """One symbol, a list of up to 5, or None (no books)."""
+        if isinstance(symbols, str):
+            symbols = [symbols]
+        new = {x for x in (symbols or []) if isinstance(x, str) and ":" in x}
+        new = set(sorted(new)[:5])
+        added = new - c.depth
+        c.depth = new
         self._resync()
-        if c.depth and c.depth in self.last_depth:
-            self._offer(c, {"depth": self.last_depth[c.depth]})
+        for s in added:
+            if s in self.last_depth:
+                self._offer(c, {"depth": self.last_depth[s]})
 
     def wanted_depth(self) -> list:
-        return sorted({c.depth for c in self.clients if c.depth})[:5]
+        u = set()
+        for c in self.clients:
+            u |= c.depth
+        return sorted(u)[:5]
 
     def wanted(self) -> list:
         u = set()
@@ -102,7 +112,7 @@ class Feed:
 
     def _fanout_depth(self, d: dict):
         for c in list(self.clients):
-            if c.depth == d["s"]:
+            if d["s"] in c.depth:
                 self._offer(c, {"depth": d})
 
     def publish_depth(self, d: dict):
@@ -228,11 +238,12 @@ class Feed:
             await asyncio.sleep(3)
             dwant = self.wanted_depth()
             now = time.time()
-            # order book fallback: one REST call every 6 s, only if the socket isn't delivering depth
+            # order book fallback: one REST call every 6 s (books take turns), only if the socket isn't delivering depth
             if dwant and fyers_link.token() and now - self.last_depth_at > 15 and now - last_dpoll > 6:
                 last_dpoll = now
+                self._dturn = (getattr(self, "_dturn", -1) + 1) % len(dwant)
                 try:
-                    d = await self.loop.run_in_executor(None, fyers_link.depth, dwant[0])
+                    d = await self.loop.run_in_executor(None, fyers_link.depth, dwant[self._dturn])
                     if d:
                         self.publish_depth(d)
                 except Exception as e:

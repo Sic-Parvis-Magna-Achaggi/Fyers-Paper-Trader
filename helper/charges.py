@@ -13,31 +13,68 @@ Each order pays:
   sebi        SEBI turnover fee, Rs 10 per crore
   ipft        NSE investor protection fund (NSE only)
   gst         18% of brokerage + exchange + clearing + SEBI fee (+ IPFT)
+  dp          stocks sold from delivery: Rs 12.5 + GST per sell (depository charge)
+
+Stocks: intraday pays STT 0.025% on the sell; delivery pays STT 0.1% on both sides, stamp 0.015% and brokerage
+Rs 20 or 0.3% (lower). Indices can't be traded, so they have no charges.
 """
 from __future__ import annotations
 
-AS_OF = "Fyers charges list, 27 Oct 2026"
+AS_OF = "Fyers charges list, 27 Oct 2026 (exchange rates cross-checked with the NSE / BSE schedules)"
 CRORE = 1e7
+DP_SELL = 12.5 * 1.18     # delivery sell: Rs 12.5 + GST per scrip (CDSL Rs 3.5 + Fyers Rs 9), charged on the sell
 
-# (exchange, kind) -> rates as fractions of order value
+_FUT = {"brk_pct": 0.0003, "brk_cap": 20.0}
+_OPT = {"brk_flat": 20.0}
+_EQI = {"brk_pct": 0.0003, "brk_cap": 20.0, "clearing": 0.0, "tax_sell": 0.00025, "tax_name": "STT", "stamp_buy": 0.00003}
+_EQD = {"brk_pct": 0.003, "brk_cap": 20.0, "clearing": 0.0, "tax_sell": 0.001, "tax_buy": 0.001, "tax_name": "STT",
+        "stamp_buy": 0.00015, "dp_sell": DP_SELL}
+_S = {"sebi": 10 / CRORE}
+
+# (exchange, kind) -> rates as fractions of order value. Kinds: EQ_I / EQ_D (stocks intraday / delivery), FUT, OPT,
+# OPT_IDX (BSE Sensex / Bankex options), CURFUT, CUROPT.
 RATES = {
-    ("MCX", "FUT"): {"brk_pct": 0.0003, "brk_cap": 20.0, "exchange": 0.000021, "clearing": 0.000018,
-                     "tax_sell": 0.0001, "tax_name": "CTT", "stamp_buy": 0.00002, "sebi": 10 / CRORE, "ipft": 0.0},
-    ("MCX", "OPT"): {"brk_flat": 20.0, "exchange": 0.000418, "clearing": 0.0005,
-                     "tax_sell": 0.0005, "tax_name": "CTT", "stamp_buy": 0.00003, "sebi": 10 / CRORE, "ipft": 0.0},
-    ("NSE", "FUT"): {"brk_pct": 0.0003, "brk_cap": 20.0, "exchange": 0.000018299, "clearing": 0.000005,
-                     "tax_sell": 0.0005, "tax_name": "STT", "stamp_buy": 0.00002, "sebi": 10 / CRORE, "ipft": 10 / CRORE},
-    ("NSE", "OPT"): {"brk_flat": 20.0, "exchange": 0.000355299, "clearing": 0.00009,
-                     "tax_sell": 0.0015, "tax_name": "STT", "stamp_buy": 0.00003, "sebi": 10 / CRORE, "ipft": 50 / CRORE},
+    ("MCX", "FUT"): {**_FUT, **_S, "exchange": 0.000021, "clearing": 0.000018, "tax_sell": 0.0001, "tax_name": "CTT", "stamp_buy": 0.00002, "ipft": 0.0},
+    ("MCX", "OPT"): {**_OPT, **_S, "exchange": 0.000418, "clearing": 0.0005, "tax_sell": 0.0005, "tax_name": "CTT", "stamp_buy": 0.00003, "ipft": 0.0},
+    ("NSE", "EQ_I"): {**_EQI, **_S, "exchange": 0.000030699, "ipft": 10 / CRORE},
+    ("NSE", "EQ_D"): {**_EQD, **_S, "exchange": 0.000030699, "ipft": 10 / CRORE},
+    ("BSE", "EQ_I"): {**_EQI, **_S, "exchange": 0.0000375, "ipft": 0.0},
+    ("BSE", "EQ_D"): {**_EQD, **_S, "exchange": 0.0000375, "ipft": 0.0},
+    ("NSE", "FUT"): {**_FUT, **_S, "exchange": 0.000018299, "clearing": 0.000005, "tax_sell": 0.0005, "tax_name": "STT", "stamp_buy": 0.00002, "ipft": 10 / CRORE},
+    ("NSE", "OPT"): {**_OPT, **_S, "exchange": 0.000355299, "clearing": 0.00009, "tax_sell": 0.0015, "tax_name": "STT", "stamp_buy": 0.00003, "ipft": 50 / CRORE},
+    ("BSE", "FUT"): {**_FUT, **_S, "exchange": 0.0, "clearing": 0.000005, "tax_sell": 0.0005, "tax_name": "STT", "stamp_buy": 0.00002, "ipft": 0.0},
+    ("BSE", "OPT"): {**_OPT, **_S, "exchange": 0.00005, "clearing": 0.00009, "tax_sell": 0.0015, "tax_name": "STT", "stamp_buy": 0.00003, "ipft": 0.0},
+    ("BSE", "OPT_IDX"): {**_OPT, **_S, "exchange": 0.000325, "clearing": 0.00009, "tax_sell": 0.0015, "tax_name": "STT", "stamp_buy": 0.00003, "ipft": 0.0},
+    ("NSE", "CURFUT"): {**_FUT, **_S, "exchange": 0.0000035, "clearing": 0.000005, "tax_sell": 0.0, "tax_name": "STT", "stamp_buy": 0.000001, "ipft": 5 / CRORE},
+    ("NSE", "CUROPT"): {**_OPT, **_S, "exchange": 0.000311, "clearing": 0.00009, "tax_sell": 0.0, "tax_name": "STT", "stamp_buy": 0.000001, "ipft": 200 / CRORE},
+    ("BSE", "CURFUT"): {**_FUT, **_S, "exchange": 0.0000045, "clearing": 0.000005, "tax_sell": 0.0, "tax_name": "STT", "stamp_buy": 0.000001, "ipft": 0.0},
+    ("BSE", "CUROPT"): {**_OPT, **_S, "exchange": 0.00001, "clearing": 0.000005, "tax_sell": 0.0, "tax_name": "STT", "stamp_buy": 0.000001, "ipft": 0.0},
+    ("NSE", "COMFUT"): {**_FUT, **_S, "exchange": 0.000001, "clearing": 0.000018, "tax_sell": 0.0001, "tax_name": "CTT", "stamp_buy": 0.00002, "ipft": 0.0},
+    ("NSE", "COMOPT"): {**_OPT, **_S, "exchange": 0.00001, "clearing": 0.0005, "tax_sell": 0.0005, "tax_name": "CTT", "stamp_buy": 0.00003, "ipft": 0.0},
 }
+LABEL = {"EQ_I": "stocks, intraday", "EQ_D": "stocks, delivery (CNC)", "FUT": "futures", "OPT": "options", "OPT_IDX": "Sensex / Bankex options",
+         "CURFUT": "currency futures", "CUROPT": "currency options", "COMFUT": "commodity futures", "COMOPT": "commodity options"}
 GST = 0.18
-FIELDS = ("brokerage", "exchange", "clearing", "tax", "stamp", "sebi", "ipft", "gst")
+FIELDS = ("brokerage", "exchange", "clearing", "tax", "stamp", "sebi", "ipft", "gst", "dp")
+
+
+def kind_of(row: dict) -> tuple:
+    ex = row.get("x") or row["s"].split(":", 1)[0]
+    f, g = row.get("f"), row.get("g")
+    if g == "CM" or f in ("EQ", "OTHER", "IDX"):
+        return ex, "EQ_D" if row.get("prod") == "CNC" else "EQ_I"
+    if g == "CD":
+        return ex, "CUROPT" if f == "OPT" else "CURFUT"
+    if g == "COM" and ex == "NSE":
+        return ex, "COMOPT" if f == "OPT" else "COMFUT"
+    if ex == "BSE" and f == "OPT" and row.get("u") in ("SENSEX", "BANKEX"):
+        return ex, "OPT_IDX"
+    return ex, "OPT" if f == "OPT" else "FUT"
 
 
 def rates_for(row: dict) -> dict:
-    ex = row["s"].split(":", 1)[0]
-    kind = "OPT" if row.get("f") == "OPT" else "FUT"
-    return RATES.get((ex, kind)) or RATES[("MCX", kind)]
+    ex, k = kind_of(row)
+    return RATES.get((ex, k)) or RATES[("MCX", "OPT" if k.endswith("OPT") else "FUT")]
 
 
 def value(row: dict, qty: float, price: float) -> float:
@@ -56,10 +93,11 @@ def order(row: dict, side: int, qty: float, price: float) -> dict:
         "brokerage": brk,
         "exchange": v * r["exchange"],
         "clearing": v * r["clearing"],
-        "tax": v * r["tax_sell"] if side < 0 else 0.0,
+        "tax": v * (r["tax_sell"] if side < 0 else r.get("tax_buy", 0.0)),
         "stamp": v * r["stamp_buy"] if side > 0 else 0.0,
         "sebi": v * r["sebi"],
         "ipft": v * r["ipft"],
+        "dp": r.get("dp_sell", 0.0) if side < 0 else 0.0,      # flat, GST included
     }
     c["gst"] = GST * (c["brokerage"] + c["exchange"] + c["clearing"] + c["sebi"] + c["ipft"])
     c = {k: round(x, 4) for k, x in c.items()}
@@ -138,19 +176,21 @@ def size_for_risk(row: dict, side: int, entry: float, sl: float, risk: float, ma
 
 
 def table() -> list:
-    """Rates for the Settings screen."""
+    """Rates for the Settings / Account screen."""
     out = []
     for (ex, kind), r in RATES.items():
+        tax = f"{r['tax_name']} {r['tax_sell']*100:.3g}% on sell" + (f" and {r['tax_buy']*100:.3g}% on buy" if r.get("tax_buy") else "") if r["tax_sell"] else "none"
         out.append({
-            "segment": f"{ex} {'options' if kind == 'OPT' else 'futures'}",
+            "segment": f"{ex} {LABEL.get(kind, kind)}",
             "brokerage": f"Rs {r['brk_flat']:.0f} per order" if "brk_flat" in r else f"Rs {r['brk_cap']:.0f} or {r['brk_pct']*100:.2f}%, lower",
-            "exchange": f"{r['exchange']*100:.5g}%",
-            "clearing": f"{r['clearing']*100:.4g}%",
-            "tax": f"{r['tax_name']} {r['tax_sell']*100:.3g}% on sell",
+            "exchange": f"{r['exchange']*100:.5g}%" if r["exchange"] else "none",
+            "clearing": f"{r['clearing']*100:.4g}%" if r["clearing"] else "none",
+            "tax": tax,
             "stamp": f"{r['stamp_buy']*100:.3g}% on buy",
             "sebi": "Rs 10 per crore",
             "ipft": f"Rs {r['ipft']*CRORE:.0f} per crore" if r["ipft"] else "-",
             "gst": "18% of brokerage + exchange + clearing + SEBI" + (" + IPFT" if r["ipft"] else ""),
-            "on": "premium" if kind == "OPT" else "contract value",
+            "dp": f"Rs {r['dp_sell']:.2f} per sell (incl. GST)" if r.get("dp_sell") else "-",
+            "on": "premium" if kind.endswith("OPT") or kind == "OPT_IDX" else "order value",
         })
     return out

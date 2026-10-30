@@ -1,5 +1,44 @@
 # Changelog
 
+## v0.10.0 — 30 Oct 2026 — Full pages; NSE and BSE: stocks, indices, F&O, currency
+
+Added
+- Pages next to the chart (top bar: Chart · Trades · History · Book · Account · Log). The chart keeps
+  running underneath, so switching back is instant; the address remembers the page (#trades ...).
+  - Trades: every open position in one table (entry, LTP, SL / TP with their net ₹, BE + costs, net P&L,
+    R, charges paid, time open), per-trade Trail BE / Trail SL with R boxes, BE and close buttons; click
+    any price to change it. Pending orders with their price, distance from the market, SL / TP and risk.
+    BE all, Cancel all orders, Close all. The account figures sit on top.
+  - History: filters (period, contract, side, wins / losses, exit, product), stats (net, win rate,
+    profit factor, average R, expectancy, average win / loss, charges, best / worst, max drawdown,
+    streaks, average hold), an equity curve and a daily P&L chart, results by contract and by exit,
+    and every closed trade with its full charge breakdown. Download the filtered list as CSV.
+  - Book: up to 4 order books side by side (the chart's contract plus any from your watchlist or open
+    positions), with spread, buy / sell totals and the day's figures.
+  - Account: the paper account's figures, rules, trailing defaults, reset, and the charges in use.
+  - Log: the paper account's events (now the last 500) and the helper's own log, with filters and search.
+  - ⤢ on the trade panel's tabs opens the Trades page.
+- NSE and BSE as well as MCX:
+  - Stocks (NSE and BSE), indices (NIFTY 50, BANK NIFTY, SENSEX, INDIA VIX ...), index and stock F&O
+    (NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, SENSEX, BANKEX ...), NSE currency, NSE commodities.
+  - Find has exchange (NSE / BSE / MCX) and type (Stocks / Index / Fut / Opt) filters. Searching
+    "nifty" puts the index first, then its futures and options.
+  - Option chains from an index or stock row (Opt), with the at-the-money strike from the index.
+  - Indices are chart-only: BUY / SELL explains that an index can't be traded.
+  - Stocks trade as Intraday or Delivery (CNC); F&O as Intraday or Carry (NRML). A delivery sell needs
+    shares you hold, as at the broker.
+- Charges for every new segment, net in every ₹ figure as before: stock intraday (STT 0.025% on sell)
+  and delivery (STT 0.1% both ways, stamp 0.015%, brokerage ₹20 or 0.3%, DP ₹12.5 + GST per sell), NSE
+  and BSE exchange rates, BSE Sensex / Bankex options, BSE futures, currency futures and options, NSE
+  commodities.
+- Square-off and expiry-day exits per market: MCX (23:15 / 22:45), NSE / BSE (15:15 / 15:00) and
+  currency (16:45 / 12:00), all in Rules.
+
+Changed
+- MCX contracts still show without "MCX:"; NSE and BSE ones keep their exchange (NSE:RELIANCE-EQ vs
+  BSE:RELIANCE-A).
+- The symbol lists are kept compactly in memory (the server has 1 GB), about 2 seconds to load.
+
 ## v0.9.0 — 30 Oct 2026 — Hide / collapse indicators; your Liquidity Levels script draws on the candles
 
 Added

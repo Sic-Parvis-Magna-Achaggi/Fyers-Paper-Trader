@@ -6,6 +6,11 @@ It runs on our own server and serves its own page, so there is nothing to instal
 
 **Address:** https://68-183-245-178.sslip.io
 
+## Version 0.10.0: pages, NSE and BSE
+
+- **Full pages** for Trades, History (stats, equity curve, filters), Book (up to 4 order books), Account and Log, next to the chart.
+- **NSE and BSE:** stocks, indices, F&O and currency, alongside MCX, with their charges.
+
 ## Version 0.8.0: Pine Editor
 
 - **Write, save and run your own Pine Script indicators.** Pine (above the chart) opens the editor; scripts are saved on the server and listed in ƒx → My scripts.

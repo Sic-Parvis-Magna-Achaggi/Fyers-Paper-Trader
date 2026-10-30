@@ -224,11 +224,11 @@ def fyers_callback(request: Request):
 
 # ------------------------------------------------------------------ market data
 @app.get("/api/symbols")
-def find_symbols(request: Request, q: str = "", kind: str = ""):
+def find_symbols(request: Request, q: str = "", kind: str = "", ex: str = ""):
     _need(request)
     if len(q.strip()) < 2:
         return {"ok": True, "rows": []}
-    return {"ok": True, "rows": symbols.search(q, kind)}
+    return {"ok": True, "rows": symbols.search(q, kind, ex=ex)}
 
 
 @app.get("/api/symbol")
@@ -239,12 +239,19 @@ def one_symbol(request: Request, s: str):
 
 
 @app.get("/api/chain")
-def option_chain(request: Request, u: str, exp: int = 0):
+def option_chain(request: Request, u: str, exp: int = 0, ex: str = ""):
+    """u: an underlying name (NIFTY, CRUDEOIL), or an index / stock / contract ticker (NSE:NIFTY50-INDEX)."""
     _need(request)
-    exps = symbols.expiries(u)
+    name, x = symbols.resolve_underlying(u)
+    ex = ex or x
+    exps = symbols.expiries(name, ex)
     if not exp and exps:
         exp = exps[0]
-    return {"ok": True, "expiries": exps, "exp": exp, "rows": symbols.chain(u, exp)}
+    rows = symbols.chain(name, exp, ex)
+    sp = symbols.spot(name, rows[0]["x"] if rows else ex)
+    fut = symbols.underlying_future(rows[0]) if rows else None
+    return {"ok": True, "u": name, "ex": rows[0]["x"] if rows else ex, "expiries": exps, "exp": exp, "rows": rows,
+            "spot": sp["s"] if sp else None, "fut": fut["s"] if fut else None}
 
 
 _hist_cache: dict = {}
@@ -516,6 +523,13 @@ async def paper_history(request: Request, days: int = 0):
     return {"ok": True, "rows": rows[::-1]}
 
 
+@app.get("/api/paper/events")
+async def paper_events(request: Request):
+    """The paper account's log: fills, stops moved, exits, refusals (the latest 500)."""
+    _need(request)
+    return {"ok": True, "events": engine.events[::-1]}
+
+
 @app.get("/api/paper/history.csv")
 async def paper_csv(request: Request):
     _need(request)
@@ -525,7 +539,7 @@ async def paper_csv(request: Request):
     w = csv.writer(f)
     cols = ["id", "symbol", "side", "product", "lots", "qty", "avg_entry", "exit", "opened_ist", "closed_ist", "reason",
             "first_sl", "sl", "tp", "gross", "brokerage", "exchange", "clearing", "ctt_stt", "stamp", "sebi", "ipft",
-            "gst", "charges_total", "net", "init_risk", "r", "best", "worst", "balance_after"]
+            "gst", "dp", "charges_total", "net", "init_risk", "r", "best", "worst", "balance_after"]
     w.writerow(cols)
     fmt = lambda ts: time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
     for h in engine.history:
@@ -533,7 +547,7 @@ async def paper_csv(request: Request):
         w.writerow([h["id"], h["s"], "BUY" if h["side"] > 0 else "SELL", h["product"], h["lots"], h["qty"], h["avg"],
                     h["exit"], fmt(h["opened"]), fmt(h["closed"]), h["reason"], h["first_sl"], h["sl"], h["tp"],
                     h["gross"], c["brokerage"], c["exchange"], c["clearing"], c["tax"], c["stamp"], c["sebi"],
-                    c["ipft"], c["gst"], c["total"], h["net"], h["init_risk"], h["r"], h["best"], h["worst"],
+                    c["ipft"], c["gst"], c.get("dp", 0), c["total"], h["net"], h["init_risk"], h["r"], h["best"], h["worst"],
                     h["balance_after"]])
     from fastapi.responses import Response
     return Response(f.getvalue(), media_type="text/csv",

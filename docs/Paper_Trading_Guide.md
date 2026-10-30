@@ -1,6 +1,24 @@
-# Paper trading: how it works (v0.9.0)
+# Paper trading: how it works (v0.10.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
+
+## Markets
+
+- **MCX** commodities, **NSE and BSE** stocks, indices, F&O, and NSE currency. Find has exchange and type filters; **Opt** on an index, stock or future opens its option chain.
+- **Indices** are for charts only: BUY / SELL tells you an index can't be traded. Trade its futures or options.
+- **Stocks:** Intraday or Delivery (CNC). A delivery sell needs shares you hold, as at the broker; to short a stock, use Intraday.
+- **F&O, currency, commodities:** Intraday or Carry (NRML).
+- **Square-off and expiry-day exits** are per market: MCX 23:15 / 22:45, NSE and BSE 15:15 / 15:00, currency 16:45 / 12:00. All are in Rules.
+
+## Pages
+
+The top bar has **Chart · Trades · History · Book · Account · Log**. The chart keeps running while you're on another page, and the address remembers the page.
+
+- **Trades:** all open positions and pending orders in tables. Click any price to change it; set Trail BE / Trail SL per trade; BE, close, cancel. BE all, Cancel all orders and Close all at the top.
+- **History:** filters, stats (net, win rate, profit factor, average R, expectancy, drawdown, streaks...), an equity curve, daily P&L, results by contract and by exit, and each trade's charges. Download the filtered list as CSV.
+- **Book:** up to 4 order books side by side.
+- **Account:** the account's figures, rules, trailing defaults, reset and the charges in use.
+- **Log:** everything the paper account did, plus the helper's own log.
 
 ## The long / short tool on the chart (like the MT5 EA)
 
@@ -105,7 +123,9 @@ Wherever the app shows money for a stop, a target, risk, P&L, R or break-even, i
 | SEBI fee | ₹10 per crore | ₹10 per crore | value / premium |
 | GST | 18% of brokerage + exchange + clearing + SEBI fee | same | |
 
-NSE futures and options rates are also in the app, for later. These rates come from Fyers' charges list (27 Oct 2026). Settings → **Charges used** shows the table the app is using.
+**Stocks:** intraday pays STT 0.025% on the sell and stamp 0.003% on the buy, with brokerage ₹20 or 0.03% (lower). Delivery (CNC) pays STT 0.1% on both buy and sell, stamp 0.015% on the buy, brokerage ₹20 or 0.3% (lower), and a DP charge of ₹12.5 + GST on the sell. Exchange charges are NSE 0.0030699% and BSE 0.00375%.
+
+NSE and BSE F&O, BSE Sensex / Bankex options, and currency futures and options all have their own rates. These rates come from Fyers' charges list (27 Oct 2026), with the exchange rates cross-checked against the NSE and BSE schedules. **Account → Charges used** shows every table the app is using.
 
 - **Value** = price × quantity × multiplier. For example, CRUDEOILM is 10 barrels a lot, CRUDEOIL 100, and GOLDPETAL 1 gram.
 - **Lot sizing** finds the most lots whose loss at the stop, including both orders' charges, fits your risk.
