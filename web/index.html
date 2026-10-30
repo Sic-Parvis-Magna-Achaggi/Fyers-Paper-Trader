@@ -98,6 +98,16 @@ section.chartwrap{display:grid;grid-template-rows:auto minmax(0,1fr);min-width:0
 #tfPick .row2{display:flex;gap:6px;margin-top:8px}
 #tfPick .row2 input{padding:4px 8px;font-size:12px}
 #tfPick .row2 button{padding:4px 10px;font-size:12px;white-space:nowrap}
+/* chart settings popover */
+#cfgPick{position:absolute;right:10px;top:42px;z-index:31;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;width:330px;max-height:calc(100% - 60px);overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.35);font-size:12.5px}
+#cfgPick .cfgh{display:flex;align-items:center;margin-bottom:6px}
+#cfgPick .cfgh b{flex:1}
+#cfgPick .sec{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:10px 0 4px}
+#cfgPick .cr{display:grid;grid-template-columns:1fr 34px 92px 22px;gap:6px;align-items:center;padding:2px 0}
+#cfgPick input[type=color]{width:34px;height:24px;padding:0;border:1px solid var(--line);border-radius:4px;background:none;cursor:pointer}
+#cfgPick select{padding:2px 4px;font-size:12px}
+#cfgPick input[type=checkbox]{width:16px;height:16px}
+#cfgPick input[type=range]{width:100%}
 /* on-chart buttons and the long/short tool */
 #ctools{position:absolute;left:8px;top:8px;z-index:6;display:flex;gap:4px}
 #ctools button{padding:3px 12px;font-size:12px;font-weight:600;letter-spacing:.04em;background:color-mix(in srgb,var(--panel) 85%,transparent)}
@@ -286,6 +296,7 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
         <span class="spacer" style="flex:1"></span>
         <div class="tf" id="tf"></div>
         <button class="tfmore" id="bTf" title="All timeframes and custom">▾</button>
+        <button class="ghost fsb" id="bCfg" title="Chart settings: colours and line styles">⚙</button>
         <button class="ghost fsb" id="bPanel" title="Show or hide the trade panel (P)">Panel</button>
         <button class="ghost fsb" id="bFull" title="Maximise the chart in this window (F · Shift+F = full screen)">⛶</button>
       </div>
@@ -294,6 +305,11 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
         <div class="grid" id="tfGrid"></div>
         <div class="row2"><input id="tfCustom" placeholder="e.g. 7m, 2h, 4h, 1D, 1W, 1M" autocomplete="off"><button id="tfAdd">Use</button></div>
         <div class="err" id="tfErr" style="min-height:0"></div>
+      </div>
+      <div id="cfgPick" class="hide">
+        <div class="cfgh"><b>Chart settings</b><button class="ghost" id="cfgClose">✕</button></div>
+        <div id="cfgBody"></div>
+        <div class="btns" style="margin-top:10px"><button id="cfgReset">Reset to defaults</button></div>
       </div>
       <div id="chart"><div id="chartMsg">Pick a contract from Find or Options.</div>
         <div id="ctools"><button id="cBuy" title="Long tool">BUY</button><button id="cSell" title="Short tool">SELL</button></div>
@@ -563,32 +579,87 @@ function onTick(t){
 /* ---------------------------------------------------------------- chart */
 let chart = null, series = null, lastBar = null, histToken = 0;
 function cssVar(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+/* chart colours and line styles (saved with your preferences on the server) */
+const CHART_DEFAULTS = {up:"#22a06b", down:"#e2483d", bg:"", grid:true,
+  bidC:"#a3abb8", bidS:0, bidOn:true, askC:"#e2483d", askS:0, askOn:true, lastC:"#e0b341", lastS:2, lastOn:true,
+  entryC:"", entryS:2, slC:"#e2483d", slS:0, tpC:"#22a06b", tpS:0, beC:"#4f8cff", beS:1, orderC:"#4f8cff", orderS:2,
+  toolC:"#4f8cff", toolS:0, lossZ:"#e2483d", profitZ:"#22a06b", zoneA:20};
+function chartCfg(){ return {...CHART_DEFAULTS, ...(prefGet("chart", {}) || {})}; }
+function cfgColor(k){ const c = chartCfg()[k]; return c || cssVar(k === "entryC" ? "--text" : "--bg"); }
 function buildChart(){
   const el = $("#chart");
   if(chart){ chart.remove(); }
+  const C = chartCfg();
   chart = LightweightCharts.createChart(el, {
     autoSize: true,
-    layout:{background:{type:"solid", color:cssVar("--bg")}, textColor:cssVar("--muted"), fontFamily:"IBM Plex Mono"},
-    grid:{vertLines:{visible:false}, horzLines:{color:cssVar("--line")}},
+    layout:{background:{type:"solid", color:C.bg || cssVar("--bg")}, textColor:cssVar("--muted"), fontFamily:"IBM Plex Mono"},
+    grid:{vertLines:{visible:false}, horzLines:{color:cssVar("--line"), visible:!!C.grid}},
     rightPriceScale:{borderColor:cssVar("--line")},
     timeScale:{borderColor:cssVar("--line"), timeVisible:true, secondsVisible:false, rightOffset:24},
     crosshair:{mode:0}
   });
-  series = chart.addCandlestickSeries({upColor:cssVar("--up"), downColor:cssVar("--down"), borderVisible:false,
-    wickUpColor:cssVar("--up"), wickDownColor:cssVar("--down"), priceLineVisible:false, lastValueVisible:false});
-  // MT5-style solid bid (grey) and ask (red) lines with their prices on the scale
-  bidLine = series.createPriceLine({price:0, color:"#a3abb8", lineWidth:1, lineStyle:0, axisLabelVisible:true, lineVisible:false, title:""});
-  askLine = series.createPriceLine({price:0, color:"#e2483d", lineWidth:1, lineStyle:0, axisLabelVisible:true, lineVisible:false, title:""});
-  bidLine.applyOptions({axisLabelVisible:false}); askLine.applyOptions({axisLabelVisible:false});
+  series = chart.addCandlestickSeries({upColor:C.up, downColor:C.down, borderVisible:false,
+    wickUpColor:C.up, wickDownColor:C.down, priceLineVisible:false, lastValueVisible:false});
+  // MT5-style quote lines: bid, ask and the last traded price (the candle's close), each with its price on the scale
+  const mk = () => series.createPriceLine({price:0, color:"#888", lineWidth:1, lineStyle:0, axisLabelVisible:false, lineVisible:false, title:""});
+  bidLine = mk(); askLine = mk(); lastLine = mk();
 }
-let bidLine = null, askLine = null;
+let bidLine = null, askLine = null, lastLine = null, lastQuote = null;
+function textOn(hex){ const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(hex || ""); if(!m) return "#fff";
+  const [r, g, b] = [m[1], m[2], m[3]].map(x => parseInt(x, 16)); return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? "#0f1216" : "#fff"; }
 function bidAsk(t){
   if(!bidLine) return;
-  const bid = t.bid || t.ltp, ask = t.ask;
-  bidLine.applyOptions({price: bid, lineVisible: true, axisLabelVisible: true, axisLabelColor: "#a3abb8", axisLabelTextColor: "#0f1216"});
-  if(ask && ask !== bid) askLine.applyOptions({price: ask, lineVisible: true, axisLabelVisible: true, axisLabelColor: "#e2483d", axisLabelTextColor: "#fff"});
-  else askLine.applyOptions({lineVisible: false, axisLabelVisible: false});
+  lastQuote = t;
+  const C = chartCfg(), bid = t.bid || t.ltp, ask = t.ask;
+  const set = (line, price, on, c, st, title) => line.applyOptions(on && price
+    ? {price, color:c, lineStyle:+st, lineVisible:true, axisLabelVisible:true, axisLabelColor:c, axisLabelTextColor:textOn(c), title}
+    : {lineVisible:false, axisLabelVisible:false});
+  set(bidLine, bid, C.bidOn, C.bidC, C.bidS, "");
+  set(askLine, ask, C.askOn && ask && ask !== bid, C.askC, C.askS, "");
+  // the last trade only gets its own label when it differs from both bid and ask (otherwise it would sit on top of one)
+  set(lastLine, t.ltp, C.lastOn, C.lastC, C.lastS, t.ltp !== bid && t.ltp !== ask ? "Last" : "");
 }
+function applyChartCfg(){
+  if(!chart) return;
+  const C = chartCfg();
+  series.applyOptions({upColor:C.up, downColor:C.down, wickUpColor:C.up, wickDownColor:C.down});
+  chart.applyOptions({layout:{background:{type:"solid", color:C.bg || cssVar("--bg")}}, grid:{horzLines:{visible:!!C.grid, color:cssVar("--line")}}});
+  if(lastQuote && cur && lastQuote.s === cur.s) bidAsk(lastQuote);
+  if(typeof drawLines === "function") drawLines();
+}
+/* the settings popover */
+const CFG_LINES = [["bid", "Bid", true], ["ask", "Ask", true], ["last", "Last trade", true], ["entry", "Position entry"], ["sl", "Stop loss"],
+  ["tp", "Target"], ["be", "Break-even / floor"], ["order", "Pending order"], ["tool", "New-trade entry"]];
+const STYLES = [[0, "Solid"], [2, "Dashed"], [1, "Dotted"], [3, "Long dash"]];
+function renderCfg(){
+  const C = chartCfg();
+  const hex = (k) => C[k] || (k === "entryC" ? (cssVar("--text").length === 7 ? cssVar("--text") : "#e6e9ee") : (cssVar("--bg").length === 7 ? cssVar("--bg") : "#0f1216"));
+  let h = `<div class="sec">Lines</div><div class="cr muted" style="font-size:11px"><span></span><span>Colour</span><span>Style</span><span>On</span></div>`;
+  for(const [k, label, canHide] of CFG_LINES)
+    h += `<div class="cr"><span>${label}</span><input type="color" data-k="${k}C" value="${hex(k + "C")}">
+      <select data-k="${k}S">${STYLES.map(([v, n]) => `<option value="${v}" ${+C[k + "S"] === v ? "selected" : ""}>${n}</option>`).join("")}</select>
+      ${canHide ? `<input type="checkbox" data-k="${k}On" ${C[k + "On"] ? "checked" : ""}>` : "<span></span>"}</div>`;
+  h += `<div class="sec">Candles</div>
+    <div class="cr"><span>Up</span><input type="color" data-k="up" value="${C.up}"><span></span><span></span></div>
+    <div class="cr"><span>Down</span><input type="color" data-k="down" value="${C.down}"><span></span><span></span></div>
+    <div class="sec">Risk / reward zones</div>
+    <div class="cr"><span>Loss zone</span><input type="color" data-k="lossZ" value="${C.lossZ}"><span></span><span></span></div>
+    <div class="cr"><span>Profit zone</span><input type="color" data-k="profitZ" value="${C.profitZ}"><span></span><span></span></div>
+    <div class="cr" style="grid-template-columns:1fr 150px"><span>Zone strength</span><input type="range" min="5" max="50" data-k="zoneA" value="${C.zoneA}"></div>
+    <div class="sec">Chart</div>
+    <div class="cr"><span>Background</span><input type="color" data-k="bg" value="${hex("bg")}"><span class="muted" style="font-size:11px">${C.bg ? "" : "theme"}</span><span></span></div>
+    <div class="cr"><span>Grid lines</span><span></span><span></span><input type="checkbox" data-k="grid" ${C.grid ? "checked" : ""}></div>`;
+  $("#cfgBody").innerHTML = h;
+  $("#cfgBody").querySelectorAll("[data-k]").forEach(el => el.addEventListener("input", () => {
+    const k = el.dataset.k, cfg = {...(prefGet("chart", {}) || {})};
+    cfg[k] = el.type === "checkbox" ? el.checked : (el.tagName === "SELECT" || el.type === "range") ? +el.value : el.value;
+    prefSet("chart", cfg); applyChartCfg();
+  }));
+}
+$("#bCfg").onclick = e => { e.stopPropagation(); renderCfg(); $("#cfgPick").classList.toggle("hide"); $("#tfPick").classList.add("hide"); };
+$("#cfgClose").onclick = () => $("#cfgPick").classList.add("hide");
+$("#cfgReset").onclick = () => { prefSet("chart", {}); renderCfg(); applyChartCfg(); };
+document.addEventListener("click", e => { if(!e.target.closest("#cfgPick,#bCfg")) $("#cfgPick").classList.add("hide"); });
 function setTf(k){ tf = k; prefSet("tf2", tf); tfButtons(); loadHistory(); }
 function tfButtons(){
   $("#tf").innerHTML = "";
@@ -633,7 +704,7 @@ async function openSymbol(row){
   $("#cSym").textContent = row.s.replace("MCX:", "");
   $("#cLtp").textContent = last[row.s] ? fmt(last[row.s].ltp, row.tick) : "";
   $("#cMeta").textContent = "";
-  if(bidLine){ bidLine.applyOptions({lineVisible:false, axisLabelVisible:false}); askLine.applyOptions({lineVisible:false, axisLabelVisible:false}); }
+  if(bidLine) for(const l of [bidLine, askLine, lastLine]) l.applyOptions({lineVisible:false, axisLabelVisible:false, title:""});
   sendWant();
   loadHistory();
   paperOnSymbol(row);

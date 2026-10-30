@@ -453,21 +453,21 @@ function zoneList(){
   return out;
 }
 function drawZones(ctx, size){
-  const UP = cssv("--up"), DOWN = cssv("--down");
+  const C = chartCfg(), UP = C.profitZ, DOWN = C.lossZ, A = (+C.zoneA || 20) / 100;
   P.toolX = null;
   for(const z of zoneList()){
     const ye = series.priceToCoordinate(z.entry); if(ye == null) continue;
     let x0 = zoneX(z.x0, size.width);
     if(z.tool){ x0 = x0 == null ? size.width * 0.55 : x0 + 6; x0 = Math.min(x0, size.width - 170); P.toolX = x0; }
     else if(x0 == null) x0 = 0;
-    const x1 = size.width, w = Math.max(0, x1 - x0), a = z.tool ? 0.20 : 0.09;
+    const x1 = size.width, w = Math.max(0, x1 - x0), a = z.tool ? A : A * 0.45;
     const box = (y2, col) => { if(y2 == null) return; ctx.fillStyle = rgba(col, a); ctx.fillRect(x0, Math.min(ye, y2), w, Math.abs(y2 - ye)); };
     const ys = z.sl != null ? series.priceToCoordinate(z.sl) : null, yt = z.tp != null ? series.priceToCoordinate(z.tp) : null;
     box(ys, DOWN); box(yt, UP);
     ctx.font = "600 11px 'IBM Plex Sans', system-ui, sans-serif"; ctx.textBaseline = "middle";
     const label = (y2, txt, col) => { if(y2 == null || !txt) return; const y = y2 + (y2 > ye ? -10 : 10);
       ctx.fillStyle = col; ctx.fillText(txt, x0 + 8, Math.abs(y2 - ye) < 22 ? y2 : y); };
-    label(ys, z.slTxt, DOWN); label(yt, z.tpTxt, UP);
+    label(ys, z.slTxt, C.slC); label(yt, z.tpTxt, C.tpC);
   }
 }
 /* one-click ✕ on each open position's entry line (this chart), like the MT5 EA */
@@ -521,27 +521,28 @@ function drawLines(){
   ensurePrim();
   clearLines(P.posLines);
   P.posDrags = [];
-  const UP = cssv("--up"), DOWN = cssv("--down"), ACC = cssv("--accent"), MUT = cssv("--muted");
+  const C = chartCfg(), ENTRY = cfgColor("entryC");
   const tk = s => (sym[s] || {}).tick || cur.tick;
   const drag = (line, price, tick, drop) => P.posDrags.push({line, price: () => price, tick, drop, set: v => { price = v; }});
   if(P.snap){
     for(const p of P.snap.positions){
       const bs = p.basis === "underlying" ? p.ref : p.s, e = p.est ? "≈" : "";
-      if(p.s === cur.s) mkLine(P.posLines, p.avg, cssv("--text"), "", 2);
-      else if(p.basis === "underlying" && p.ref === cur.s && p.basis_entry != null) mkLine(P.posLines, p.basis_entry, MUT, "", 2);
-      if(p.s === cur.s && p.floor != null) mkLine(P.posLines, p.floor, ACC, `BE floor +${p.be_ticks || 0} ticks · covers ${rs(p.be_covers)}`, 1);
+      if(p.s === cur.s) mkLine(P.posLines, p.avg, ENTRY, "", +C.entryS);
+      else if(p.basis === "underlying" && p.ref === cur.s && p.basis_entry != null) mkLine(P.posLines, p.basis_entry, ENTRY, "", +C.entryS);
+      if(p.s === cur.s && p.floor != null) mkLine(P.posLines, p.floor, C.beC, `BE floor +${p.be_ticks || 0} ticks · covers ${rs(p.be_covers)}`, +C.beS);
       if(bs !== cur.s) continue;
       const slTitle = p.at_be && p.basis === "self" ? `${p.trail ? "TRAIL" : "BE"} +${p.be_ticks} ticks · covers ${rs(p.be_covers)} · ${rsS(p.at_sl)}`
         : `SL ${e}${rsS(p.at_sl)}${p.trail ? " trail" : ""}`;
-      if(p.sl != null) drag(mkLine(P.posLines, p.sl, p.at_be && p.basis === "self" ? ACC : DOWN, slTitle, 0, 2), p.sl, tk(bs), v => papi("modify", {id: p.id, sl: v}));
-      if(p.tp != null) drag(mkLine(P.posLines, p.tp, UP, `TP ${e}${rsS(p.at_tp)}`, 0, 2), p.tp, tk(bs), v => papi("modify", {id: p.id, tp: v}));
+      const atBe = p.at_be && p.basis === "self";
+      if(p.sl != null) drag(mkLine(P.posLines, p.sl, atBe ? C.beC : C.slC, slTitle, atBe ? +C.beS : +C.slS, 2), p.sl, tk(bs), v => papi("modify", {id: p.id, sl: v}));
+      if(p.tp != null) drag(mkLine(P.posLines, p.tp, C.tpC, `TP ${e}${rsS(p.at_tp)}`, +C.tpS, 2), p.tp, tk(bs), v => papi("modify", {id: p.id, tp: v}));
     }
     for(const o of P.snap.orders){
-      if(o.s === cur.s) drag(mkLine(P.posLines, o.price, ACC, "", 2, 2), o.price, tk(o.s), v => papi("modify", {id: o.id, price: v}));
+      if(o.s === cur.s) drag(mkLine(P.posLines, o.price, C.orderC, "", +C.orderS, 2), o.price, tk(o.s), v => papi("modify", {id: o.id, price: v}));
       const bs = o.basis === "underlying" ? o.ref : o.s;
       if(bs !== cur.s) continue;
-      if(o.sl != null) drag(mkLine(P.posLines, o.sl, DOWN, `SL ${rsS(o.at_sl)}`, 2), o.sl, tk(bs), v => papi("modify", {id: o.id, sl: v}));
-      if(o.tp != null) drag(mkLine(P.posLines, o.tp, UP, `TP ${o.at_tp != null ? rsS(o.at_tp) : ""}`, 2), o.tp, tk(bs), v => papi("modify", {id: o.id, tp: v}));
+      if(o.sl != null) drag(mkLine(P.posLines, o.sl, C.slC, `SL ${rsS(o.at_sl)}`, +C.orderS), o.sl, tk(bs), v => papi("modify", {id: o.id, sl: v}));
+      if(o.tp != null) drag(mkLine(P.posLines, o.tp, C.tpC, `TP ${o.at_tp != null ? rsS(o.at_tp) : ""}`, +C.orderS), o.tp, tk(bs), v => papi("modify", {id: o.id, tp: v}));
     }
   }
   toolRedraw(true);
@@ -554,11 +555,12 @@ function toolRedraw(rebuild){
   if(rebuild || !show){ if(P.toolLines){ clearLines(P.toolLines.all); } P.toolLines = null; }
   P.toolDrags = [];
   if(show){
-    const UP = cssv("--up"), DOWN = cssv("--down"), ACC = cssv("--accent"), MUT = cssv("--muted");
+    const C = chartCfg();
     if(!P.toolLines){
       const all = [];
       P.toolLines = {all,
-        entry: mkLine(all, 0, ACC, "", 0, 2), sl: mkLine(all, 0, DOWN, "", 0, 2), tp: mkLine(all, 0, UP, "", 0, 2), be: mkLine(all, 0, MUT, "BE+costs", 1, 1)};
+        entry: mkLine(all, 0, C.toolC, "", +C.toolS, 2), sl: mkLine(all, 0, C.slC, "", +C.slS, 2), tp: mkLine(all, 0, C.tpC, "", +C.tpS, 2),
+        be: mkLine(all, 0, C.beC, "BE+costs", +C.beS, 1)};
     }
     const L = P.toolLines, bs = basisSym(), pl = P.plan;
     const set = (line, price, title) => line.applyOptions(price == null ? {price: 0, lineVisible: false, axisLabelVisible: false, title: ""}

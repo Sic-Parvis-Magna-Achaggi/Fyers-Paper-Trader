@@ -1,4 +1,4 @@
-# Paper trading: how it works (v0.4.2)
+# Paper trading: how it works (v0.4.3)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -25,7 +25,13 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
 
   These trailing settings belong to that trade. The panel's Trail row sets the defaults for new trades, and changing it there also changes every open trade.
 - **Pending orders** have a bar with their type and lots, and **✕** to cancel.
-- **Bid and ask** are solid lines, as in MT5: grey for bid, red for ask, with their prices on the scale.
+- **Bid and ask** are solid lines, as in MT5: grey for bid, red for ask, with their prices on the scale. A dashed **Last** line marks the last traded price, which is where the live candle closes. Candles are built from trades, so in a thin contract the candle can sit away from bid / ask until the next trade. Stops, targets and fills always use bid / ask.
+- **Chart settings (⚙):**
+  - colour and style for every line: bid, ask, last, entry, SL, TP, BE, order and new-trade entry;
+  - show or hide bid, ask and last;
+  - candle colours, zone colours and strength, background and grid.
+
+  They're saved with your preferences.
 
 ## Timeframes and full screen
 

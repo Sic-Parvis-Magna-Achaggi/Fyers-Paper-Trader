@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.4.3 — 30 Oct 2026 — Last line and chart settings
+
+Added
+- "Last" line at the last traded price (the live candle's close), labelled "Last" when it differs
+  from both bid and ask - shows why the candle can sit away from the bid / ask in thin contracts
+- Chart settings (⚙ above the chart): colour and style (solid, dashed, dotted, long dash) for the
+  bid, ask, last, position entry, stop loss, target, break-even / floor, pending order and new-trade
+  entry lines; show / hide bid, ask and last; candle up / down colours; loss and profit zone colours
+  and strength; background colour; grid on / off; Reset to defaults. Saved with your preferences
+
+Fixed
+- Preferences (watchlist, timeframes, last chart, theme, ticket defaults, stop distances) weren't being
+  saved to the server in v0.4.1 and v0.4.2 - a change in v0.4.1 removed that part of the helper by
+  mistake, so they only lived in the browser. Restored; a check of every helper route now runs
+  before each release
+
 ## v0.4.2 — 30 Oct 2026 — Break-even matched to LiveTrader
 
 Changed
