@@ -110,13 +110,23 @@ def _parse(name: str, fmt: str, seg: str, text: str) -> list:
     return [r for r in out if not r[6] or r[6] > now - 3 * 86400]        # drop contracts that expired days ago
 
 
+_fo_u: set = set()             # NSE / BSE underlyings that have futures (their stocks square off earlier at Fyers)
+
+
 def _rebuild():
-    global _rows, _hay, _by_ticker
+    global _rows, _hay, _by_ticker, _fo_u
     rows = [r for name, *_ in SOURCES for r in _parts.get(name, [])]
     _rows = rows
+    _fo_u = {(r[13], r[2]) for r in rows if r[9] == "FUT" and r[14] == "FO"}
     _hay = [(r[0] + " " + r[1] + " " + r[2]).upper() for r in rows]
     _by_ticker = {r[0]: i for i, r in enumerate(rows)}
     _dcache.clear()
+
+
+def has_fo(row: dict) -> bool:
+    """A stock with F&O contracts on its exchange (Fyers calls these CAS stocks)."""
+    x = row.get("x") or row.get("s", "").split(":", 1)[0]
+    return (x, row.get("u")) in _fo_u or ("NSE", row.get("u")) in _fo_u
 
 
 def _dict(r: tuple) -> dict:

@@ -231,6 +231,8 @@ async def setup(request: Request):
 async def login(request: Request):
     _same_origin(request)
     b = await _body(request)
+    if "username" not in b:            # a page loaded before v0.13 (single password) is still open
+        return _err("This page is out of date: reload it (Ctrl+Shift+R). Login now needs your username too.", 400)
     try:
         ptok, stage = users.login(b.get("username", ""), b.get("password", ""), _ip(request))
     except ValueError as e:

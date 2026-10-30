@@ -1,4 +1,4 @@
-# Paper trading: how it works (v0.13.0)
+# Paper trading: how it works (v0.13.1)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -27,7 +27,13 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
 - **Indices** are for charts only: BUY / SELL tells you an index can't be traded. Trade its futures or options.
 - **Stocks:** Intraday or Delivery (CNC). A delivery sell needs shares you hold, as at the broker; to short a stock, use Intraday.
 - **F&O, currency, commodities:** Intraday or Carry (NRML).
-- **Square-off and expiry-day exits** are per market: MCX 23:15 / 22:45, NSE and BSE 15:15 / 15:00, currency 16:45 / 12:00. All are in Rules.
+- **Product (Intraday or Carry / Delivery)** is chosen in the trade panel or with the **INTRADAY / NRML / CNC** button on the chart's PLACE box. Whatever you pick stays the default for later trades in that account (saved on the server) until you change it. Margin comes from Fyers for that product.
+- **Intraday square-off: 5 minutes before Fyers'.** Fyers squares off Intraday positions itself and charges ₹50 + GST per order for it. Its times: index and stock F&O **15:25**, stocks that have F&O **15:05**, other stocks **15:20**, MCX **23:20** while the US is on summer time and **23:45** the rest of the year. At 5 minutes before each one, the app:
+  - closes every Intraday position in that market;
+  - cancels pending Intraday orders;
+  - refuses new Intraday orders for the rest of the day (pick Carry / Delivery instead).
+- The app switches the MCX time by itself when US clocks change (second Sunday of March, first Sunday of November). The minutes, Fyers' times and on / off are all in Rules. Carry (NRML) and Delivery (CNC) positions are never squared off.
+- **Expiry-day exits:** MCX 22:45, NSE and BSE 15:00, currency 12:00 (Rules). Currency intraday closes at 16:45 (Fyers doesn't offer currency intraday at present).
 
 ## Pages
 
@@ -194,7 +200,7 @@ These are checked before every new order, as in LiveTrader:
 - daily loss %, max loss % (static or trailing), the buffer, and when the day starts;
 - risk cap per trade, max margin use and max open risk (lots are cut to fit);
 - max trades a day, and whether an SL is required;
-- intraday square-off time, the expiry-day exit time, and the stale-price limit.
+- intraday square-off (on / off, minutes before Fyers', and Fyers' own times per market), the expiry-day exit times, and the stale-price limit.
 
 An order is refused if, with every stop on the account hit, equity would fall below a floor plus the buffer. Widening a stop goes through the same check. Tightening, BE and trailing are never blocked.
 

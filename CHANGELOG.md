@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.13.1 — 31 Oct 2026 — Intraday square-off 5 minutes before Fyers, product switch on the chart
+
+Added
+- **Product on the chart:** the PLACE box has an **INTRADAY / NRML / CNC** button. Click to switch between
+  Intraday and Carry (Delivery for stocks). The choice stays the default for later trades in that account,
+  the same as the Product box in the panel.
+
+Changed
+- **Intraday square-off now runs 5 minutes before Fyers' own square-off** (Fyers charges ₹50 + GST per
+  order it closes). Fyers' times: index and stock F&O 15:25, stocks with F&O 15:05, other stocks 15:20,
+  MCX 23:20 (US summer time) / 23:45 (US winter time, from Mon 2 Nov). So the app closes at 15:20, 15:00,
+  15:15 and 23:15 / 23:40. The MCX time switches by itself when US clocks change.
+- At that moment the app also **cancels pending Intraday orders**, and **refuses new Intraday orders** for
+  the rest of the day (pick Carry / Delivery instead). Carry and Delivery are never touched.
+- Rules: "Intraday square-off" on / off, "Minutes before Fyers' square-off" (5; it shows today's times),
+  and Fyers' own times per market, in case Fyers changes them. These replace the three fixed square-off
+  times. If you had turned square-off off (empty times), it stays off.
+- An open page from before v0.13.0 that tries to log in now says "reload it" instead of "wrong username or
+  password".
+
 ## v0.13.0 — 30 Oct 2026 — Users with two-factor login, and several paper accounts
 
 **After this update:** open the page and log in with username **admin** and your existing page password.

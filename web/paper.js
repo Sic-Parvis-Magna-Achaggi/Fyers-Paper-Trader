@@ -687,13 +687,18 @@ function toolOverlay(){
     body = `<span class="tl${p.blocked ? " blocked" : ""}" title="${esc(p.blocked || (p.notes || []).join(" · "))}">${head} · ${p.lots} lot${p.lots === 1 ? "" : "s"}${money}${p.blocked ? " · " + esc(p.blocked) : ""}</span>`;
   }
   const canPlace = p && !p.blocked && p.lots > 0 && (onOwn || T.basis === "underlying");
-  const sig = [body, canPlace, T.follow, T.side].join("|");
+  const r0 = sym[T.s] || {}, stock = r0.f === "EQ" || r0.f === "OTHER";
+  const prodLbl = T.product === "INTRADAY" ? "INTRADAY" : stock ? "CNC" : "NRML";
+  const sig = [body, canPlace, T.follow, T.side, prodLbl].join("|");
   if(el.dataset.sig !== sig){
     el.dataset.sig = sig;
-    el.innerHTML = body + `<button class="tp ${T.side > 0 ? "buy" : "sell"}" id="tPlace" ${canPlace ? "" : "disabled"}>PLACE</button>`
+    el.innerHTML = body + `<button class="tx tprod${T.product === "INTRADAY" ? "" : " carry"}" id="tProd" title="${T.product === "INTRADAY" ? "Intraday: closed before Fyers' square-off. Click for " + (stock ? "Delivery (CNC)" : "Carry (NRML)") : (stock ? "Delivery (CNC)" : "Carry (NRML)") + ": kept overnight. Click for Intraday"}. Stays the default for later trades.">${prodLbl}</button>`
+      + `<button class="tp ${T.side > 0 ? "buy" : "sell"}" id="tPlace" ${canPlace ? "" : "disabled"}>PLACE</button>`
       + (T.follow ? "" : `<button class="tx" id="tMkt" title="Back to a market order">MKT</button>`)
       + `<button class="tx" id="tX" title="Close the tool">✕</button>`;
-    $("#tPlace").onclick = place; $("#tX").onclick = disarm; const m = $("#tMkt"); if(m) m.onclick = toMarket;
+    $("#tPlace").onclick = place; $("#tX").onclick = disarm;
+    $("#tProd").onclick = () => { P.T.product = P.T.product === "INTRADAY" ? (stock ? "CNC" : "MARGIN") : "INTRADAY";
+      $("#tkProd").value = P.T.product === "INTRADAY" ? "INTRADAY" : $("#tkProd").options[1].value; preview(); saveTicketDefaults(); }; const m = $("#tMkt"); if(m) m.onclick = toMarket;
   }
   el.classList.remove("hide");
   const x = P.toolX != null ? P.toolX : 60;
@@ -801,30 +806,40 @@ const RULES = [
   ["max_open_risk_pct", "Max open risk %", "Everything open at its stop, % of balance; 0 = off"],
   ["max_trades", "Max trades a day", "Pending orders count; 0 = no limit"],
   ["sl_required", "Stop loss required", "", [true, false]],
-  ["squareoff", "MCX intraday square-off (IST)", "Intraday positions close at this time, HH:MM; empty = off"],
+  ["squareoff_on", "Intraday square-off", "Close Intraday positions and cancel Intraday orders before Fyers squares them off (Fyers charges ₹50 + GST per order it closes)", [true, false]],
+  ["sq_before_min", "Minutes before Fyers' square-off", "SQTODAY"],
+  ["fy_sq_fo", "Fyers' square-off: index and stock F&O", "IST, HH:MM (Fyers' support page, Oct 2026)"],
+  ["fy_sq_eq_fo", "Fyers' square-off: stocks with F&O", "After this only Delivery (CNC) orders"],
+  ["fy_sq_eq", "Fyers' square-off: other stocks", ""],
+  ["fy_sq_mcx_summer", "Fyers' square-off: MCX, US summer time", "Mid-March to the first Sunday of November"],
+  ["fy_sq_mcx_winter", "Fyers' square-off: MCX, US winter time", "The rest of the year. The app switches by itself"],
   ["expiry_exit", "MCX expiry-day exit (IST)", "Positions in contracts expiring today close at this time; empty = off"],
-  ["squareoff_eq", "NSE / BSE intraday square-off (IST)", "Stocks and F&O on Intraday close at this time (Fyers squares off from about 15:15)"],
   ["expiry_exit_eq", "NSE / BSE expiry-day exit (IST)", "F&O expiring today close at this time"],
-  ["squareoff_cd", "Currency intraday square-off (IST)", ""],
+  ["squareoff_cd", "Currency intraday square-off (IST)", "Fyers doesn't offer currency intraday at present"],
   ["expiry_exit_cd", "Currency expiry-day exit (IST)", ""],
   ["stale_sec", "Stale price (seconds)", "Market orders are refused when the last price is older"],
   ["be_buffer_ticks", "BE buffer (ticks)", "Extra ticks beyond break-even + costs when a stop moves to BE (BE, BE all, Trail BE)"],
 ];
+function sqToday(){
+  const t = (P.snap || {}).squareoff_today || {};
+  const parts = Object.entries(t).map(([k, v]) => `${k} ${v}`);
+  return parts.length ? "Today the app closes Intraday at: " + parts.join(" · ") : "0 = at Fyers' time";
+}
 function renderRules(sel = "#rulesForm"){
   if(!P.snap || !$(sel)) return;
   if(sel === "#rulesForm") P.rulesShown = true;
   const r = P.snap.rules;
   $(sel).innerHTML = RULES.map(([k, label, help, opts]) => `<div class="rf"><label>${label}</label>` +
-    (opts ? `<select data-k="${k}">${opts.map(o => `<option value="${o}" ${String(r[k]) === String(o) ? "selected" : ""}>${o === true ? "required" : o === false ? "optional" : o}</option>`).join("")}</select>`
+    (opts ? `<select data-k="${k}">${opts.map(o => `<option value="${o}" ${String(r[k]) === String(o) ? "selected" : ""}>${o === true ? (k === "squareoff_on" ? "on" : "required") : o === false ? (k === "squareoff_on" ? "off" : "optional") : o}</option>`).join("")}</select>`
           : `<input data-k="${k}" value="${esc(r[k])}" ${typeof r[k] === "number" ? 'inputmode="decimal"' : ""}>`) +
-    (help ? `<div class="help">${help}</div>` : "") + `</div>`).join("");
+    (help ? `<div class="help">${help === "SQTODAY" ? sqToday() : help}</div>` : "") + `</div>`).join("");
 }
 async function saveRules(sel = "#rulesForm", msgSel = "#rulesMsg"){
   const body = {};
   document.querySelectorAll(sel + " [data-k]").forEach(el => {
     const k = el.dataset.k; let v = el.value;
-    if(k === "sl_required") v = v === "true";
-    else if(!["max_mode", "day_from", "squareoff", "expiry_exit", "squareoff_eq", "expiry_exit_eq", "squareoff_cd", "expiry_exit_cd"].includes(k)) v = num(v);
+    if(k === "sl_required" || k === "squareoff_on") v = v === "true";
+    else if(!["max_mode", "day_from"].includes(k) && !/^(expiry_exit|squareoff_cd|fy_sq)/.test(k)) v = num(v);
     body[k] = v;
   });
   const j = await papi("rules", body);

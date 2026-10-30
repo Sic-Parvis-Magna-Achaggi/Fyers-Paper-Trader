@@ -37,13 +37,44 @@ DEFAULT_RULES = {
     "sl_required": True,
     "stale_sec": 90,          # refuse market orders when the last price is older (market closed)
     "be_buffer_ticks": 0,     # extra ticks beyond break-even + costs when moving a stop to BE (LiveTrader: BE buffer)
-    "squareoff": "23:15",     # MCX: INTRADAY positions are closed at this IST time ("" = off)
-    "expiry_exit": "22:45",   # MCX: positions in contracts expiring today are closed at this IST time ("" = off)
-    "squareoff_eq": "15:15",  # NSE / BSE stocks and F&O, intraday
+    # intraday square-off: the app closes Intraday positions (and cancels Intraday orders) this many minutes before
+    # Fyers' own square-off, so Fyers' ₹50 + GST per order charge is never paid. Fyers' times below (support page, Oct 2026).
+    "squareoff_on": True,
+    "sq_before_min": 5,
+    "fy_sq_fo": "15:25",        # NSE / BSE index and stock F&O
+    "fy_sq_eq_fo": "15:05",     # stocks that have F&O
+    "fy_sq_eq": "15:20",        # other stocks
+    "fy_sq_mcx_summer": "23:20",  # MCX while the US is on daylight saving time (mid-March to early November)
+    "fy_sq_mcx_winter": "23:45",  # MCX the rest of the year
+    "squareoff_cd": "16:45",    # currency (Fyers doesn't offer currency intraday at present): the app's own time
+    "expiry_exit": "22:45",     # MCX: positions in contracts expiring today are closed at this IST time ("" = off)
     "expiry_exit_eq": "15:00",
-    "squareoff_cd": "16:45",  # currency, intraday
     "expiry_exit_cd": "12:00",
 }
+TIME_KEYS = ("expiry_exit", "expiry_exit_eq", "expiry_exit_cd", "squareoff_cd", "fy_sq_fo", "fy_sq_eq_fo", "fy_sq_eq",
+             "fy_sq_mcx_summer", "fy_sq_mcx_winter")
+
+
+TIME_LABELS = {"expiry_exit": "MCX expiry-day exit", "expiry_exit_eq": "NSE / BSE expiry-day exit",
+               "expiry_exit_cd": "Currency expiry-day exit", "squareoff_cd": "Currency square-off",
+               "fy_sq_fo": "Fyers' F&O square-off", "fy_sq_eq_fo": "Fyers' square-off for stocks with F&O",
+               "fy_sq_eq": "Fyers' square-off for other stocks", "fy_sq_mcx_summer": "Fyers' MCX square-off (summer)",
+               "fy_sq_mcx_winter": "Fyers' MCX square-off (winter)"}
+
+
+def us_dst(d: dt.date) -> bool:
+    """US daylight saving time: second Sunday of March to first Sunday of November. MCX's evening hours (and Fyers'
+    commodity square-off) follow it from the next trading day."""
+    def nth_sunday(month, n):
+        first = dt.date(d.year, month, 1)
+        return first + dt.timedelta(days=(6 - first.weekday()) % 7 + 7 * (n - 1))
+    return nth_sunday(3, 2) < d <= nth_sunday(11, 1)
+
+
+def hm_minus(hm: str, minutes: float) -> str:
+    h, m = int(hm[:2]), int(hm[3:])
+    t = max(0, h * 60 + m - int(minutes))
+    return f"{t // 60:02d}:{t % 60:02d}"
 DEFAULT_TICKET = {"mode": "pct", "risk_pct": 1.0, "risk_amt": 250.0, "lots": 1, "product": "INTRADAY", "tp_r": 2.0}
 DEFAULT_TRAIL = {"be_on": False, "be_r": 1.0, "sl_on": False, "sl_r": 1.0}
 
@@ -111,7 +142,10 @@ class Paper:
     # ------------------------------------------------------------ storage
     def load(self):
         s = store.load(self.dir + "paper.json")
-        self.rules = {**DEFAULT_RULES, **store.load(self.dir + "paper_rules.json")}
+        saved = store.load(self.dir + "paper_rules.json")
+        if "squareoff" in saved and "squareoff_on" not in saved:      # before v0.13.1: fixed clock times, "" = off
+            saved["squareoff_on"] = bool(saved.get("squareoff") or saved.get("squareoff_eq"))
+        self.rules = {**DEFAULT_RULES, **{k: v for k, v in saved.items() if k in DEFAULT_RULES}}
         self.acct = s.get("acct") or {"start": self.rules["size"], "realized": 0.0, "peak": self.rules["size"],
                                       "created": now(), "cycle": 1}
         self.day = s.get("day") or {}
@@ -301,6 +335,10 @@ class Paper:
         elif product == "CNC":
             product = "MARGIN"
         row = {**row0, "prod": product}
+        if product == "INTRADAY" and (sq := self.intraday_closed(row0, row0["s"])):
+            alt = "Delivery (CNC)" if row0["f"] in ("EQ", "OTHER") else "Carry (NRML)"
+            raise Refused(f"Intraday is closed for today in this market (the app squares off at {sq}, {self.rules.get('sq_before_min', 5):g} min "
+                          f"before Fyers) - use {alt}")
         lot = row.get("lot") or 1
         basis = req.get("basis") if row["f"] == "OPT" and req.get("basis") == "underlying" else "self"
         out = {"s": row["s"], "side": side, "type": typ, "product": product, "basis": basis, "notes": [],
@@ -844,14 +882,48 @@ class Paper:
             self.changed(f"{self.short(pos['s'])}: stop now {pos.get('sl')}" + (f", floor {pos['floor']}" if pos.get("floor") else ""))
         return moved
 
-    def _times(self, row: dict, s: str) -> tuple:
-        """(intraday square-off, expiry-day exit) for this contract's market."""
-        ex = row.get("x") or s.split(":", 1)[0]
-        if ex == "MCX" or (row.get("g") == "COM"):
-            return self.rules["squareoff"], self.rules["expiry_exit"]
+    def fyers_squareoff(self, row: dict, s: str, day: dt.date | None = None):
+        """Fyers' own intraday square-off time for this contract (IST HH:MM), or None."""
+        R, ex = self.rules, row.get("x") or s.split(":", 1)[0]
+        if ex == "MCX" or row.get("g") == "COM":
+            return R["fy_sq_mcx_summer"] if us_dst(day or ist().date()) else R["fy_sq_mcx_winter"]
         if row.get("g") == "CD":
-            return self.rules.get("squareoff_cd"), self.rules.get("expiry_exit_cd")
-        return self.rules.get("squareoff_eq"), self.rules.get("expiry_exit_eq")
+            return None
+        if row.get("f") in ("EQ", "OTHER"):
+            return R["fy_sq_eq_fo"] if symbols.has_fo(row) else R["fy_sq_eq"]
+        return R["fy_sq_fo"]
+
+    def _times(self, row: dict, s: str) -> tuple:
+        """(the app's intraday square-off, expiry-day exit) for this contract's market."""
+        R, ex = self.rules, row.get("x") or s.split(":", 1)[0]
+        sq = None
+        if R.get("squareoff_on"):
+            if row.get("g") == "CD":
+                sq = R.get("squareoff_cd") or None
+            else:
+                fy = self.fyers_squareoff(row, s)
+                sq = hm_minus(fy, R.get("sq_before_min", 5)) if fy else None
+        if ex == "MCX" or row.get("g") == "COM":
+            return sq, R["expiry_exit"]
+        if row.get("g") == "CD":
+            return sq, R.get("expiry_exit_cd")
+        return sq, R.get("expiry_exit_eq")
+
+    def squareoff_today(self) -> dict:
+        """When the app closes Intraday today, per market (for the Rules screen)."""
+        R = self.rules
+        if not R.get("squareoff_on"):
+            return {}
+        b = R.get("sq_before_min", 5)
+        mcx = R["fy_sq_mcx_summer"] if us_dst(ist().date()) else R["fy_sq_mcx_winter"]
+        return {"F&O": hm_minus(R["fy_sq_fo"], b), "stocks with F&O": hm_minus(R["fy_sq_eq_fo"], b),
+                "other stocks": hm_minus(R["fy_sq_eq"], b), "MCX": hm_minus(mcx, b)}
+
+    def intraday_closed(self, row: dict, s: str):
+        """The app's square-off time if it has passed today (no new Intraday orders until the next day), else None."""
+        sq = self._times(row, s)[0]
+        t = ist()
+        return sq if sq and t.hour >= 9 and t.strftime("%H:%M") >= sq else None
 
     def housekeeping(self):
         """Every few seconds: new day, intraday square-off, expiry-day exit, and saving best/worst prices."""
@@ -877,10 +949,13 @@ class Paper:
                     self.changed(f"{self.short(pos['s'])}: due for {why} but there's no live price", "warn")
         for o in list(self.orders):
             row = symbols.get(o["s"]) or {}
-            ex_t = self._times(row, o["s"])[1]
+            sq, ex_t = self._times(row, o["s"])
             if row.get("exp") and ist(row["exp"]).date() == today and ex_t and hm >= ex_t:
                 self.cancel(o["id"], quiet=True)
                 self.changed(f"Cancelled {self.short(o['s'])} order: contract expires today")
+            elif sq and o["product"] == "INTRADAY" and hm >= sq and t.hour >= 9:
+                self.cancel(o["id"], quiet=True)
+                self.changed(f"Cancelled {self.short(o['s'])} Intraday order: intraday square-off at {sq}")
         if self._dirty_at and now() - self._dirty_at > 10:
             self.save()
 
@@ -980,7 +1055,7 @@ class Paper:
         }
         return {"acct": acct, "positions": [self.pos_view(p) for p in self.positions],
                 "orders": [self.order_view(o) for o in self.orders], "trail": self.trail, "ticket": self.ticket,
-                "rules": self.rules, "events": self.events[-20:], "day": self.day}
+                "rules": self.rules, "events": self.events[-20:], "day": self.day, "squareoff_today": self.squareoff_today()}
 
     def set_rules(self, new: dict):
         r = dict(self.rules)
@@ -996,10 +1071,14 @@ class Paper:
                     raise Refused(f"{k} can't be negative")
                 if isinstance(d, int):
                     v = int(v)
-            elif k in ("squareoff", "expiry_exit", "squareoff_eq", "expiry_exit_eq", "squareoff_cd", "expiry_exit_cd"):
+            elif k in TIME_KEYS:
                 v = str(v or "").strip()
-                if v and not (len(v) == 5 and v[2] == ":" and v[:2].isdigit() and v[3:].isdigit()):
-                    raise Refused(f"{k}: use HH:MM, e.g. 23:15")
+                if len(v) == 4 and v[1] == ":":
+                    v = "0" + v
+                if v and not (len(v) == 5 and v[2] == ":" and v[:2].isdigit() and v[3:].isdigit() and int(v[:2]) < 24 and int(v[3:]) < 60):
+                    raise Refused(f"{TIME_LABELS.get(k, k)}: use HH:MM in 24-hour time, e.g. 15:25")
+                if not v and k.startswith("fy_sq"):
+                    raise Refused("Fyers' square-off times can't be empty (turn the app's square-off off instead)")
             elif k == "max_mode" and v not in ("static", "trailing"):
                 raise Refused("max loss: static or trailing")
             elif k == "day_from" and v not in ("balance", "equity", "higher"):
@@ -1007,6 +1086,8 @@ class Paper:
             r[k] = v
         if r["size"] <= 0:
             raise Refused("size must be above 0")
+        if r["sq_before_min"] > 60:
+            raise Refused("square-off: at most 60 minutes before Fyers'")
         size_changed = r["size"] != self.rules["size"]
         self.rules = r
         store.save(self.dir + "paper_rules.json", r)
