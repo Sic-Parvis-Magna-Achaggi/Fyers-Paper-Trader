@@ -114,6 +114,16 @@ section.chartwrap{display:grid;grid-template-rows:auto minmax(0,1fr);min-width:0
 #tool .tp{color:#fff} #tool .tp.buy{background:var(--up);border-color:var(--up)} #tool .tp.sell{background:var(--down);border-color:var(--down)}
 #tool .tp:disabled{opacity:.45;cursor:not-allowed}
 #tool .tx{background:var(--panel);padding:3px 7px}
+/* control bar on each position's entry line */
+#posbars .pbar{position:absolute;z-index:7;display:flex;align-items:center;gap:3px;transform:translateY(-50%);padding:2px 3px 2px 8px;
+  background:var(--panel);border:1px solid var(--line);border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.25);font-size:12px;white-space:nowrap}
+#posbars .pt{font-family:var(--mono);margin-right:4px}
+#posbars .pt b{font-weight:600}
+#posbars button{padding:2px 7px;font-size:11px;font-weight:600;border-radius:4px;line-height:1.3}
+#posbars button.bx{background:var(--down);border-color:var(--down);color:#fff;padding:2px 8px}
+#posbars button.tg.on{background:var(--accent);border-color:var(--accent);color:#fff}
+#posbars input.rr{width:38px;padding:2px 4px;font-size:11px;font-family:var(--mono);text-align:center;border-radius:4px}
+@media (max-width:760px){ #posbars .pbar{font-size:11px} #posbars input.rr{width:32px} }
 #chartMsg{position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;color:var(--muted);text-align:center;padding:20px;pointer-events:none}
 
 /* drawer */
@@ -139,7 +149,7 @@ body.chartfs header,body.chartfs aside{display:none!important}
 body.chartfs main{position:fixed!important;inset:0;z-index:40;background:var(--bg);display:block!important;overflow:hidden!important}
 body.chartfs section.chartwrap{position:absolute;inset:0;height:100%;width:100%}
 body.chartfs #panel{display:none}
-body.chartfs.fspanel #panel{display:block!important;position:absolute;top:0;right:0;bottom:0;width:min(360px,100%);z-index:45;box-shadow:-8px 0 24px rgba(0,0,0,.35)}
+body.chartfs.fspanel #panel{display:block!important;position:absolute;top:41px;right:0;bottom:0;width:min(360px,100%);z-index:45;box-shadow:-8px 0 24px rgba(0,0,0,.35)}
 body.nopanel:not(.chartfs) #panel{display:none!important}
 body.nopanel:not(.chartfs) main{grid-template-columns:260px 1fr}
 /* trade panel */
@@ -277,7 +287,7 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
         <div class="tf" id="tf"></div>
         <button class="tfmore" id="bTf" title="All timeframes and custom">▾</button>
         <button class="ghost fsb" id="bPanel" title="Show or hide the trade panel (P)">Panel</button>
-        <button class="ghost fsb" id="bFull" title="Full screen (F)">⛶</button>
+        <button class="ghost fsb" id="bFull" title="Maximise the chart in this window (F · Shift+F = full screen)">⛶</button>
       </div>
       <div id="tfPick" class="hide">
         <div class="h">Pick a timeframe · ★ = on the bar (right-click or long-press to pin)</div>
@@ -288,10 +298,12 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
       <div id="chart"><div id="chartMsg">Pick a contract from Find or Options.</div>
         <div id="ctools"><button id="cBuy" title="Long tool">BUY</button><button id="cSell" title="Short tool">SELL</button></div>
         <div id="tool" class="hide"></div>
+        <div id="posbars"></div>
       </div>
     </section>
     <section id="panel">
-      <div style="display:flex;align-items:center;gap:8px"><h4 style="margin:4px 0 6px;flex:1">Paper account</h4><span class="tag">SIM</span></div>
+      <div style="display:flex;align-items:center;gap:8px"><h4 style="margin:4px 0 6px;flex:1">Paper account</h4><span class="tag">SIM</span>
+        <button class="ghost" id="bPanelX" title="Hide this panel (P)" style="padding:2px 8px;font-size:15px">✕</button></div>
       <div id="acct"></div><div id="acctFoot"></div>
 
       <h4>New trade</h4>
@@ -315,7 +327,8 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
       </div>
       <div class="status" id="tkStatus"></div>
 
-      <h4>Manage</h4>
+      <h4>Manage · trailing defaults</h4>
+      <p class="help" style="margin:0 0 6px">Used for new trades; changing them here also changes every open trade. Each trade's own settings are on its entry line on the chart.</p>
       <div class="trail"><span>Trail BE</span><input id="trBeR" inputmode="decimal"><button id="trBe">off</button>
         <span>Trail SL</span><input id="trSlR" inputmode="decimal"><button id="trSl">off</button></div>
       <div class="acts"><button id="bBeAll">BE all</button><button id="bCloseAll">Close all</button></div>
@@ -543,6 +556,7 @@ function onTick(t){
     $("#cLtp").textContent = fmt(t.ltp, cur.tick);
     $("#cMeta").textContent = (t.bid != null ? `Bid ${fmt(t.bid, cur.tick)} · Ask ${fmt(t.ask, cur.tick)} · ` : "") + (t.src === "poll" ? "polled" : "live");
     liveBar(t);
+    bidAsk(t);
   }
 }
 
@@ -561,7 +575,19 @@ function buildChart(){
     crosshair:{mode:0}
   });
   series = chart.addCandlestickSeries({upColor:cssVar("--up"), downColor:cssVar("--down"), borderVisible:false,
-    wickUpColor:cssVar("--up"), wickDownColor:cssVar("--down")});
+    wickUpColor:cssVar("--up"), wickDownColor:cssVar("--down"), priceLineVisible:false, lastValueVisible:false});
+  // MT5-style solid bid (grey) and ask (red) lines with their prices on the scale
+  bidLine = series.createPriceLine({price:0, color:"#a3abb8", lineWidth:1, lineStyle:0, axisLabelVisible:true, lineVisible:false, title:""});
+  askLine = series.createPriceLine({price:0, color:"#e2483d", lineWidth:1, lineStyle:0, axisLabelVisible:true, lineVisible:false, title:""});
+  bidLine.applyOptions({axisLabelVisible:false}); askLine.applyOptions({axisLabelVisible:false});
+}
+let bidLine = null, askLine = null;
+function bidAsk(t){
+  if(!bidLine) return;
+  const bid = t.bid || t.ltp, ask = t.ask;
+  bidLine.applyOptions({price: bid, lineVisible: true, axisLabelVisible: true, axisLabelColor: "#a3abb8", axisLabelTextColor: "#0f1216"});
+  if(ask && ask !== bid) askLine.applyOptions({price: ask, lineVisible: true, axisLabelVisible: true, axisLabelColor: "#e2483d", axisLabelTextColor: "#fff"});
+  else askLine.applyOptions({lineVisible: false, axisLabelVisible: false});
 }
 function setTf(k){ tf = k; prefSet("tf2", tf); tfButtons(); loadHistory(); }
 function tfButtons(){
@@ -607,6 +633,7 @@ async function openSymbol(row){
   $("#cSym").textContent = row.s.replace("MCX:", "");
   $("#cLtp").textContent = last[row.s] ? fmt(last[row.s].ltp, row.tick) : "";
   $("#cMeta").textContent = "";
+  if(bidLine){ bidLine.applyOptions({lineVisible:false, axisLabelVisible:false}); askLine.applyOptions({lineVisible:false, axisLabelVisible:false}); }
   sendWant();
   loadHistory();
   paperOnSymbol(row);
@@ -636,6 +663,7 @@ async function loadHistory(){
   msg.classList.toggle("hide", bars.length > 0);
   if(!bars.length) msg.textContent = "No candles for this range yet.";
   chart.timeScale().scrollToRealTime();
+  if(last[cur.s]) bidAsk(last[cur.s]);
   drawLines();
 }
 let curPlan = null;
@@ -790,15 +818,17 @@ $("#bLogs").onclick = loadLogs;
 
 /* ---------------------------------------------------------------- start */
 /* full screen and panel toggles */
-function setFull(on){
+/* F / ⛶ maximises the chart inside the browser window (tabs stay one click away).
+   Shift+F also asks the browser for real full screen. */
+function setFull(on, real){
   document.body.classList.toggle("chartfs", on);
   if(!on) document.body.classList.remove("fspanel");
   const de = document.documentElement;
   try{
-    if(on && !document.fullscreenElement && de.requestFullscreen) de.requestFullscreen().catch(()=>{});
+    if(on && real && !document.fullscreenElement && de.requestFullscreen) de.requestFullscreen().catch(()=>{});
     if(!on && document.fullscreenElement) document.exitFullscreen().catch(()=>{});
   }catch(e){}
-  $("#bFull").textContent = on ? "✕" : "⛶"; $("#bFull").title = on ? "Exit full screen (F or Esc)" : "Full screen (F)";
+  $("#bFull").textContent = on ? "✕" : "⛶"; $("#bFull").title = on ? "Back to normal view (F or Esc)" : "Maximise the chart in this window (F · Shift+F = full screen)";
 }
 function togglePanel(){
   if(document.body.classList.contains("chartfs")){ document.body.classList.toggle("fspanel"); return; }   // in full screen the panel slides over the chart
@@ -806,10 +836,11 @@ function togglePanel(){
 }
 $("#bFull").onclick = () => setFull(!document.body.classList.contains("chartfs"));
 $("#bPanel").onclick = togglePanel;
+$("#bPanelX").onclick = togglePanel;
 document.addEventListener("fullscreenchange", () => { if(!document.fullscreenElement && document.body.classList.contains("chartfs")) setFull(false); });
 document.addEventListener("keydown", e => {
   if(e.target.closest("input,select,textarea") || e.ctrlKey || e.metaKey || e.altKey) return;
-  if(e.key === "f" || e.key === "F"){ e.preventDefault(); setFull(!document.body.classList.contains("chartfs")); }
+  if(e.key === "f" || e.key === "F"){ e.preventDefault(); setFull(!document.body.classList.contains("chartfs"), e.shiftKey); }
   if(e.key === "p" || e.key === "P"){ e.preventDefault(); togglePanel(); }
   if(e.key === "Escape" && document.body.classList.contains("chartfs")) setFull(false);
 });

@@ -1,4 +1,4 @@
-# Paper trading: how it works (v0.3.0)
+# Paper trading: how it works (v0.4.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -16,7 +16,16 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
   - The stop distance you set is remembered per instrument and used next time.
   - The target defaults to your R (Settings: the ticket's R box), net of charges.
 - **PLACE** sends it; **✕** closes the tool. The side panel shows the same trade with more detail (charges, margin, BE + costs). You don't need it open to trade.
-- **Open positions** show their zones from the entry candle, with SL and TP lines you can drag and a red **✕** on the entry line to close at market in one click. Pending orders have a grey **✕** to cancel.
+- **Open positions** show their zones from the entry candle and SL / TP lines you can drag. A control bar sits on the entry line, just left of the price scale. It shows:
+  - side, lots, live net P&L and R;
+  - **✕** to close at market;
+  - **BE** to move the stop to break-even + costs now;
+  - **BE-T** with its R box: trail to BE once the trade reaches that R;
+  - **TRAIL** with its R box: trail the stop that many R behind the best price.
+
+  These trailing settings belong to that trade. The panel's Trail row sets the defaults for new trades, and changing it there also changes every open trade.
+- **Pending orders** have a bar with their type and lots, and **✕** to cancel.
+- **Bid and ask** are solid lines, as in MT5: grey for bid, red for ask, with their prices on the scale.
 
 ## Timeframes and full screen
 
@@ -24,7 +33,7 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
   - Type any other, such as `7m`, `90m`, `2h` or `3D`, and press Use.
   - Right-click one (or long-press on a phone) to pin or unpin it.
 - Timeframes Fyers doesn't serve directly are built from smaller candles, starting at the session open (09:00 for MCX).
-- **⛶ or F** opens full screen. In full screen, **P** slides the panel over the chart, and **Esc** exits.
+- **⛶ or F** maximises the chart inside the browser window, so your tabs stay one click away. **Shift+F** gives real full screen. When maximised, **P** (or Panel) slides the trade panel in, its **✕** hides it, and **Esc** goes back to the normal view.
 
 ## Saved on the server
 

@@ -6,6 +6,15 @@ It runs on our own server and serves its own page, so there is nothing to instal
 
 **Address:** https://68-183-245-178.sslip.io
 
+## Version 0.4.0: chart controls
+
+- **A control bar on each position's entry line:** close, BE, BE-trail and trail, each trail with its own R box.
+- **Solid bid and ask lines,** as in MT5.
+- **⛶ / F maximises the chart in the browser window,** so your tabs stay one click away. Shift+F gives real full screen.
+- **The panel has its own ✕.**
+
+See `CHANGELOG.md` for every version.
+
 ## Version 0.3.0: trade from the chart
 
 - **An MT5-style long/short tool on the chart:**

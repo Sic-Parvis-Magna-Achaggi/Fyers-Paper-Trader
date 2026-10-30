@@ -473,6 +473,7 @@ function drawZones(ctx, size){
 /* one-click ✕ on each open position's entry line (this chart), like the MT5 EA */
 function drawMarks(ctx, size){
   P.hits = [];
+  return;                                   // position / order controls are HTML bars now (posBars)
   if(!P.snap || !cur) return;
   for(const p of P.snap.positions){
     if(p.s !== cur.s) continue;
@@ -502,7 +503,7 @@ function ensurePrim(){
     const h = (P.hits || []).find(h => Math.abs(param.point.x - h.x) <= h.r && Math.abs(param.point.y - h.y) <= h.r);
     if(h) h.act();
   });
-  chart.timeScale().subscribeVisibleLogicalRangeChange(() => toolOverlay());
+  chart.timeScale().subscribeVisibleLogicalRangeChange(() => { toolOverlay(); posBars(); });
   // keep the tool's and positions' SL / TP inside the visible price range, so they can always be grabbed
   series.applyOptions({autoscaleInfoProvider: orig => {
     const r = orig(); if(!r || !r.priceRange) return r;
@@ -526,14 +527,15 @@ function drawLines(){
   if(P.snap){
     for(const p of P.snap.positions){
       const bs = p.basis === "underlying" ? p.ref : p.s, e = p.est ? "≈" : "";
-      if(p.s === cur.s) mkLine(P.posLines, p.avg, MUT, `${p.side > 0 ? "LONG" : "SHORT"} ${p.lots} · ${rsS(p.net)}`, 2);
+      if(p.s === cur.s) mkLine(P.posLines, p.avg, cssv("--text"), "", 2);
+      else if(p.basis === "underlying" && p.ref === cur.s && p.basis_entry != null) mkLine(P.posLines, p.basis_entry, MUT, "", 2);
       if(p.s === cur.s && p.floor != null) mkLine(P.posLines, p.floor, DOWN, "floor (BE)", 1);
       if(bs !== cur.s) continue;
       if(p.sl != null) drag(mkLine(P.posLines, p.sl, DOWN, `SL ${e}${rsS(p.at_sl)}${p.trail ? " trail" : ""}`, 0, 2), p.sl, tk(bs), v => papi("modify", {id: p.id, sl: v}));
       if(p.tp != null) drag(mkLine(P.posLines, p.tp, UP, `TP ${e}${rsS(p.at_tp)}`, 0, 2), p.tp, tk(bs), v => papi("modify", {id: p.id, tp: v}));
     }
     for(const o of P.snap.orders){
-      if(o.s === cur.s) drag(mkLine(P.posLines, o.price, ACC, `${o.side > 0 ? "BUY" : "SELL"} ${o.type} ${o.lots}`, 2, 2), o.price, tk(o.s), v => papi("modify", {id: o.id, price: v}));
+      if(o.s === cur.s) drag(mkLine(P.posLines, o.price, ACC, "", 2, 2), o.price, tk(o.s), v => papi("modify", {id: o.id, price: v}));
       const bs = o.basis === "underlying" ? o.ref : o.s;
       if(bs !== cur.s) continue;
       if(o.sl != null) drag(mkLine(P.posLines, o.sl, DOWN, `SL ${rsS(o.at_sl)}`, 2), o.sl, tk(bs), v => papi("modify", {id: o.id, sl: v}));
@@ -574,7 +576,71 @@ function toolRedraw(rebuild){
   }
   P.drags = [...(P.posDrags || []), ...P.toolDrags];
   if(P.prim) P.prim.update();
-  toolOverlay();
+  toolOverlay(); posBars();
+}
+/* a control bar on each position's entry line (right side, clear of the price scale):
+   side · lots · net P&L, ✕ close, BE, BE-trail [R], trail [R]. Pending orders get a bar with ✕ cancel. */
+function posBars(){
+  const host = $("#posbars");
+  if(!host) return;
+  if(!series || !cur || !P.snap){ host.innerHTML = ""; P.barKey = ""; return; }
+  const items = [];
+  for(const p of P.snap.positions){
+    const y0 = p.s === cur.s ? p.avg : (p.basis === "underlying" && p.ref === cur.s ? p.basis_entry : null);
+    if(y0 != null) items.push({kind: "pos", id: p.id, price: y0, p});
+  }
+  for(const o of P.snap.orders) if(o.s === cur.s) items.push({kind: "ord", id: o.id, price: o.price, o});
+  const key = items.map(i => i.kind === "pos" ? [i.id, i.p.tr.be_on, i.p.tr.be_r, i.p.tr.sl_on, i.p.tr.sl_r, i.p.lots, i.p.be_done].join("|") : i.id).join(";");
+  const focused = host.contains(document.activeElement) && document.activeElement.tagName === "INPUT";
+  if(key !== P.barKey && !focused){
+    P.barKey = key;
+    host.innerHTML = items.map(i => {
+      if(i.kind === "ord") return `<div class="pbar" data-id="${i.id}"><span class="pt" data-f="t"></span><button class="bx" data-a="cancel" title="Cancel order">✕</button></div>`;
+      const t = i.p.tr;
+      return `<div class="pbar" data-id="${i.id}"><span class="pt" data-f="t"></span>
+        <button class="bx" data-a="close" title="Close at market">✕</button>
+        <button data-a="be" title="Stop to break-even + costs now">BE</button>
+        <button class="tg ${t.be_on ? "on" : ""}" data-a="be_on" title="Trail BE: move the stop to BE + costs once the trade reaches this many R">BE-T</button><input class="rr" data-a="be_r" value="${t.be_r}" inputmode="decimal" title="R for trail BE">
+        <button class="tg ${t.sl_on ? "on" : ""}" data-a="sl_on" title="Trail SL: follow the best price this many R behind">TRAIL</button><input class="rr" data-a="sl_r" value="${t.sl_r}" inputmode="decimal" title="R for trail SL">
+      </div>`;
+    }).join("");
+    host.querySelectorAll(".pbar").forEach(el => {
+      const id = el.dataset.id;
+      const pos = () => P.snap.positions.find(x => x.id === id);
+      el.querySelectorAll("button").forEach(b => b.onclick = e => { e.stopPropagation();
+        const a = b.dataset.a;
+        if(a === "close") return papi("close", {id});
+        if(a === "cancel") return papi("cancel", {id});
+        if(a === "be") return papi("be", {id});
+        const p = pos(); if(!p) return;
+        if(a === "be_on") return papi("pos_trail", {id, be_on: !p.tr.be_on, be_r: num(el.querySelector('[data-a="be_r"]').value) || p.tr.be_r});
+        if(a === "sl_on") return papi("pos_trail", {id, sl_on: !p.tr.sl_on, sl_r: num(el.querySelector('[data-a="sl_r"]').value) || p.tr.sl_r});
+      });
+      el.querySelectorAll("input.rr").forEach(inp => {
+        const save = () => { const v = num(inp.value); if(v && v > 0){ const b = {id}; b[inp.dataset.a] = v; papi("pos_trail", b); } };
+        inp.onkeydown = e => { e.stopPropagation(); if(e.key === "Enter"){ save(); inp.blur(); } };
+        inp.onchange = save;
+      });
+      for(const ev of ["mousedown", "touchstart"]) el.addEventListener(ev, e => e.stopPropagation());
+    });
+  }
+  // place each bar on its line, just left of the price scale, and refresh its text
+  const axis = (() => { try{ return chart.priceScale("right").width(); }catch(e){ return 60; } })();
+  for(const i of items){
+    const el = host.querySelector(`.pbar[data-id="${i.id}"]`); if(!el) continue;
+    const y = series.priceToCoordinate(i.price);
+    if(y == null){ el.style.display = "none"; continue; }
+    el.style.display = ""; el.style.top = y + "px"; el.style.right = (axis + 6) + "px";
+    const t = el.querySelector('[data-f="t"]');
+    if(i.kind === "pos"){
+      const p = i.p;
+      t.innerHTML = `<b class="${p.side > 0 ? "up" : "down"}">${p.side > 0 ? "LONG" : "SHORT"} ${p.lots}</b> <span class="${cls(p.net)}">${rsS(p.net)}</span>`
+        + (p.r_now != null ? ` <span class="muted">${p.r_now > 0 ? "+" : ""}${p.r_now}R</span>` : "");
+    } else {
+      const o = i.o;
+      t.innerHTML = `<b class="${o.side > 0 ? "up" : "down"}">${o.side > 0 ? "BUY" : "SELL"} ${o.type.toUpperCase()} ${o.lots}</b>`;
+    }
+  }
 }
 /* the PLACE box that sits on the tool's entry line */
 function toolOverlay(){
@@ -713,5 +779,5 @@ async function paperInit(){
   wireTicket(); wireTrail(); wireTabs(); wireSettings(); wireDrag();
   const j = await api("/api/paper"); if(j.ok) paperUpdate(j.paper);
   renderTicket();
-  setInterval(() => { if(P.armed && !P.dragging){ toolOverlay(); if(P.prim) P.prim.update(); } }, 300);   // follows price-scale zooms too
+  setInterval(() => { if(P.dragging) return; if(P.armed){ toolOverlay(); if(P.prim) P.prim.update(); } posBars(); }, 250);   // follows price-scale zooms too
 }

@@ -408,6 +408,11 @@ async def paper_be_all(request: Request):
     return await _paper(request, go)
 
 
+@app.post("/api/paper/pos_trail")
+async def paper_pos_trail(request: Request):
+    return await _paper(request, lambda b: engine.set_pos_trail(b["id"], {k: b[k] for k in ("be_on", "be_r", "sl_on", "sl_r") if k in b}))
+
+
 @app.post("/api/paper/trail")
 async def paper_trail(request: Request):
     return await _paper(request, lambda b: engine.set_trail(b))

@@ -501,7 +501,8 @@ class Paper:
                    "init_risk": round(risk_add, 2), "opened": now(), "best": price, "worst": price,
                    "basis_entry": ref_px if plan["basis"] == "underlying" else price,
                    "basis_best": ref_px if plan["basis"] == "underlying" else price,
-                   "be_done": False, "trail": False, "own_stop": False, "margin": plan.get("margin", 0)}
+                   "be_done": False, "trail": False, "own_stop": False, "margin": plan.get("margin", 0),
+                   "tr": dict(self.trail)}           # this trade's own trailing settings (start from the defaults)
             self.positions.append(pos)
             self.day["trades"] = self.day.get("trades", 0) + 1
             verb = "Opened"
@@ -762,7 +763,7 @@ class Paper:
             return False
         reached = udir * (pos["basis_best"] - pos["basis_entry"]) / R
         moved = False
-        tr = self.trail
+        tr = pos.get("tr") or self.trail
         if tr["be_on"] and not pos["be_done"] and reached >= tr["be_r"]:
             try:
                 self._set_be(pos, f"trail BE at {tr['be_r']:g}R")
@@ -857,7 +858,8 @@ class Paper:
             v["at_tp"] = charges.net_at(row, pos["side"], pos["qty"], pos["avg"], tp_ex, paid=pos["paid"])["net"]
         v["r_now"] = round(n["net"] / pos["init_risk"], 2) if pos["init_risk"] else None
         v["est"] = pos["basis"] == "underlying"
-        v["basis_entry"] = pos.get("basis_entry")            # figures at an underlying stop use the option's delta
+        v["basis_entry"] = pos.get("basis_entry")
+        v["tr"] = pos.get("tr") or dict(self.trail)            # figures at an underlying stop use the option's delta
         return v
 
     def order_view(self, o) -> dict:
@@ -929,23 +931,48 @@ class Paper:
             self.day = {}
         self.changed("Rules saved")
 
-    def set_trail(self, new: dict):
+    @staticmethod
+    def _apply_trail(tr: dict, new: dict):
         for k in ("be_on", "sl_on"):
             if k in new:
-                self.trail[k] = bool(new[k])
+                tr[k] = bool(new[k])
         for k in ("be_r", "sl_r"):
             if k in new:
                 v = float(new[k])
                 if v <= 0:
                     raise Refused("R must be above 0")
-                self.trail[k] = v
-        for p in self.positions:                           # changing trailing re-arms it for open trades
-            if "be_on" in new or "be_r" in new:
-                if self.trail["be_on"] and not p.get("floor") and not (p["basis"] == "self" and p.get("sl") is not None
-                                                                         and p["side"] * (p["sl"] - p["avg"]) >= 0):
-                    p["be_done"] = False
-            if "sl_on" in new or "sl_r" in new:
-                p["own_stop"] = False
+                tr[k] = v
+
+    def _rearm(self, p, new: dict):
+        tr = p.get("tr") or self.trail
+        if "be_on" in new or "be_r" in new:
+            at_be = p.get("floor") is not None or (p["basis"] == "self" and p.get("sl") is not None
+                                                  and p["side"] * (p["sl"] - p["avg"]) >= 0)
+            if tr["be_on"] and not at_be:
+                p["be_done"] = False
+        if "sl_on" in new or "sl_r" in new:
+            p["own_stop"] = False
+
+    def set_pos_trail(self, pid, new: dict):
+        """Trailing for one trade (the controls on its entry line)."""
+        p = self.find_pos(pid)
+        tr = dict(p.get("tr") or self.trail)
+        self._apply_trail(tr, new)
+        p["tr"] = tr
+        self._rearm(p, new)
+        self.changed(f"{self.short(p['s'])}: Trail BE {'ON' if tr['be_on'] else 'off'} {tr['be_r']:g}R, "
+                     f"Trail SL {'ON' if tr['sl_on'] else 'off'} {tr['sl_r']:g}R")
+
+    def set_trail(self, new: dict):
+        """Defaults for new trades; a change here is also applied to every open trade (as in LiveTrader)."""
+        self._apply_trail(self.trail, new)
+        for p in self.positions:
+            tr = dict(p.get("tr") or self.trail)
+            for k in new:
+                if k in ("be_on", "sl_on", "be_r", "sl_r"):
+                    tr[k] = self.trail[k]
+            p["tr"] = tr
+            self._rearm(p, new)
         self.changed(f"Trail BE {'ON' if self.trail['be_on'] else 'off'} {self.trail['be_r']:g}R, "
                      f"Trail SL {'ON' if self.trail['sl_on'] else 'off'} {self.trail['sl_r']:g}R")
 
