@@ -2,9 +2,9 @@
    Uses globals from index.html: api, toast, fmt, chart, series, cur, last, sym, openSymbol, sendWant, $ */
 "use strict";
 const P = {
-  snap: null, plan: null, armed: false, pvTimer: null, pvSeq: 0, lines: [], drags: [], dragging: null,
-  posKey: "", ordKey: "", tab: "pos",
-  T: {s: null, side: 1, type: "market", price: null, sl: null, tp: null, tp_r: 2, tpMode: "r", basis: "self", ref: null,
+  snap: null, plan: null, armed: false, pvTimer: null, pvSeq: 0, drags: [], posDrags: [], toolDrags: [], dragging: null,
+  posLines: [], toolLines: null, prim: null, primSeries: null, hits: [], posKey: "", ordKey: "", tab: "pos",
+  T: {s: null, side: 1, follow: true, price: null, slDist: null, tpDist: null, tp_r: 2, tpMode: "r", basis: "self", ref: null,
       mode: "pct", risk_pct: 1, risk_amt: 250, lots: 1, product: "INTRADAY"}
 };
 const rs = n => n == null || isNaN(n) ? "–" : (n < 0 ? "−₹" : "₹") + Math.abs(n).toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2});
@@ -53,65 +53,85 @@ function renderAcct(){
     + (a.win_rate != null ? ` · win ${a.win_rate}%` : "") + (a.pf != null ? ` · PF ${a.pf}` : "") + ` · today ${a.trades_today} trades, charges ${rsS(a.charges_today)}`;
 }
 
-/* ---------------------------------------------------------------- ticket */
+/* ---------------------------------------------------------------- ticket (the long / short tool)
+   The entry follows the market until you drag it (or type a price). Dragged below the market a buy becomes a
+   limit, above it a stop (the other way round for a sell). SL and TP keep their distance from the entry, so the
+   whole tool moves with the price. Distances you set are remembered per underlying. */
 function tkRow(){ return sym[P.T.s] || null; }
 function basisSym(){ return P.T.basis === "underlying" ? P.T.ref : P.T.s; }
+function ltpOf(s){ return last[s] ? last[s].ltp : null; }
+function tickOf(s){ return (sym[s] || {}).tick || (P.plan && P.plan.ref === s ? P.plan.ref_tick : null) || (tkRow() || {}).tick || 0.05; }
+function udir(){ const r = tkRow() || {}; return P.T.side * (P.T.basis === "underlying" && r.o === "PE" ? -1 : 1); }
+function mktEntry(){
+  const t = last[P.T.s]; if(!t) return null;
+  const v = P.T.side > 0 ? t.ask : t.bid; return v || t.ltp;
+}
+function entryNow(){ return P.T.follow ? mktEntry() : P.T.price; }
+function orderType(){
+  if(P.T.follow) return "market";
+  const l = ltpOf(P.T.s); if(l == null || P.T.price == null) return "limit";
+  return P.T.side * (P.T.price - l) <= 0 ? "limit" : "stop";
+}
+function basisNow(){ return P.T.basis === "underlying" ? (ltpOf(P.T.ref) || (P.plan && P.plan.ref_price)) : entryNow(); }
+function slNow(){ const b = basisNow(); return b == null || P.T.slDist == null ? null : roundTick(b - udir() * P.T.slDist, tickOf(basisSym())); }
+function tpNow(){
+  const b = basisNow(); if(b == null) return null;
+  if(P.T.tpMode === "dist" && P.T.tpDist != null) return roundTick(b + udir() * P.T.tpDist, tickOf(basisSym()));
+  if(P.plan && P.plan.tp != null && P.plan.entry != null) return roundTick(b + udir() * Math.abs(P.plan.tp - P.plan.entry), tickOf(basisSym()));
+  if(P.T.slDist != null) return roundTick(b + udir() * P.T.slDist * (P.T.tp_r || 2), tickOf(basisSym()));   // until the server has worked it out
+  return null;
+}
+function distKey(){ const r = tkRow() || {}; return (P.T.basis === "underlying" ? "U:" : "") + (r.u || r.s) + (r.f === "OPT" && P.T.basis === "self" ? ":OPT" : ""); }
+function setDefaults(){
+  const b = basisNow(); if(b == null) return false;
+  const tick = tickOf(basisSym());
+  const saved = (prefGet("sl_dist", {}) || {})[distKey()];
+  P.T.slDist = saved ? Math.max(tick, roundTick(saved, tick)) : Math.max(tick * 10, roundTick(b * 0.003, tick));
+  if(P.T.basis === "underlying"){ P.T.tpMode = "dist"; P.T.tpDist = P.T.slDist * (P.T.tp_r || 2); }
+  else if(P.T.tpMode !== "dist") P.T.tpMode = "r";
+  else P.T.tpDist = P.T.slDist * (P.T.tp_r || 2);
+  return true;
+}
 function paperOnSymbol(row){
-  // the chart switched contract: the ticket follows it, unless it's the future of an option ticket using underlying stops
-  if(P.T.basis === "underlying" && row.s === P.T.ref){ drawLines(); return; }
+  // the chart switched contract: the tool follows it, unless it's the future of an option tool using underlying stops
+  if(P.T.basis === "underlying" && row.s === P.T.ref){ renderTicket(); toolRedraw(); return; }
   if(P.T.s !== row.s){
-    P.T.s = row.s; P.T.basis = "self"; P.T.ref = null; P.T.sl = P.T.tp = P.T.price = null; P.plan = null;
+    P.T.s = row.s; P.T.basis = "self"; P.T.ref = null; P.T.follow = true; P.T.price = null; P.plan = null;
+    P.T.slDist = null; P.T.tpMode = "r";
     if(P.armed) setDefaults();
   }
   renderTicket(); drawLines(); preview();
 }
-function ltpOf(s){ return last[s] ? last[s].ltp : null; }
-function setDefaults(){
-  const row = tkRow(); if(!row) return;
-  const bs = basisSym(), b = ltpOf(bs) || (P.T.type !== "market" ? P.T.price : null);
-  const tick = (sym[bs] || {}).tick || (P.plan && P.plan.ref === bs ? P.plan.ref_tick : null) || row.tick;
-  if(P.T.type !== "market" && !P.T.price){
-    const l = ltpOf(P.T.s); if(l) P.T.price = roundTick(l - P.T.side * (P.T.type === "limit" ? 1 : -1) * Math.max(tick * 10, l * 0.002), row.tick);
-  }
-  const refPx = P.plan && P.plan.ref === bs ? P.plan.ref_price : null;
-  const base = P.T.basis === "underlying" ? (ltpOf(bs) || refPx) : (P.T.type === "market" ? ltpOf(P.T.s) : P.T.price);
-  if(base){
-    const udir = P.T.side * (P.T.basis === "underlying" && row.o === "PE" ? -1 : 1);
-    P.T.sl = roundTick(base - udir * Math.max(tick * 10, base * 0.003), tick);
-    if(P.T.basis === "underlying" || P.T.tpMode === "price") P.T.tp = roundTick(base + udir * Math.max(tick * 20, base * 0.006), tick);
-    else P.T.tp = null;
-  }
-}
 function arm(side){
   if(!P.T.s){ toast("Open a contract's chart first"); return; }
-  const was = P.armed && P.T.side === side;
-  if(was){ disarm(); return; }
+  if(P.armed && P.T.side === side){ disarm(); return; }
   const flip = P.armed && P.T.side !== side;
   P.T.side = side; P.armed = true;
-  if(flip || P.T.sl == null) setDefaults();
-  renderTicket(); drawLines(); preview(); sendWant();
+  if(flip){ P.T.follow = true; P.T.price = null; }
+  if(P.T.slDist == null || flip){ if(!setDefaults()) P.needDefaults = true; }
+  P.plan = null;
+  renderTicket(); drawLines(); preview(0); sendWant();
 }
-function disarm(){ P.armed = false; P.plan = null; renderTicket(); drawLines(); sendWant(); }
+function disarm(){ P.armed = false; P.plan = null; P.T.follow = true; P.T.price = null; renderTicket(); drawLines(); sendWant(); }
 function wantSymbols(){ return P.armed ? [P.T.s, P.T.ref].filter(Boolean) : []; }
+function toMarket(){ P.T.follow = true; P.T.price = null; renderTicket(); toolRedraw(); preview(0); }
 
 function renderTicket(){
   const row = tkRow(), T = P.T;
   $("#tkSym").textContent = row ? short(row.s) : "No contract";
   $("#tkInfo").textContent = row ? `lot ${row.lot} × ${row.mult} · tick ${row.tick}` : "";
-  $("#bBuy").classList.toggle("on", P.armed && T.side > 0);
-  $("#bSell").classList.toggle("on", P.armed && T.side < 0);
+  for(const [id, s] of [["#bBuy", 1], ["#bSell", -1], ["#cBuy", 1], ["#cSell", -1]]) $(id).classList.toggle("on", P.armed && T.side === s);
   $("#tkBody").classList.toggle("hide", !P.armed);
   $("#tkHint").classList.toggle("hide", P.armed);
-  if(!P.armed) return;
-  document.querySelectorAll("#tkType button").forEach(b => b.classList.toggle("on", b.dataset.v === T.type));
+  if(!P.armed){ toolOverlay(); return; }
+  const typ = orderType();
+  document.querySelectorAll("#tkType button").forEach(b => b.classList.toggle("on", b.dataset.v === typ));
   document.querySelectorAll("#tkMode button").forEach(b => b.classList.toggle("on", b.dataset.v === T.mode));
   document.querySelectorAll("#tkBasis button").forEach(b => b.classList.toggle("on", b.dataset.v === T.basis));
   $("#tkBasisRow").classList.toggle("hide", !(row && row.f === "OPT"));
-  const ent = $("#tkPrice");
-  ent.disabled = T.type === "market";
-  if(document.activeElement !== ent) ent.value = T.type === "market" ? (ltpOf(T.s) != null ? "market" : "") : (T.price ?? "");
   const setv = (id, v) => { if(document.activeElement !== $(id)) $(id).value = v ?? ""; };
-  setv("#tkSl", T.sl); setv("#tkTp", T.tpMode === "price" ? T.tp : (P.plan && P.plan.tp != null ? P.plan.tp : ""));
+  setv("#tkPrice", T.follow ? "market" : T.price);
+  setv("#tkSl", slNow()); setv("#tkTp", tpNow());
   setv("#tkTpR", T.tpMode === "r" ? T.tp_r : "");
   $("#tkTp").placeholder = T.basis === "underlying" ? "future price" : "price";
   $("#tkSl").placeholder = T.basis === "underlying" ? "future price" : "price";
@@ -122,20 +142,20 @@ function renderTicket(){
   const note = $("#tkBasisNote");
   if(T.basis === "underlying"){
     const onIt = cur && cur.s === T.ref;
-    note.innerHTML = T.ref ? (onIt ? `Lines are on this chart (${esc(short(T.ref))}). The option is exited when the future hits them.`
+    note.innerHTML = T.ref ? (onIt ? `SL and target are on this chart (${esc(short(T.ref))}). The option is sold when the future hits them.`
       : `SL and target are prices of <b>${esc(short(T.ref))}</b>. <a href="#" id="goRef">Open its chart</a> to drag them.`) : "Finding the future…";
     const g = $("#goRef"); if(g) g.onclick = e => { e.preventDefault(); const r = sym[T.ref]; if(r) openSymbol(r); else openBySymbol(T.ref); };
   } else note.textContent = "";
-  renderPlan();
+  renderPlan(); toolOverlay();
 }
 function renderPlan(){
   const p = P.plan, el = $("#tkPv"), btn = $("#bPlace");
-  if(!p){ el.innerHTML = `<div class="muted">Working out size and costs…</div>`; btn.disabled = true; btn.textContent = "Place"; return; }
+  if(!p){ if(!P.pvErr) el.innerHTML = `<div class="muted">Working out size and costs…</div>`; btn.disabled = true; btn.textContent = "Place"; return; }
   const est = p.risk_estimated ? "≈ " : "";
   const ec = p.entry_charges;
   const rows = [
     ["Lots", `<b>${p.lots}</b> <span class="muted">(${p.qty} qty${p.mult > 1 ? ` × ${p.mult}` : ""})</span>`],
-    ["Entry", `${fmt(p.entry, p.tick)}${p.type === "market" ? ' <span class="muted">at the ' + (p.side > 0 ? "ask" : "bid") + "</span>" : ""}`],
+    ["Entry", `${fmt(p.entry, p.tick)} <span class="muted">${p.type === "market" ? "market, at the " + (p.side > 0 ? "ask" : "bid") : p.type}</span>`],
     ["At stop (net)", p.risk != null ? `<b class="down">${est}${rs(-p.risk)}</b>` : p.risk_1lot != null ? `<span class="down">1 lot would be ${est}${rs(-p.risk_1lot)}</span>` : "no stop"],
     ["At target (net)", p.reward != null ? `<b class="up">${est}${rs(p.reward)}</b>` + (p.rr != null ? ` <span class="muted">${p.rr}R</span>` : "") : "–"],
     ["BE + costs", p.be != null ? fmt(p.be, p.tick) : "–"],
@@ -148,10 +168,13 @@ function renderPlan(){
     + (p.blocked ? `<div class="note down">${esc(p.blocked)}</div>` : "")
     + `<div class="breakdown hide" id="pvBd"></div>`;
   const more = $("#pvMore");
-  if(more) more.onclick = e => { e.preventDefault(); const bd = $("#pvBd"); bd.classList.toggle("hide"); bd.innerHTML = breakdown(p.entry_charges, "Entry order") ; };
+  if(more) more.onclick = e => { e.preventDefault(); const bd = $("#pvBd"); bd.classList.toggle("hide"); bd.innerHTML = breakdown(p.entry_charges, "Entry order"); };
   btn.disabled = !!p.blocked || !p.lots;
   btn.className = "place " + (p.side > 0 ? "buy" : "sell");
-  btn.textContent = `${p.side > 0 ? "BUY" : "SELL"} ${p.lots || 0} lot${p.lots === 1 ? "" : "s"} ${p.type === "market" ? "at market" : (p.type === "limit" ? "limit " : "stop ") + fmt(p.entry, p.tick)}`;
+  btn.textContent = placeLabel(p);
+}
+function placeLabel(p){
+  return `${p.side > 0 ? "BUY" : "SELL"} ${p.lots || 0} lot${p.lots === 1 ? "" : "s"} ${p.type === "market" ? "at market" : p.type + " " + fmt(p.entry, p.tick)}`;
 }
 function breakdown(c, title){
   if(!c) return "";
@@ -161,57 +184,88 @@ function breakdown(c, title){
     `<div class="tot"><span>Total</span><span>${rs(c.total)}</span></div>`;
 }
 function ticketBody(){
-  const T = P.T;
-  return {s: T.s, side: T.side, type: T.type, price: T.type === "market" ? null : T.price, sl: T.sl,
-    tp: T.tpMode === "price" || T.basis === "underlying" ? T.tp : null, tp_r: T.tpMode === "r" && T.basis === "self" ? T.tp_r : null,
+  const T = P.T, typ = orderType();
+  const useR = T.tpMode === "r" && T.basis === "self";
+  return {s: T.s, side: T.side, type: typ, price: typ === "market" ? null : T.price, sl: slNow(),
+    tp: useR ? null : tpNow(), tp_r: useR ? T.tp_r : null,
     basis: T.basis, mode: T.mode, risk_pct: T.risk_pct, risk_amt: T.risk_amt, lots: T.lots, product: T.product};
 }
 function preview(delay = 250){
   if(!P.armed || !P.T.s) return;
   clearTimeout(P.pvTimer);
   P.pvTimer = setTimeout(async () => {
+    if(P.needDefaults && setDefaults()) P.needDefaults = false;
     const my = ++P.pvSeq;
     const j = await api("/api/paper/preview", {body: ticketBody()});
-    if(my !== P.pvSeq) return;
+    if(my !== P.pvSeq || !P.armed) return;
     if(!j.ok){
-      P.plan = null; renderPlan();
+      P.plan = null; P.pvErr = j.error;
       const waiting = /^waiting/.test(j.error || "");
       $("#tkPv").innerHTML = `<div class="note ${waiting ? "" : "down"}">${esc(j.error)}</div>`;
+      renderPlan(); toolRedraw();
       if(waiting && (P.waitTries = (P.waitTries || 0) + 1) < 15) preview(1500);
       return;
     }
-    P.waitTries = 0;
+    P.waitTries = 0; P.pvErr = null;
     P.plan = j.plan;
     if(j.plan.ref && P.T.ref !== j.plan.ref){ P.T.ref = j.plan.ref; sendWant(); }
-    if(P.T.basis === "underlying" && P.T.sl == null && P.T.ref){ setDefaults(); if(P.T.sl != null){ preview(0); } }
-    renderTicket(); drawLines();
+    if(P.T.slDist == null && setDefaults()){ P.needDefaults = false; preview(0); }
+    renderTicket(); toolRedraw();
   }, delay);
 }
 async function place(){
-  const j = await papi("place", ticketBody());
-  if(j.ok){ setStatus(""); disarm(); api("/api/paper/ticket", {body: {mode: P.T.mode, risk_pct: P.T.risk_pct, risk_amt: P.T.risk_amt, lots: P.T.lots, product: P.T.product, tp_r: P.T.tp_r}}); }
+  if(P.placing) return;
+  P.placing = true;
+  try{ const j = await papi("place", ticketBody()); if(j.ok){ setStatus(""); disarm(); } }
+  finally{ P.placing = false; }
+}
+let tkSaveTimer = null;
+function saveTicketDefaults(){
+  clearTimeout(tkSaveTimer);
+  tkSaveTimer = setTimeout(() => api("/api/paper/ticket", {body: {mode: P.T.mode, risk_pct: P.T.risk_pct, risk_amt: P.T.risk_amt,
+    lots: P.T.lots, product: P.T.product, tp_r: P.T.tp_r}}), 500);
+}
+function rememberDist(){
+  const m = {...(prefGet("sl_dist", {}) || {})}; m[distKey()] = P.T.slDist; prefSet("sl_dist", m);
 }
 function wireTicket(){
   $("#bBuy").onclick = () => arm(1);
   $("#bSell").onclick = () => arm(-1);
+  $("#cBuy").onclick = () => arm(1);
+  $("#cSell").onclick = () => arm(-1);
   $("#tkX").onclick = disarm;
-  document.querySelectorAll("#tkType button").forEach(b => b.onclick = () => { P.T.type = b.dataset.v; if(P.T.type !== "market" && !P.T.price) setDefaults(); renderTicket(); drawLines(); preview(); });
-  document.querySelectorAll("#tkMode button").forEach(b => b.onclick = () => { P.T.mode = b.dataset.v; renderTicket(); preview(); });
+  document.querySelectorAll("#tkType button").forEach(b => b.onclick = () => {
+    const v = b.dataset.v;
+    if(v === "market") return toMarket();
+    const l = ltpOf(P.T.s); if(l == null) return toast("No price yet");
+    const off = Math.max(tickOf(P.T.s) * 10, l * 0.002);
+    P.T.follow = false;
+    P.T.price = roundTick(v === "limit" ? l - P.T.side * off : l + P.T.side * off, tickOf(P.T.s));
+    renderTicket(); toolRedraw(); preview(0);
+  });
+  document.querySelectorAll("#tkMode button").forEach(b => b.onclick = () => { P.T.mode = b.dataset.v; renderTicket(); preview(); saveTicketDefaults(); });
   document.querySelectorAll("#tkBasis button").forEach(b => b.onclick = () => {
-    P.T.basis = b.dataset.v; P.T.sl = P.T.tp = null;
-    if(P.T.basis === "underlying"){ P.T.tpMode = "price"; } else { P.T.tpMode = "r"; setDefaults(); }
-    renderTicket(); drawLines(); preview(0); setTimeout(() => { if(P.T.sl == null){ setDefaults(); renderTicket(); drawLines(); preview(); } }, 900);
+    P.T.basis = b.dataset.v; P.T.slDist = null; P.plan = null;
+    P.T.tpMode = P.T.basis === "underlying" ? "dist" : "r";
+    if(!setDefaults()) P.needDefaults = true;
+    renderTicket(); drawLines(); preview(0);
   });
   const on = (id, fn) => { $(id).addEventListener("change", fn); $(id).addEventListener("keydown", e => { if(e.key === "Enter") fn(); }); };
-  on("#tkPrice", () => { const v = num($("#tkPrice").value); if(v){ P.T.price = v; drawLines(); preview(); } });
-  on("#tkSl", () => { P.T.sl = num($("#tkSl").value); drawLines(); preview(); });
-  on("#tkTp", () => { const v = num($("#tkTp").value); P.T.tp = v; P.T.tpMode = v == null ? "r" : "price"; drawLines(); preview(); });
-  on("#tkTpR", () => { const v = num($("#tkTpR").value); if(v){ P.T.tp_r = v; P.T.tpMode = "r"; P.T.tp = null; preview(); } });
+  on("#tkPrice", () => { const v = num($("#tkPrice").value); if(v){ P.T.follow = false; P.T.price = roundTick(v, tickOf(P.T.s)); } else toMarket(); toolRedraw(); preview(); });
+  on("#tkSl", () => { const v = num($("#tkSl").value), b = basisNow(); if(v == null || b == null) return;
+    if(udir() * (b - v) <= 0) return toast("The stop must be on the losing side of the entry");
+    P.T.slDist = roundTick(Math.abs(b - v), tickOf(basisSym())); rememberDist(); toolRedraw(); preview(); });
+  on("#tkTp", () => { const v = num($("#tkTp").value), b = basisNow();
+    if(v == null){ P.T.tpMode = "r"; } else if(b != null){ P.T.tpMode = "dist"; P.T.tpDist = Math.abs(v - b); }
+    toolRedraw(); preview(); });
+  on("#tkTpR", () => { const v = num($("#tkTpR").value); if(v){ P.T.tp_r = v; P.T.tpMode = "r"; saveTicketDefaults(); preview(); } });
   on("#tkSize", () => { const v = num($("#tkSize").value); if(v == null) return;
-    if(P.T.mode === "pct") P.T.risk_pct = v; else if(P.T.mode === "amt") P.T.risk_amt = v; else P.T.lots = Math.max(1, Math.round(v)); preview(); });
-  $("#tkProd").onchange = () => { P.T.product = $("#tkProd").value; preview(); };
+    if(P.T.mode === "pct") P.T.risk_pct = v; else if(P.T.mode === "amt") P.T.risk_amt = v; else P.T.lots = Math.max(1, Math.round(v));
+    preview(); saveTicketDefaults(); });
+  $("#tkProd").onchange = () => { P.T.product = $("#tkProd").value; preview(); saveTicketDefaults(); };
   $("#bPlace").onclick = place;
-  setInterval(() => { if(P.armed && P.T.type === "market" && document.visibilityState === "visible") preview(0); }, 3000);
+  // while the tool is on and the entry follows the market, keep the money figures current
+  setInterval(() => { if(P.armed && document.visibilityState === "visible" && !P.dragging) preview(0); }, P.T.follow ? 1500 : 3000);
 }
 
 /* ---------------------------------------------------------------- trail row */
@@ -348,86 +402,254 @@ function wireTabs(){
 }
 async function openBySymbol(s){ const j = await api("/api/symbol?s=" + encodeURIComponent(s)); if(j.ok) openSymbol(j.row); }
 
-/* ---------------------------------------------------------------- chart lines */
-function clearLines(){ for(const l of P.lines){ try{ series.removePriceLine(l); }catch(e){} } P.lines = []; P.drags = []; }
-function addLine(price, color, title, style, drag){
-  const l = series.createPriceLine({price, color, lineWidth: drag ? 2 : 1, lineStyle: style ?? 0, axisLabelVisible: true, title});
-  P.lines.push(l);
-  if(drag) P.drags.push({line: l, price, ...drag});
-  return l;
+/* ---------------------------------------------------------------- chart: lines, zones, the tool's PLACE box, drags */
+const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function clearLines(arr){ for(const l of arr){ try{ series.removePriceLine(l); }catch(e){} } arr.length = 0; }
+function mkLine(arr, price, color, title, style, width){
+  const l = series.createPriceLine({price, color, lineWidth: width || 1, lineStyle: style ?? 0, axisLabelVisible: true, title});
+  arr.push(l); return l;
 }
+/* shaded risk / reward zones, drawn under the candles (a Lightweight Charts series primitive) */
+class ZonePrim {
+  constructor(){ this.req = null; const self = this;
+    this.views = [{zOrder: () => "bottom", renderer: () => ({draw: t => self.draw(t)})},
+                  {zOrder: () => "top", renderer: () => ({draw: t => self.drawTop(t)})}]; }
+  attached(p){ this.req = p.requestUpdate; }
+  detached(){ this.req = null; }
+  updateAllViews(){}
+  paneViews(){ return this.views; }
+  update(){ if(this.req) this.req(); }
+  draw(target){ target.useMediaCoordinateSpace(({context, mediaSize}) => drawZones(context, mediaSize)); }
+  drawTop(target){ target.useMediaCoordinateSpace(({context, mediaSize}) => drawMarks(context, mediaSize)); }
+}
+function zoneX(time, w){
+  if(time == null) return null;
+  const x = chart.timeScale().timeToCoordinate(time);
+  return x == null ? null : x;
+}
+function rgba(hex, a){
+  const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(hex || ""); if(!m) return `rgba(128,128,128,${a})`;
+  return `rgba(${parseInt(m[1], 16)},${parseInt(m[2], 16)},${parseInt(m[3], 16)},${a})`;
+}
+function zoneList(){
+  const out = [];
+  if(!cur) return out;
+  if(P.armed){
+    const bs = basisSym();
+    if(bs === cur.s){
+      const e = basisNow(), sl = slNow(), tp = tpNow(), p = P.plan;
+      if(e != null) out.push({tool: true, entry: e, sl, tp, x0: lastBar ? lastBar.time : null,
+        slTxt: p && (p.risk != null || p.risk_1lot != null) ? `${p.risk_estimated ? "≈" : ""}${rsS(-(p.risk ?? p.risk_1lot))}${p.risk == null ? " (1 lot)" : ""}` : "",
+        tpTxt: p && p.reward != null ? `${p.risk_estimated ? "≈" : ""}${rsS(p.reward)}${p.rr != null ? " · " + p.rr + "R" : ""}` : ""});
+    }
+  }
+  if(P.snap) for(const p of P.snap.positions){
+    const bs = p.basis === "underlying" ? p.ref : p.s;
+    if(bs !== cur.s) continue;
+    const e = p.basis === "underlying" ? p.basis_entry : p.avg;
+    out.push({entry: e, sl: p.sl, tp: p.tp, x0: curPlan ? bucket(p.opened + IST, curPlan) : null,
+      slTxt: p.at_sl != null ? (p.est ? "≈" : "") + rsS(p.at_sl) : "", tpTxt: p.at_tp != null ? (p.est ? "≈" : "") + rsS(p.at_tp) : ""});
+  }
+  return out;
+}
+function drawZones(ctx, size){
+  const UP = cssv("--up"), DOWN = cssv("--down");
+  P.toolX = null;
+  for(const z of zoneList()){
+    const ye = series.priceToCoordinate(z.entry); if(ye == null) continue;
+    let x0 = zoneX(z.x0, size.width);
+    if(z.tool){ x0 = x0 == null ? size.width * 0.55 : x0 + 6; x0 = Math.min(x0, size.width - 170); P.toolX = x0; }
+    else if(x0 == null) x0 = 0;
+    const x1 = size.width, w = Math.max(0, x1 - x0), a = z.tool ? 0.20 : 0.09;
+    const box = (y2, col) => { if(y2 == null) return; ctx.fillStyle = rgba(col, a); ctx.fillRect(x0, Math.min(ye, y2), w, Math.abs(y2 - ye)); };
+    const ys = z.sl != null ? series.priceToCoordinate(z.sl) : null, yt = z.tp != null ? series.priceToCoordinate(z.tp) : null;
+    box(ys, DOWN); box(yt, UP);
+    ctx.font = "600 11px 'IBM Plex Sans', system-ui, sans-serif"; ctx.textBaseline = "middle";
+    const label = (y2, txt, col) => { if(y2 == null || !txt) return; const y = y2 + (y2 > ye ? -10 : 10);
+      ctx.fillStyle = col; ctx.fillText(txt, x0 + 8, Math.abs(y2 - ye) < 22 ? y2 : y); };
+    label(ys, z.slTxt, DOWN); label(yt, z.tpTxt, UP);
+  }
+}
+/* one-click ✕ on each open position's entry line (this chart), like the MT5 EA */
+function drawMarks(ctx, size){
+  P.hits = [];
+  if(!P.snap || !cur) return;
+  for(const p of P.snap.positions){
+    if(p.s !== cur.s) continue;
+    const y = series.priceToCoordinate(p.avg); if(y == null) continue;
+    const x = size.width - 22;
+    ctx.fillStyle = cssv("--down"); ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - 8, y - 8, 16, 16, 3) : ctx.rect(x - 8, y - 8, 16, 16); ctx.fill();
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.6; ctx.beginPath();
+    ctx.moveTo(x - 4, y - 4); ctx.lineTo(x + 4, y + 4); ctx.moveTo(x + 4, y - 4); ctx.lineTo(x - 4, y + 4); ctx.stroke();
+    P.hits.push({x, y, r: 10, act: () => papi("close", {id: p.id})});
+  }
+  for(const o of (P.snap.orders || [])){
+    if(o.s !== cur.s) continue;
+    const y = series.priceToCoordinate(o.price); if(y == null) continue;
+    const x = size.width - 22;
+    ctx.fillStyle = cssv("--muted"); ctx.beginPath(); ctx.rect(x - 8, y - 8, 16, 16); ctx.fill();
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.6; ctx.beginPath();
+    ctx.moveTo(x - 4, y - 4); ctx.lineTo(x + 4, y + 4); ctx.moveTo(x + 4, y - 4); ctx.lineTo(x - 4, y + 4); ctx.stroke();
+    P.hits.push({x, y, r: 10, act: () => papi("cancel", {id: o.id})});
+  }
+}
+function ensurePrim(){
+  if(!series || P.primSeries === series) return;
+  P.prim = new ZonePrim(); series.attachPrimitive(P.prim); P.primSeries = series;
+  P.posLines = []; P.toolLines = null;
+  chart.subscribeClick(param => {
+    if(!param.point || Date.now() - (P.dragEnd || 0) < 300) return;
+    const h = (P.hits || []).find(h => Math.abs(param.point.x - h.x) <= h.r && Math.abs(param.point.y - h.y) <= h.r);
+    if(h) h.act();
+  });
+  chart.timeScale().subscribeVisibleLogicalRangeChange(() => toolOverlay());
+  // keep the tool's and positions' SL / TP inside the visible price range, so they can always be grabbed
+  series.applyOptions({autoscaleInfoProvider: orig => {
+    const r = orig(); if(!r || !r.priceRange) return r;
+    const ps = [];
+    for(const z of zoneList()) for(const v of [z.entry, z.sl, z.tp]) if(v != null && isFinite(v)) ps.push(v);
+    if(P.snap) for(const o of P.snap.orders) if(o.s === cur.s && o.price) ps.push(o.price);
+    if(ps.length){ r.priceRange.minValue = Math.min(r.priceRange.minValue, ...ps); r.priceRange.maxValue = Math.max(r.priceRange.maxValue, ...ps); }
+    return r;
+  }});
+}
+
+/* lines for open positions and pending orders (rebuilt when the snapshot changes) */
 function drawLines(){
   if(!series || !cur || P.dragging) return;
-  clearLines();
-  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-  const UP = css("--up"), DOWN = css("--down"), ACC = css("--accent"), MUT = css("--muted");
-  const tickOf = s => (sym[s] || {}).tick || cur.tick;
+  ensurePrim();
+  clearLines(P.posLines);
+  P.posDrags = [];
+  const UP = cssv("--up"), DOWN = cssv("--down"), ACC = cssv("--accent"), MUT = cssv("--muted");
+  const tk = s => (sym[s] || {}).tick || cur.tick;
+  const drag = (line, price, tick, drop) => P.posDrags.push({line, price: () => price, tick, drop, set: v => { price = v; }});
   if(P.snap){
     for(const p of P.snap.positions){
-      const bs = p.basis === "underlying" ? p.ref : p.s;
-      if(p.s === cur.s) addLine(p.avg, MUT, `${p.side > 0 ? "L" : "S"} ${p.lots} ${rsS(p.net)}`, 2);
-      if(p.s === cur.s && p.floor != null) addLine(p.floor, DOWN, "floor (BE)", 1);
+      const bs = p.basis === "underlying" ? p.ref : p.s, e = p.est ? "≈" : "";
+      if(p.s === cur.s) mkLine(P.posLines, p.avg, MUT, `${p.side > 0 ? "LONG" : "SHORT"} ${p.lots} · ${rsS(p.net)}`, 2);
+      if(p.s === cur.s && p.floor != null) mkLine(P.posLines, p.floor, DOWN, "floor (BE)", 1);
       if(bs !== cur.s) continue;
-      const e = p.est ? "≈" : "";
-      if(p.sl != null) addLine(p.sl, DOWN, `SL ${e}${rsS(p.at_sl)}${p.trail ? " trail" : ""}`, 0,
-        {tick: tickOf(bs), drop: v => papi("modify", {id: p.id, sl: v})});
-      if(p.tp != null) addLine(p.tp, UP, `TP ${e}${rsS(p.at_tp)}`, 0, {tick: tickOf(bs), drop: v => papi("modify", {id: p.id, tp: v})});
+      if(p.sl != null) drag(mkLine(P.posLines, p.sl, DOWN, `SL ${e}${rsS(p.at_sl)}${p.trail ? " trail" : ""}`, 0, 2), p.sl, tk(bs), v => papi("modify", {id: p.id, sl: v}));
+      if(p.tp != null) drag(mkLine(P.posLines, p.tp, UP, `TP ${e}${rsS(p.at_tp)}`, 0, 2), p.tp, tk(bs), v => papi("modify", {id: p.id, tp: v}));
     }
     for(const o of P.snap.orders){
-      if(o.s === cur.s) addLine(o.price, ACC, `${o.side > 0 ? "BUY" : "SELL"} ${o.type} ${o.lots}`, 2, {tick: tickOf(o.s), drop: v => papi("modify", {id: o.id, price: v})});
+      if(o.s === cur.s) drag(mkLine(P.posLines, o.price, ACC, `${o.side > 0 ? "BUY" : "SELL"} ${o.type} ${o.lots}`, 2, 2), o.price, tk(o.s), v => papi("modify", {id: o.id, price: v}));
       const bs = o.basis === "underlying" ? o.ref : o.s;
       if(bs !== cur.s) continue;
-      if(o.sl != null) addLine(o.sl, DOWN, `SL ${rsS(o.at_sl)}`, 2, {tick: tickOf(bs), drop: v => papi("modify", {id: o.id, sl: v})});
-      if(o.tp != null) addLine(o.tp, UP, `TP ${o.at_tp != null ? rsS(o.at_tp) : ""}`, 2, {tick: tickOf(bs), drop: v => papi("modify", {id: o.id, tp: v})});
+      if(o.sl != null) drag(mkLine(P.posLines, o.sl, DOWN, `SL ${rsS(o.at_sl)}`, 2), o.sl, tk(bs), v => papi("modify", {id: o.id, sl: v}));
+      if(o.tp != null) drag(mkLine(P.posLines, o.tp, UP, `TP ${o.at_tp != null ? rsS(o.at_tp) : ""}`, 2), o.tp, tk(bs), v => papi("modify", {id: o.id, tp: v}));
     }
   }
-  if(P.armed){
-    const T = P.T, pl = P.plan, bs = basisSym();
-    if(T.type !== "market" && T.s === cur.s && T.price)
-      addLine(T.price, ACC, `${T.side > 0 ? "BUY" : "SELL"} ${T.type}`, 0, {tick: tickOf(T.s), drop: v => { P.T.price = v; preview(0); }});
-    if(bs === cur.s){
-      if(T.sl != null) addLine(T.sl, DOWN, `SL ${pl && pl.risk != null ? (pl.risk_estimated ? "≈" : "") + rsS(-pl.risk) : ""}`, 0,
-        {tick: tickOf(bs), drop: v => { P.T.sl = v; renderTicket(); preview(0); }});
-      const tp = T.tpMode === "price" || T.basis === "underlying" ? T.tp : (pl ? pl.tp : null);
-      if(tp != null) addLine(tp, UP, `TP ${pl && pl.reward != null ? rsS(pl.reward) : ""}`, 0,
-        {tick: tickOf(bs), drop: v => { P.T.tp = v; P.T.tpMode = "price"; renderTicket(); preview(0); }});
-      if(pl && pl.be != null && T.s === cur.s) addLine(pl.be, MUT, "BE+costs", 1);
+  toolRedraw(true);
+}
+/* the tool's own lines: kept and moved on every price change instead of being rebuilt */
+function toolRedraw(rebuild){
+  if(!series || !cur) return;
+  ensurePrim();
+  const T = P.T, show = P.armed;
+  if(rebuild || !show){ if(P.toolLines){ clearLines(P.toolLines.all); } P.toolLines = null; }
+  P.toolDrags = [];
+  if(show){
+    const UP = cssv("--up"), DOWN = cssv("--down"), ACC = cssv("--accent"), MUT = cssv("--muted");
+    if(!P.toolLines){
+      const all = [];
+      P.toolLines = {all,
+        entry: mkLine(all, 0, ACC, "", 0, 2), sl: mkLine(all, 0, DOWN, "", 0, 2), tp: mkLine(all, 0, UP, "", 0, 2), be: mkLine(all, 0, MUT, "BE+costs", 1, 1)};
     }
+    const L = P.toolLines, bs = basisSym(), pl = P.plan;
+    const set = (line, price, title) => line.applyOptions(price == null ? {price: 0, lineVisible: false, axisLabelVisible: false, title: ""}
+      : {price, lineVisible: true, axisLabelVisible: true, title});
+    const onOwn = T.s === cur.s, onBasis = bs === cur.s;
+    const typ = orderType();
+    const ent = onOwn ? entryNow() : (onBasis ? basisNow() : null);
+    set(L.entry, ent, onOwn ? `${T.side > 0 ? "BUY" : "SELL"} ${typ}` : "future now");
+    const sl = onBasis ? slNow() : null, tp = onBasis ? tpNow() : null;
+    set(L.sl, sl, `SL`); set(L.tp, tp, `TP`);
+    set(L.be, onOwn && pl && pl.be != null ? pl.be : null, "BE+costs");
+    if(onOwn) P.toolDrags.push({line: L.entry, price: () => entryNow(), tick: tickOf(T.s), move: v => { T.follow = false; T.price = v; }, drop: () => { renderTicket(); preview(0); }});
+    if(onBasis && sl != null) P.toolDrags.push({line: L.sl, price: () => slNow(), tick: tickOf(bs),
+      move: v => { const b = basisNow(); if(udir() * (b - v) > 0) T.slDist = Math.max(tickOf(bs), roundTick(Math.abs(b - v), tickOf(bs))); }, drop: () => { rememberDist(); renderTicket(); preview(0); }});
+    if(onBasis && tp != null) P.toolDrags.push({line: L.tp, price: () => tpNow(), tick: tickOf(bs),
+      move: v => { const b = basisNow(); if(udir() * (v - b) > 0){ T.tpMode = "dist"; T.tpDist = roundTick(Math.abs(v - b), tickOf(bs)); } }, drop: () => { renderTicket(); preview(0); }});
   }
+  P.drags = [...(P.posDrags || []), ...P.toolDrags];
+  if(P.prim) P.prim.update();
+  toolOverlay();
+}
+/* the PLACE box that sits on the tool's entry line */
+function toolOverlay(){
+  const el = $("#tool");
+  if(!P.armed || !series || !cur || (P.T.s !== cur.s && basisSym() !== cur.s)){ el.classList.add("hide"); return; }
+  const onOwn = P.T.s === cur.s;
+  const price = onOwn ? entryNow() : basisNow();
+  const y = price != null ? series.priceToCoordinate(price) : null;
+  if(y == null){ el.classList.add("hide"); return; }
+  const p = P.plan, typ = orderType(), T = P.T;
+  const head = `<b>${T.side > 0 ? "BUY" : "SELL"} ${typ.toUpperCase()}</b>`;
+  let body;
+  if(!p) body = `<span class="tl${P.pvErr ? " blocked" : ""}" title="${esc(P.pvErr || "")}">${head} · ${esc(P.pvErr || "working out…")}</span>`;
+  else {
+    const e = p.risk_estimated ? "≈" : "";
+    const money = p.risk != null ? ` · <span class="down">${e}${rsS(-p.risk)}</span>` + (p.reward != null ? ` / <span class="up">${e}${rsS(p.reward)}</span>` : "") + (p.rr != null ? ` · ${p.rr}R` : "") : "";
+    body = `<span class="tl${p.blocked ? " blocked" : ""}" title="${esc(p.blocked || (p.notes || []).join(" · "))}">${head} · ${p.lots} lot${p.lots === 1 ? "" : "s"}${money}${p.blocked ? " · " + esc(p.blocked) : ""}</span>`;
+  }
+  const canPlace = p && !p.blocked && p.lots > 0 && (onOwn || T.basis === "underlying");
+  const sig = [body, canPlace, T.follow, T.side].join("|");
+  if(el.dataset.sig !== sig){
+    el.dataset.sig = sig;
+    el.innerHTML = body + `<button class="tp ${T.side > 0 ? "buy" : "sell"}" id="tPlace" ${canPlace ? "" : "disabled"}>PLACE</button>`
+      + (T.follow ? "" : `<button class="tx" id="tMkt" title="Back to a market order">MKT</button>`)
+      + `<button class="tx" id="tX" title="Close the tool">✕</button>`;
+    $("#tPlace").onclick = place; $("#tX").onclick = disarm; const m = $("#tMkt"); if(m) m.onclick = toMarket;
+  }
+  el.classList.remove("hide");
+  const x = P.toolX != null ? P.toolX : 60;
+  el.style.left = Math.max(4, Math.min(x, $("#chart").clientWidth - el.offsetWidth - 70)) + "px";
+  el.style.top = (y - 16) + "px";
+}
+function onToolTick(t){
+  if(!P.armed) return;
+  if(t.s !== P.T.s && t.s !== P.T.ref) return;
+  if(P.rafPending) return;
+  P.rafPending = true;
+  requestAnimationFrame(() => { P.rafPending = false; if(!P.dragging) toolRedraw(); });
 }
 function wireDrag(){
   const el = $("#chart");
   const yOf = e => (e.touches ? e.touches[0].clientY : e.clientY) - el.getBoundingClientRect().top;
   const near = y => {
-    let best = null, bd = 8;
-    for(const d of P.drags){ const yy = series.priceToCoordinate(d.price); if(yy != null && Math.abs(yy - y) < bd){ bd = Math.abs(yy - y); best = d; } }
+    let best = null, bd = 9;
+    for(const d of P.drags || []){ const pr = d.price(); if(pr == null) continue; const yy = series.priceToCoordinate(pr); if(yy != null && Math.abs(yy - y) < bd){ bd = Math.abs(yy - y); best = d; } }
     return best;
   };
   const down = e => {
-    if(!series) return;
+    if(!series || e.target.closest("#tool,#ctools")) return;
     const d = near(yOf(e)); if(!d) return;
     e.preventDefault(); e.stopPropagation();
     P.dragging = d; chart.applyOptions({handleScroll: false, handleScale: false});
   };
   const move = e => {
-    if(!series) return;
+    if(!series || e.target.closest && e.target.closest("#tool,#ctools")) return;
     const y = yOf(e);
     if(!P.dragging){ el.style.cursor = near(y) ? "ns-resize" : ""; return; }
     e.preventDefault(); e.stopPropagation();
     const v = series.coordinateToPrice(y); if(v == null) return;
     const p = roundTick(v, P.dragging.tick);
-    P.dragging.price = p; P.dragging.line.applyOptions({price: p});
+    P.dragging.line.applyOptions({price: p});
+    if(P.dragging.move){ P.dragging.move(p); const d = P.dragging; P.dragging = null; toolRedraw(); P.dragging = d; }
+    else P.dragging.set(p);
   };
   const up = e => {
     if(!P.dragging) return;
-    const d = P.dragging; P.dragging = null;
+    const d = P.dragging; P.dragging = null; P.dragEnd = Date.now();
     chart.applyOptions({handleScroll: true, handleScale: true});
     e.stopPropagation();
-    d.drop(d.price);
+    d.drop(d.price());
   };
   for(const [ev, fn] of [["mousedown", down], ["touchstart", down], ["mousemove", move], ["touchmove", move]])
     el.addEventListener(ev, fn, {capture: true, passive: false});
   window.addEventListener("mouseup", up, true); window.addEventListener("touchend", up, true);
+  new ResizeObserver(() => toolOverlay()).observe(el);
 }
 
 /* ---------------------------------------------------------------- rules (Settings) */
@@ -491,4 +713,5 @@ async function paperInit(){
   wireTicket(); wireTrail(); wireTabs(); wireSettings(); wireDrag();
   const j = await api("/api/paper"); if(j.ok) paperUpdate(j.paper);
   renderTicket();
+  setInterval(() => { if(P.armed && !P.dragging){ toolOverlay(); if(P.prim) P.prim.update(); } }, 300);   // follows price-scale zooms too
 }

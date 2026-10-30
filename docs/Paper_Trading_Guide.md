@@ -1,6 +1,34 @@
-# Paper trading: how it works (v0.2.0)
+# Paper trading: how it works (v0.3.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
+
+## The long / short tool on the chart (like the MT5 EA)
+
+- Press **BUY** or **SELL** at the chart's top-left corner. The tool appears on the chart:
+  - a red zone down to the stop and a green zone up to the target, each with its **net ₹**;
+  - the R multiple;
+  - a **PLACE** box on the entry line.
+- **The entry follows the live price** (a market order) until you drag it:
+  - drag a buy's entry **below** the market and it becomes a **limit**; drag it **above** and it becomes a **stop** (the other way round for a sell);
+  - **MKT** on the PLACE box snaps it back to market.
+- **SL and TP keep their distance** from the entry, so the whole tool moves with the price.
+  - Drag either line to change its distance.
+  - The stop distance you set is remembered per instrument and used next time.
+  - The target defaults to your R (Settings: the ticket's R box), net of charges.
+- **PLACE** sends it; **✕** closes the tool. The side panel shows the same trade with more detail (charges, margin, BE + costs). You don't need it open to trade.
+- **Open positions** show their zones from the entry candle, with SL and TP lines you can drag and a red **✕** on the entry line to close at market in one click. Pending orders have a grey **✕** to cancel.
+
+## Timeframes and full screen
+
+- The bar above the chart shows your pinned timeframes. **▾** lists them all: 1m–45m, 1h–4h, 1D, 1W, 1M.
+  - Type any other, such as `7m`, `90m`, `2h` or `3D`, and press Use.
+  - Right-click one (or long-press on a phone) to pin or unpin it.
+- Timeframes Fyers doesn't serve directly are built from smaller candles, starting at the session open (09:00 for MCX).
+- **⛶ or F** opens full screen. In full screen, **P** slides the panel over the chart, and **Esc** exits.
+
+## Saved on the server
+
+Your watchlist, pinned timeframes, last chart, theme, panel on/off, ticket defaults (risk mode and amount, product, R) and remembered stop distances are saved on the server. Your rules and trailing settings have been saved there since v0.2.0. Any device, after any login, opens the same set-up.
 
 ## Every ₹ figure is net
 

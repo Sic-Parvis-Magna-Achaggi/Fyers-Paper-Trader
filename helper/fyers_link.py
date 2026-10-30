@@ -184,20 +184,33 @@ def status() -> dict:
 
 
 # ---------------------------------------------------------------- data
-RES = {"1": 60, "3": 180, "5": 300, "15": 900, "30": 1800, "60": 3600, "D": 86400}
-MAX_DAYS = {"1": 30, "3": 60, "5": 90, "15": 90, "30": 90, "60": 90, "D": 365}
+RES = {"1": 60, "2": 120, "3": 180, "5": 300, "10": 600, "15": 900, "20": 1200, "30": 1800, "45": 2700,
+       "60": 3600, "120": 7200, "180": 10800, "240": 14400, "D": 86400}
+CHUNK = {"D": 365}                       # days per request (Fyers: 100 for intraday, 366 for daily)
+MAX_TOTAL = {"1": 30, "2": 45, "3": 60, "D": 1100}   # most days we fetch in one go (others: 200)
 
 
 def history(symbol: str, res: str, days: int) -> list:
-    """Candles [[epoch_sec, o, h, l, c, v], ...], oldest first."""
+    """Candles [[epoch_sec, o, h, l, c, v], ...], oldest first. Long ranges are fetched in chunks."""
     if res not in RES:
         raise ValueError("bad resolution")
-    days = max(1, min(days, MAX_DAYS[res]))
+    days = max(1, min(int(days), MAX_TOTAL.get(res, 200)))
+    chunk = CHUNK.get(res, 99)
     end = dt.datetime.now(IST).date()
     start = end - dt.timedelta(days=days)
-    j = _get(f"{DATA}/history", {"symbol": symbol, "resolution": res, "date_format": "1",
-                                 "range_from": start.isoformat(), "range_to": end.isoformat(), "cont_flag": "1"})
-    return j.get("candles", [])
+    out, a = [], start
+    while a <= end:
+        b = min(end, a + dt.timedelta(days=chunk))
+        j = _get(f"{DATA}/history", {"symbol": symbol, "resolution": res, "date_format": "1",
+                                     "range_from": a.isoformat(), "range_to": b.isoformat(), "cont_flag": "1"})
+        out += j.get("candles", [])
+        a = b + dt.timedelta(days=1)
+    seen, uniq = set(), []
+    for c in sorted(out, key=lambda c: c[0]):
+        if c[0] not in seen:
+            seen.add(c[0])
+            uniq.append(c)
+    return uniq
 
 
 def margin(symbol: str, qty: int, side: int, product: str, price: float = 0.0) -> float:

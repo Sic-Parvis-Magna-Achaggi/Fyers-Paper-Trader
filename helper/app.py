@@ -268,6 +268,27 @@ async def history(request: Request, symbol: str, res: str = "5", days: int = 5):
     return {"ok": True, "candles": candles}
 
 
+@app.get("/api/prefs")
+async def get_prefs(request: Request):
+    _need(request)
+    return {"ok": True, "prefs": store.load("prefs.json")}
+
+
+@app.post("/api/prefs")
+async def set_prefs(request: Request):
+    """Page preferences (watchlist, timeframes, last chart, theme, default stop distances...): merged, so
+    every device and every login gets the same set-up."""
+    _same_origin(request)
+    _need(request)
+    b = await _body(request)
+    if not isinstance(b, dict) or len(json.dumps(b)) > 100_000:
+        return _err("bad preferences")
+    p = store.load("prefs.json")
+    p.update(b)
+    store.save("prefs.json", p)
+    return {"ok": True}
+
+
 @app.get("/api/logs")
 def logs(request: Request):
     _need(request)

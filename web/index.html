@@ -77,15 +77,43 @@ aside{border-right:1px solid var(--line);background:var(--panel);display:flex;fl
 .chain tr.atm td.k{color:var(--accent)}
 .empty{color:var(--muted);font-size:13px;padding:14px 4px}
 
-section.chartwrap{display:grid;grid-template-rows:auto 1fr;min-width:0;min-height:0}
-.charthead{display:flex;align-items:center;gap:14px;padding:8px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+section.chartwrap{display:grid;grid-template-rows:auto minmax(0,1fr);min-width:0;min-height:0;position:relative}
+.charthead{display:flex;align-items:center;gap:12px;padding:6px 10px 6px 14px;border-bottom:1px solid var(--line);flex-wrap:nowrap;min-width:0;overflow:hidden}
+.charthead .meta{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .charthead .sym{font-family:var(--mono);font-weight:500}
 .charthead .ltp{font-family:var(--mono);font-size:18px}
 .charthead .meta{font-size:12px;color:var(--muted)}
 .tf{display:flex;gap:2px}
 .tf button{padding:3px 8px;font-size:12px;border-color:transparent;background:transparent;color:var(--muted)}
 .tf button.on{color:var(--text);background:var(--chip)}
-#chart{position:relative;min-height:300px}
+#chart{position:relative;min-height:0;min-width:0;overflow:hidden}
+/* timeframe picker */
+.tfmore{padding:3px 7px;font-size:12px;border-color:transparent;background:transparent;color:var(--muted)}
+#tfPick{position:absolute;right:10px;top:42px;z-index:30;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px;width:250px;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+#tfPick .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:6px}
+#tfPick .grid button{padding:4px 0;font-size:12px;position:relative}
+#tfPick .grid button.on{border-color:var(--accent);color:var(--accent)}
+#tfPick .grid button.fav::after{content:"★";position:absolute;top:-3px;right:2px;font-size:9px;color:var(--warn)}
+#tfPick .h{font-size:11px;color:var(--muted)}
+#tfPick .row2{display:flex;gap:6px;margin-top:8px}
+#tfPick .row2 input{padding:4px 8px;font-size:12px}
+#tfPick .row2 button{padding:4px 10px;font-size:12px;white-space:nowrap}
+/* on-chart buttons and the long/short tool */
+#ctools{position:absolute;left:8px;top:8px;z-index:6;display:flex;gap:4px}
+#ctools button{padding:3px 12px;font-size:12px;font-weight:600;letter-spacing:.04em;background:color-mix(in srgb,var(--panel) 85%,transparent)}
+#cBuy{color:var(--up);border-color:color-mix(in srgb,var(--up) 50%,var(--line))} #cSell{color:var(--down);border-color:color-mix(in srgb,var(--down) 50%,var(--line))}
+#cBuy.on{background:var(--up);color:#fff} #cSell.on{background:var(--down);color:#fff}
+#tool{position:absolute;z-index:6;display:flex;align-items:center;gap:4px;transform:translateY(-50%);pointer-events:none;max-width:calc(100% - 66px)}
+#tool .tl{min-width:0;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto}
+#tool button{flex:0 0 auto}
+#tool > *{pointer-events:auto}
+#tool .tl{font-size:11.5px;font-family:var(--mono);padding:3px 8px;border-radius:5px;background:var(--panel);border:1px solid var(--line);white-space:nowrap}
+#tool .tl b{font-weight:600}
+#tool .tl.blocked{border-color:var(--down);color:var(--down);max-width:280px;overflow:hidden;text-overflow:ellipsis}
+#tool button{padding:3px 10px;font-size:11.5px;font-weight:600;border-radius:5px}
+#tool .tp{color:#fff} #tool .tp.buy{background:var(--up);border-color:var(--up)} #tool .tp.sell{background:var(--down);border-color:var(--down)}
+#tool .tp:disabled{opacity:.45;cursor:not-allowed}
+#tool .tx{background:var(--panel);padding:3px 7px}
 #chartMsg{position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;color:var(--muted);text-align:center;padding:20px;pointer-events:none}
 
 /* drawer */
@@ -108,13 +136,12 @@ section.chartwrap{display:grid;grid-template-rows:auto 1fr;min-width:0;min-heigh
 /* full screen: chart (+ trade panel unless hidden) fills the screen */
 .fsb{padding:3px 8px;font-size:13px}
 body.chartfs header,body.chartfs aside{display:none!important}
-body.chartfs main{grid-template-columns:1fr 360px!important;grid-template-rows:1fr!important}
-body.chartfs #panel{grid-column:auto!important;grid-row:auto!important;border-top:0;border-left:1px solid var(--line)}
-body.chartfs section.chartwrap{grid-row:auto!important}
-body.nopanel #panel{display:none!important}
-body.nopanel main{grid-template-columns:240px 1fr}
-body.chartfs.nopanel main{grid-template-columns:1fr!important}
-@media (max-width:760px){ body.chartfs main{grid-template-columns:1fr!important;grid-template-rows:1fr auto!important} }
+body.chartfs main{position:fixed!important;inset:0;z-index:40;background:var(--bg);display:block!important;overflow:hidden!important}
+body.chartfs section.chartwrap{position:absolute;inset:0;height:100%;width:100%}
+body.chartfs #panel{display:none}
+body.chartfs.fspanel #panel{display:block!important;position:absolute;top:0;right:0;bottom:0;width:min(360px,100%);z-index:45;box-shadow:-8px 0 24px rgba(0,0,0,.35)}
+body.nopanel:not(.chartfs) #panel{display:none!important}
+body.nopanel:not(.chartfs) main{grid-template-columns:260px 1fr}
 /* trade panel */
 #panel{border-left:1px solid var(--line);background:var(--panel);overflow:auto;min-height:0;padding:10px 12px 20px}
 #panel h4{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 0 6px;font-weight:600}
@@ -187,7 +214,7 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
 }
 @media (max-width:760px){
   main{grid-template-columns:1fr;grid-template-rows:minmax(340px,55vh) auto auto;overflow:auto}
-  section.chartwrap{grid-row:1} #panel{grid-row:2} aside{grid-row:3;min-height:320px}
+  section.chartwrap{grid-row:1} #panel{grid-row:2;overflow:visible;min-height:max-content} aside{grid-row:3;min-height:320px}
   aside{border-right:0;border-top:1px solid var(--line)}
   header{padding:8px 12px}
   #pBudget,#pClock{display:none}
@@ -248,10 +275,20 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
         <span class="meta" id="cMeta"></span>
         <span class="spacer" style="flex:1"></span>
         <div class="tf" id="tf"></div>
+        <button class="tfmore" id="bTf" title="All timeframes and custom">▾</button>
         <button class="ghost fsb" id="bPanel" title="Show or hide the trade panel (P)">Panel</button>
         <button class="ghost fsb" id="bFull" title="Full screen (F)">⛶</button>
       </div>
-      <div id="chart"><div id="chartMsg">Pick a contract from Find or Options.</div></div>
+      <div id="tfPick" class="hide">
+        <div class="h">Pick a timeframe · ★ = on the bar (right-click or long-press to pin)</div>
+        <div class="grid" id="tfGrid"></div>
+        <div class="row2"><input id="tfCustom" placeholder="e.g. 7m, 2h, 4h, 1D, 1W, 1M" autocomplete="off"><button id="tfAdd">Use</button></div>
+        <div class="err" id="tfErr" style="min-height:0"></div>
+      </div>
+      <div id="chart"><div id="chartMsg">Pick a contract from Find or Options.</div>
+        <div id="ctools"><button id="cBuy" title="Long tool">BUY</button><button id="cSell" title="Short tool">SELL</button></div>
+        <div id="tool" class="hide"></div>
+      </div>
     </section>
     <section id="panel">
       <div style="display:flex;align-items:center;gap:8px"><h4 style="margin:4px 0 6px;flex:1">Paper account</h4><span class="tag">SIM</span></div>
@@ -342,16 +379,56 @@ input.edin{width:110px;padding:2px 6px;font-size:12px;display:inline-block}
 "use strict";
 const $ = s => document.querySelector(s);
 const IST = 19800;
-const TFS = [["1","1m",3],["5","5m",10],["15","15m",30],["60","1h",60],["D","1D",365]];
-const TF_SEC = {"1":60,"3":180,"5":300,"15":900,"30":1800,"60":3600,"D":86400};
 const ls = {
   get(k, d){ try{ const v = localStorage.getItem("ftm."+k); return v==null ? d : JSON.parse(v); }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem("ftm."+k, JSON.stringify(v)); }catch(e){} }
 };
+/* preferences live on the server (same set-up on every device); the browser keeps a copy for a fast first paint */
+const PREF = {};
+const prefQ = {}; let prefTimer = null;
+function prefGet(k, d){ return k in PREF ? PREF[k] : ls.get(k, d); }
+function prefSet(k, v){
+  PREF[k] = v; ls.set(k, v); prefQ[k] = v;
+  clearTimeout(prefTimer);
+  prefTimer = setTimeout(() => { const b = {...prefQ}; for(const x in prefQ) delete prefQ[x]; api("/api/prefs", {body: b}); }, 600);
+}
+async function loadPrefs(){ const j = await api("/api/prefs"); if(j.ok) Object.assign(PREF, j.prefs || {}); }
+
+/* timeframes: "5m", "45m", "2h", "1D", "1W", "1M". Fyers serves the native ones; others are built from a smaller one */
+const NATIVE = [1,2,3,5,10,15,20,30,45,60,120,180,240];
+const TF_ALL = ["1m","2m","3m","5m","10m","15m","20m","30m","45m","1h","2h","3h","4h","1D","1W","1M"];
+function parseTf(x){
+  const m = /^\s*(\d+)\s*(m|min|h|H|d|D|w|W|M|mo)\s*$/.exec(String(x)); if(!m) return null;
+  const n = +m[1]; let u = m[2];
+  if(u === "min") u = "m"; if(u === "H") u = "h"; if(u === "d") u = "D"; if(u === "w") u = "W"; if(u === "mo") u = "M";
+  if(n < 1 || n > 1000) return null;
+  const min = u === "m" ? n : u === "h" ? n * 60 : null;
+  if(min && min > 24 * 60) return null;
+  return {n, u, min, key: u === "h" && n * 60 < 60 ? n * 60 + "m" : n + u};
+}
+function tfLabel(k){ return k; }
+function tfPlan(k){
+  const t = parseTf(k) || parseTf("5m");
+  if(t.min){
+    const base = NATIVE.includes(t.min) ? t.min : Math.max(...NATIVE.filter(b => t.min % b === 0));
+    const days = Math.min(base === 1 ? 30 : 200, Math.max(2, Math.ceil(1000 * t.min / 870) + 3));
+    return {t, res: String(base), agg: base !== t.min, sec: t.min * 60, days};
+  }
+  return {t, res: "D", agg: t.u !== "D" || t.n > 1, sec: 86400 * (t.u === "D" ? t.n : 1), days: t.u === "D" && t.n === 1 ? 730 : 1100};
+}
+function sessStart(){ const r = cur && sym[cur.s]; const m = /^(\d\d)(\d\d)/.exec((r && r.sess) || cur && cur.sess || ""); return m ? (+m[1]) * 60 + (+m[2]) : 540; }
+function bucket(ts, plan){                // ts: seconds already shifted to IST
+  const t = plan.t, day = Math.floor(ts / 86400) * 86400;
+  if(t.min){ const a = day + sessStart() * 60; return a + Math.floor((ts - a) / plan.sec) * plan.sec; }
+  if(t.u === "D") return t.n === 1 ? day : Math.floor(day / plan.sec) * plan.sec;
+  if(t.u === "W"){ const dow = new Date(day * 1000).getUTCDay(); return day - ((dow + 6) % 7) * 86400; }
+  const d = new Date(ts * 1000); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) / 1000;
+}
 let S = {};                              // last /api/state
-let watch = ls.get("watch", []);         // [{s, d}]
-let cur = ls.get("cur", null);           // {s, d, tick}
-let tf = ls.get("tf", "5");
+let watch = prefGet("watch", []);        // [{s, d}]
+let cur = prefGet("cur", null);          // {s, d, tick}
+let tf = prefGet("tf2", "5m");
+let tfFav = prefGet("tfs", ["1m","5m","15m","1h","4h","1D"]);
 let ws = null, wsTry = 0;
 const last = {};                         // symbol -> tick
 const sym = {};                          // symbol -> master row
@@ -461,6 +538,7 @@ function onTick(t){
     el.className = "px" + (isNaN(prev) || prev === t.ltp ? "" : prev < t.ltp ? " up" : " down");
     el.dataset.v = t.ltp;
   });
+  onToolTick(t);
   if(cur && t.s === cur.s){
     $("#cLtp").textContent = fmt(t.ltp, cur.tick);
     $("#cMeta").textContent = (t.bid != null ? `Bid ${fmt(t.bid, cur.tick)} · Ask ${fmt(t.ask, cur.tick)} · ` : "") + (t.src === "poll" ? "polled" : "live");
@@ -479,24 +557,53 @@ function buildChart(){
     layout:{background:{type:"solid", color:cssVar("--bg")}, textColor:cssVar("--muted"), fontFamily:"IBM Plex Mono"},
     grid:{vertLines:{visible:false}, horzLines:{color:cssVar("--line")}},
     rightPriceScale:{borderColor:cssVar("--line")},
-    timeScale:{borderColor:cssVar("--line"), timeVisible:true, secondsVisible:false},
+    timeScale:{borderColor:cssVar("--line"), timeVisible:true, secondsVisible:false, rightOffset:24},
     crosshair:{mode:0}
   });
   series = chart.addCandlestickSeries({upColor:cssVar("--up"), downColor:cssVar("--down"), borderVisible:false,
     wickUpColor:cssVar("--up"), wickDownColor:cssVar("--down")});
 }
+function setTf(k){ tf = k; prefSet("tf2", tf); tfButtons(); loadHistory(); }
 function tfButtons(){
   $("#tf").innerHTML = "";
-  for(const [r, label] of TFS){
-    const b = document.createElement("button"); b.textContent = label; b.className = r === tf ? "on" : "";
-    b.onclick = () => { tf = r; ls.set("tf", tf); tfButtons(); loadHistory(); };
+  const list = tfFav.includes(tf) ? tfFav : [...tfFav, tf];
+  for(const k of list){
+    const b = document.createElement("button"); b.textContent = tfLabel(k); b.className = k === tf ? "on" : "";
+    b.onclick = () => setTf(k);
     $("#tf").append(b);
   }
+  renderTfPick();
 }
+function renderTfPick(){
+  const g = $("#tfGrid"); g.innerHTML = "";
+  const all = [...new Set([...TF_ALL, ...tfFav])];
+  for(const k of all){
+    const b = document.createElement("button"); b.textContent = k;
+    b.className = (k === tf ? "on " : "") + (tfFav.includes(k) ? "fav" : "");
+    b.title = "Click to show · right-click to pin or unpin on the bar";
+    b.onclick = () => { setTf(k); $("#tfPick").classList.add("hide"); };
+    const pin = e => { e.preventDefault(); tfFav = tfFav.includes(k) ? tfFav.filter(x => x !== k) : [...tfFav, k];
+      tfFav.sort((a, b) => tfOrder(a) - tfOrder(b)); prefSet("tfs", tfFav); tfButtons(); };
+    b.oncontextmenu = pin;
+    let lp; b.ontouchstart = e => { lp = setTimeout(() => pin(e), 550); }; b.ontouchend = () => clearTimeout(lp);
+    g.append(b);
+  }
+}
+function tfOrder(k){ const t = parseTf(k); return !t ? 1e9 : t.min || ({D: 1440, W: 10080, M: 43200}[t.u] * t.n); }
+$("#bTf").onclick = e => { e.stopPropagation(); $("#tfPick").classList.toggle("hide"); $("#tfErr").textContent = ""; };
+document.addEventListener("click", e => { if(!e.target.closest("#tfPick,#bTf")) $("#tfPick").classList.add("hide"); });
+function useCustomTf(){
+  const t = parseTf($("#tfCustom").value);
+  if(!t){ $("#tfErr").textContent = "Use a number and m, h, D, W or M - e.g. 7m, 2h, 1W"; return; }
+  if(!tfFav.includes(t.key)){ tfFav = [...tfFav, t.key].sort((a, b) => tfOrder(a) - tfOrder(b)); prefSet("tfs", tfFav); }
+  $("#tfCustom").value = ""; $("#tfPick").classList.add("hide"); setTf(t.key);
+}
+$("#tfAdd").onclick = useCustomTf;
+$("#tfCustom").onkeydown = e => { if(e.key === "Enter") useCustomTf(); };
 async function openSymbol(row){
   sym[row.s] = row;
-  cur = {s:row.s, d:row.d, tick:row.tick, lot:row.lot, mult:row.mult};
-  ls.set("cur", cur);
+  cur = {s:row.s, d:row.d, tick:row.tick, lot:row.lot, mult:row.mult, sess:row.sess};
+  prefSet("cur", cur);
   $("#cSym").textContent = row.s.replace("MCX:", "");
   $("#cLtp").textContent = last[row.s] ? fmt(last[row.s].ltp, row.tick) : "";
   $("#cMeta").textContent = "";
@@ -509,11 +616,20 @@ async function loadHistory(){
   const my = ++histToken, msg = $("#chartMsg");
   msg.textContent = "Loading…"; msg.classList.remove("hide");
   if(!(S.fyers||{}).logged_in){ msg.textContent = "Log in to Fyers to load charts."; series.setData([]); return; }
-  const days = (TFS.find(x => x[0] === tf) || [0,0,5])[2];
-  const j = await api(`/api/history?symbol=${encodeURIComponent(cur.s)}&res=${tf}&days=${days}`);
+  const plan = tfPlan(tf); curPlan = plan;
+  const j = await api(`/api/history?symbol=${encodeURIComponent(cur.s)}&res=${plan.res}&days=${plan.days}`);
   if(my !== histToken) return;
   if(!j.ok){ msg.textContent = j.error || "Couldn't load the chart."; series.setData([]); return; }
-  const bars = (j.candles || []).map(c => ({time:c[0] + IST, open:c[1], high:c[2], low:c[3], close:c[4]}));
+  let bars = (j.candles || []).map(c => ({time:c[0] + IST, open:c[1], high:c[2], low:c[3], close:c[4]}));
+  if(plan.agg){
+    const out = [];
+    for(const b of bars){
+      const k = bucket(b.time, plan), o = out[out.length - 1];
+      if(!o || o.time !== k) out.push({time:k, open:b.open, high:b.high, low:b.low, close:b.close});
+      else { o.high = Math.max(o.high, b.high); o.low = Math.min(o.low, b.low); o.close = b.close; }
+    }
+    bars = out;
+  }
   series.setData(bars);
   series.applyOptions({priceFormat:{type:"price", precision:(String(cur.tick).split(".")[1]||"").length, minMove:cur.tick || 0.01}});
   lastBar = bars.length ? {...bars[bars.length - 1]} : null;
@@ -522,10 +638,14 @@ async function loadHistory(){
   chart.timeScale().scrollToRealTime();
   drawLines();
 }
+let curPlan = null;
 function liveBar(t){
-  if(!series || !t.ltp) return;
-  const sec = TF_SEC[tf], tt = Number(t.t) || Math.floor(Date.now()/1000);
-  const b = Math.floor((tt + IST) / sec) * sec;
+  if(!series || !t.ltp || !curPlan) return;
+  const tt = Number(t.t) || Math.floor(Date.now()/1000), ts = tt + IST;
+  let b = bucket(ts, curPlan);
+  // native intraday bars: follow Fyers' own bar alignment (the last bar loaded) within the same day
+  if(!curPlan.agg && curPlan.t.min && lastBar && Math.floor(lastBar.time / 86400) === Math.floor(ts / 86400) && ts >= lastBar.time)
+    b = lastBar.time + Math.floor((ts - lastBar.time) / curPlan.sec) * curPlan.sec;
   if(lastBar && b < lastBar.time) return;
   if(!lastBar || b > lastBar.time) lastBar = {time:b, open:t.ltp, high:t.ltp, low:t.ltp, close:t.ltp};
   else { lastBar.high = Math.max(lastBar.high, t.ltp); lastBar.low = Math.min(lastBar.low, t.ltp); lastBar.close = t.ltp; }
@@ -550,7 +670,7 @@ function rowEl(r, {inWatch} = {}){
   if(last[r.s]) px.textContent = fmt(last[r.s].ltp, r.tick);
   el.onclick = () => openSymbol(r);
   const x = document.createElement("button"); x.className = "x";
-  if(inWatch){ x.textContent = "×"; x.title = "Remove"; x.onclick = e => { e.stopPropagation(); watch = watch.filter(w => w.s !== r.s); ls.set("watch", watch); renderWatch(); sendWant(); }; }
+  if(inWatch){ x.textContent = "×"; x.title = "Remove"; x.onclick = e => { e.stopPropagation(); watch = watch.filter(w => w.s !== r.s); prefSet("watch", watch); renderWatch(); sendWant(); }; }
   else { x.textContent = "+"; x.title = "Add to watchlist"; x.onclick = e => { e.stopPropagation(); addWatch(r); }; }
   el.append(x);
   if(r.f === "FUT" && !inWatch){
@@ -562,7 +682,7 @@ function rowEl(r, {inWatch} = {}){
 function addWatch(r){
   if(watch.some(w => w.s === r.s)) return toast("Already in the watchlist");
   if(watch.length >= 15) return toast("Watchlist is full (15)");
-  watch.push(r); ls.set("watch", watch); renderWatch(); sendWant(); toast("Added " + r.s.replace("MCX:", ""));
+  watch.push(r); prefSet("watch", watch); renderWatch(); sendWant(); toast("Added " + r.s.replace("MCX:", ""));
 }
 function renderWatch(){
   const box = $("#watchList"); box.innerHTML = "";
@@ -645,14 +765,15 @@ $("#bPw").onclick = async () => {
 };
 $("#bLogout").onclick = async () => { await api("/api/logout", {body:{}}); location.reload(); };
 document.querySelectorAll("#theme button").forEach(b => {
-  b.classList.toggle("on", (ls.get("theme","")) === b.dataset.t);
+  b.classList.toggle("on", (prefGet("theme","")) === b.dataset.t);
   b.onclick = () => {
-    ls.set("theme", b.dataset.t); applyTheme();
+    prefSet("theme", b.dataset.t); applyTheme();
     document.querySelectorAll("#theme button").forEach(x => x.classList.toggle("on", x === b));
   };
 });
 function applyTheme(){
-  const t = ls.get("theme", "");
+  const t = prefGet("theme", "");
+  document.querySelectorAll("#theme button").forEach(x => x.classList.toggle("on", t === x.dataset.t));
   if(t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
   if(chart){ buildChart(); loadHistory(); }
 }
@@ -671,6 +792,7 @@ $("#bLogs").onclick = loadLogs;
 /* full screen and panel toggles */
 function setFull(on){
   document.body.classList.toggle("chartfs", on);
+  if(!on) document.body.classList.remove("fspanel");
   const de = document.documentElement;
   try{
     if(on && !document.fullscreenElement && de.requestFullscreen) de.requestFullscreen().catch(()=>{});
@@ -678,7 +800,10 @@ function setFull(on){
   }catch(e){}
   $("#bFull").textContent = on ? "✕" : "⛶"; $("#bFull").title = on ? "Exit full screen (F or Esc)" : "Full screen (F)";
 }
-function togglePanel(){ document.body.classList.toggle("nopanel"); ls.set("nopanel", document.body.classList.contains("nopanel")); }
+function togglePanel(){
+  if(document.body.classList.contains("chartfs")){ document.body.classList.toggle("fspanel"); return; }   // in full screen the panel slides over the chart
+  document.body.classList.toggle("nopanel"); prefSet("nopanel", document.body.classList.contains("nopanel"));
+}
 $("#bFull").onclick = () => setFull(!document.body.classList.contains("chartfs"));
 $("#bPanel").onclick = togglePanel;
 document.addEventListener("fullscreenchange", () => { if(!document.fullscreenElement && document.body.classList.contains("chartfs")) setFull(false); });
@@ -688,12 +813,16 @@ document.addEventListener("keydown", e => {
   if(e.key === "p" || e.key === "P"){ e.preventDefault(); togglePanel(); }
   if(e.key === "Escape" && document.body.classList.contains("chartfs")) setFull(false);
 });
-if(ls.get("nopanel", false)) document.body.classList.add("nopanel");
+if(prefGet("nopanel", false)) document.body.classList.add("nopanel");
 
 function clock(){ $("#pClock").textContent = new Date().toLocaleTimeString("en-GB",{timeZone:"Asia/Kolkata"}) + " IST"; }
 async function boot(){
   applyTheme();
   if(!await refreshState()) return;
+  await loadPrefs();
+  watch = prefGet("watch", []); cur = prefGet("cur", null); tf = prefGet("tf2", "5m"); tfFav = prefGet("tfs", tfFav);
+  document.body.classList.toggle("nopanel", !!prefGet("nopanel", false));
+  applyTheme();
   $("#vSetup").classList.add("hide"); $("#vLogin").classList.add("hide"); $("#app").classList.remove("hide");
   const p = new URLSearchParams(location.search);
   if(p.get("fyers") === "ok") toast("Logged in to Fyers");

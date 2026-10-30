@@ -856,7 +856,8 @@ class Paper:
             tp_ex = pos["tp"] if pos["basis"] == "self" else pos["avg"] + pos["side"] * abs(pos["tp"] - pos["ref_entry"]) * abs(pos.get("delta") or 0.5)
             v["at_tp"] = charges.net_at(row, pos["side"], pos["qty"], pos["avg"], tp_ex, paid=pos["paid"])["net"]
         v["r_now"] = round(n["net"] / pos["init_risk"], 2) if pos["init_risk"] else None
-        v["est"] = pos["basis"] == "underlying"            # figures at an underlying stop use the option's delta
+        v["est"] = pos["basis"] == "underlying"
+        v["basis_entry"] = pos.get("basis_entry")            # figures at an underlying stop use the option's delta
         return v
 
     def order_view(self, o) -> dict:

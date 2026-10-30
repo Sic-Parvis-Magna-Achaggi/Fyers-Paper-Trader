@@ -6,6 +6,18 @@ It runs on our own server and serves its own page, so there is nothing to instal
 
 **Address:** https://68-183-245-178.sslip.io
 
+## Version 0.3.0: trade from the chart
+
+- **An MT5-style long/short tool on the chart:**
+  - red and green zones with net ₹ and R;
+  - a PLACE box on the entry line;
+  - the entry follows the market, or you drag it and it becomes a limit or stop automatically;
+  - SL and TP move with it.
+- **On-chart controls:** BUY / SELL at the chart's corner; one-click ✕ to close a position or cancel an order; zones on open positions.
+- **Custom timeframes:** any minutes or hours, plus D, W and M. Pin your favourites.
+- **Real full screen,** with the panel sliding over it (P).
+- **Settings saved on the server:** watchlist, timeframes, last chart, theme, ticket defaults and stop distances.
+
 ## Version 0.2.0: paper trading
 
 - **Paper trading on the server.** Market, limit and stop orders; draggable entry, SL and TP lines; BE, Trail BE and Trail SL; adds; Close all. It keeps running with the page closed.
