@@ -263,6 +263,41 @@ a.btnlink{border:1px solid var(--line);border-radius:6px;padding:6px 12px;color:
 #pineIn .pir input[type=checkbox]{width:16px;height:16px}
 #pineIn .pir input[type=color]{width:44px;height:26px;padding:0;border:1px solid var(--line);border-radius:4px;background:none}
 #pineIn .pir textarea{width:180px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;color:inherit;font:inherit}
+#indSet{position:fixed;z-index:70;left:50%;top:14%;transform:translateX(-50%);width:min(420px,calc(100% - 32px));max-height:72vh;display:flex;flex-direction:column;
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.45);font-size:13px}
+#indSet .pih{display:flex;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+#indSet .pib{padding:6px 14px 10px;overflow:auto}
+#indSet .pig{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:12px 0 2px}
+#indSet .pir{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 0;color:var(--text);font-size:13px}
+#indSet .pir span{flex:1}
+#indSet .pir input[type=number],#indSet .pir input[type=text],#indSet .pir select{width:150px;padding:4px 8px}
+#indSet .pir input[type=checkbox]{width:16px;height:16px}
+#indSet .pir input[type=color]{width:44px;height:26px;padding:0;border:1px solid var(--line);border-radius:4px;background:none}
+#indSet .pir textarea{width:180px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;color:inherit;font:inherit}
+#indSet .pif{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--line)}
+#indSet{width:min(470px,calc(100% - 32px))}
+#indSet .is-tabs{display:flex;gap:2px;padding:0 10px;border-bottom:1px solid var(--line)}
+#indSet .is-tabs button{background:none;border:0;border-bottom:2px solid transparent;border-radius:0;padding:8px 10px;color:var(--muted);font-weight:500}
+#indSet .is-tabs button.on{color:var(--text);border-bottom-color:var(--accent)}
+#indSet .pir span.pinc{display:flex;align-items:center;gap:6px;flex:0 0 auto}
+#indSet .is-vis label.is-pn{min-width:110px}
+#indSet .pinc small{color:var(--muted);font-size:11px;margin-left:4px}
+#indSet .pinl > span:first-child{flex:1}
+#indSet .is-cbtn{padding:2px;width:30px;height:24px;border:1px solid var(--line);border-radius:4px;background:repeating-conic-gradient(#8884 0 25%,transparent 0 50%) 0 0/8px 8px;display:inline-flex}
+#indSet .is-sw{flex:1;border-radius:2px;display:block}
+#indSet .is-pn{display:flex;align-items:center;gap:6px}
+#indSet .is-plot{border-bottom:1px dashed var(--line);padding-bottom:6px}
+#indSet .is-sub{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0 0 22px;font-size:12px;color:var(--muted)}
+#indSet .is-sub select{padding:2px 6px;font-size:12px;width:auto;min-width:0}
+#indSet .is-sub label,#indSet label.is-pn{display:inline-flex;align-items:center;gap:5px;margin:0;font-size:12px;color:var(--muted);text-transform:none;letter-spacing:0}
+#indSet label.is-pn{font-size:13px;color:var(--text)}
+#indSet .is-sub input[type=checkbox],#indSet .is-pn input[type=checkbox]{width:15px;height:15px;margin:0}
+#indSet .is-vis input[type=number]{width:64px;padding:3px 6px}
+#isPop{position:fixed;z-index:80;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px;box-shadow:0 8px 24px #0006;font-size:12px}
+#isPop input[type=color]{width:180px;height:34px;padding:0;border:1px solid var(--line);border-radius:4px;background:none}
+#isPop label{display:flex;align-items:center;gap:6px;color:var(--muted)} #isPop input[type=range]{flex:1}
+#isPop input[type=text]{font-family:IBM Plex Mono,monospace;padding:3px 6px}
+.warnc{color:var(--warn)}
 #pineIn .pif{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--line)}
 #ctPick{position:absolute;right:10px;top:42px;z-index:31;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;width:300px;max-height:calc(100% - 60px);overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.35);font-size:12.5px}
 #ctPick .cfgh{display:flex;align-items:center;margin-bottom:6px} #ctPick .cfgh b{flex:1}
@@ -322,6 +357,7 @@ a.btnlink{border:1px solid var(--line);border-radius:6px;padding:6px 12px;color:
 #posbars .ta{font-family:var(--mono);font-size:11px;padding:0 4px}
 #posbars input.rr{width:38px;padding:2px 4px;font-size:11px;font-family:var(--mono);text-align:center;border-radius:4px}
 @media (max-width:760px){ #posbars .pbar{font-size:11px} #posbars input.rr{width:32px} }
+#histPill{position:absolute;left:8px;bottom:34px;z-index:4;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:3px 10px;font-size:11.5px;color:var(--muted);pointer-events:none}
 #chartMsg{position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;color:var(--muted);text-align:center;padding:20px;pointer-events:none}
 
 /* drawer */
@@ -709,6 +745,7 @@ body:not(.is-admin) .admin-only{display:none!important}
 <script src="/static/ctype.js?v=__V__"></script>
 <script src="/static/paper.js?v=__V__"></script>
 <script src="/static/pine.js?v=__V__"></script>
+<script src="/static/indset.js?v=__V__"></script>
 <script src="/static/pages.js?v=__V__"></script>
 <script src="/vendor/qrcode/qrcode.js?v=__V__"></script>
 <script src="/static/security.js?v=__V__"></script>
@@ -912,6 +949,8 @@ function buildChart(){
   volLayout();
   indBuild();
   chart.subscribeCrosshairMove(param => { legendHover = !!(param && param.time != null && param.point); legendFill(legendHover ? param : null); });
+  // scrolled to the left edge by you: load older candles
+  chart.timeScale().subscribeVisibleLogicalRangeChange(r => { if(r && r.from < 15 && Date.now() - histUserAt < 1500) histMore(); });
   setTimeout(positionTools, 60);
   // remember each indicator pane's height when you drag a divider
   el.addEventListener("mouseup", () => setTimeout(indSaveHeights, 50));
@@ -1184,12 +1223,13 @@ function indBuild(){
   for(const cfg of indList()){
     const t = IND_TYPES[cfg.type] || {defaults: {}}, c = {...t.defaults, ...cfg}, pane = chart.panes().length;
     const r = {cfg: c, pane, series: []};
+    if(!indVisOn(c)){ r.offTf = true; c.hidden = true; }      // Settings › Visibility: not on this timeframe
     if(cfg.type === "pine") pineBuild(r);       // Pine script: its own pane, or on the candles (overlay=true)
     if(cfg.type === "volume"){
       r.hist = chart.addSeries(LightweightCharts.HistogramSeries, {priceFormat:{type:"volume"}, lastValueVisible:true, priceLineVisible:false, title:"Vol"}, pane);
       r.hist.priceScale().applyOptions({scaleMargins:{top:0.15, bottom:0}});
       r.series.push(r.hist);
-      if(c.ma){ r.ma = chart.addSeries(LightweightCharts.LineSeries, {color:c.maColor, lineWidth:1, lastValueVisible:false, priceLineVisible:false,
+      if(c.ma){ r.ma = chart.addSeries(LightweightCharts.LineSeries, {color:pcol(c.maColor), lineWidth:+((c.style || {}).maWidth) || 1, lineStyle:+((c.style || {}).maLs) || 0, lastValueVisible:false, priceLineVisible:false,
         crosshairMarkerVisible:false, priceFormat:{type:"volume"}}, pane); r.series.push(r.ma); }
     }
     if(cfg.type === "pftools"){                 // drawn on the candles' pane, over the P&F columns
@@ -1197,6 +1237,7 @@ function indBuild(){
       r.cleanup = () => { try{ s0.detachPrimitive(r.prim); }catch(e){} };
     }
     if(c.hidden && cfg.type === "volume") for(const sr of r.series) sr.applyOptions({visible: false});
+    if(c.hidden && cfg.type === "pftools" && r.prim) r.prim.update();
     INDS.push(r);
     const ps = chart.panes(); if(r.pane > 0 && ps[r.pane]){ want[r.pane] = Math.max(40, c.h || Math.round(total * 0.22)); ps[r.pane].attachPrimitive(new PaneShade()); }
   }
@@ -1305,11 +1346,12 @@ function legendFill(param){
       const m = r.ma ? ((param && param.seriesData && param.seriesData.get(r.ma)) || r.ma.data().find(d => d.time === t)) : null;
       name = `<b>Volume</b>` + (r.ma ? `<span class="lk">MA ${r.cfg.maLen}</span>` : "");
       vals = ` <span class="${bar && bar.close >= bar.open ? "up" : "down"}">${v ? (+v.value).toLocaleString("en-IN") : "–"}</span>`
-        + (r.ma ? ` <span style="color:${r.cfg.maColor}">${m ? fmtVol(m.value) : "–"}</span>` : "");
+        + (r.ma ? ` <span style="color:${pcol(r.cfg.maColor)}">${m ? fmtVol(m.value) : "–"}</span>` : "");
     }
+    if(r.offTf && !isPine) vals = ` <span class="lk">hidden on this timeframe</span>`;
     const chev = r.pane > 0 ? `<span class="la lchev" data-la="min" data-id="${id}" title="${min ? "Show values" : "Hide values"}">${min ? "▸" : "▾"}</span>` : "";
     el.classList.toggle("off", hid);
-    el.innerHTML = chev + `<span class="lname" data-id="${id}" title="Double-click for settings">${name}</span>` + (hid || min ? "" : vals)
+    el.innerHTML = chev + `<span class="lname" data-id="${id}" title="Double-click for settings">${name}</span>` + (r.offTf ? vals : hid || min ? "" : vals)
       + `<span class="lacts"><span class="la leye${hid ? " on" : ""}" data-la="eye" data-id="${id}" title="${hid ? "Show" : "Hide"}">${hid ? EYE_OFF : EYE}</span>`
       + `<span class="la" data-la="set" data-id="${id}" title="Settings">⚙</span>`
       + (isPine ? `<span class="la" data-la="src" data-id="${id}" title="Source code">{ }</span>` : "")
@@ -1322,7 +1364,7 @@ function legendFill(param){
 /* the read-out buttons: hide / show, collapse, settings, source, remove */
 document.addEventListener("DOMContentLoaded", () => $("#chart").addEventListener("dblclick", e => {
   const n = e.target.closest(".lgd .lname"); if(!n) return;
-  e.stopPropagation(); const r = INDS.find(x => x.cfg.id === n.dataset.id); if(r && r.cfg.type === "pine") pineInputs(r);
+  e.stopPropagation(); const r = INDS.find(x => x.cfg.id === n.dataset.id); if(r) indSettings(r);
 }));
 document.addEventListener("DOMContentLoaded", () => $("#chart").addEventListener("click", e => {
   const a = e.target.closest("[data-la]"); if(!a || !a.closest(".lgd,.lgdg")) return;
@@ -1330,10 +1372,10 @@ document.addEventListener("DOMContentLoaded", () => $("#chart").addEventListener
   const id = a.dataset.id, act = a.dataset.la, r = id && INDS.find(x => x.cfg.id === id);
   if(act === "group"){ prefSet("lgdMin0", !lgdGroupMin()); legendFill(null); legendPlace(); return; }
   if(!r) return;
-  if(act === "eye"){ indSet(id, "hidden", !r.cfg.hidden); indVisible(r); }
+  if(act === "eye"){ if(r.offTf){ toast("Hidden on this timeframe - see Settings › Visibility"); indSettings(r, "vis"); return; } indSet(id, "hidden", !r.cfg.hidden); indVisible(r); }
   if(act === "min"){ indSet(id, "min", !r.cfg.min); }
   if(act === "del"){ indSave(indList().filter(x => x.id !== id)); indBuild(); return; }
-  if(act === "set"){ if(r.cfg.type === "pine") pineInputs(r); else { renderIndPick(); $("#indPick").classList.remove("hide"); const el = $(`#indBody .ind[data-i="${INDS.indexOf(r)}"] .iset`); if(el) el.classList.remove("hide"); } return; }
+  if(act === "set"){ indSettings(r); return; }
   if(act === "src" && r.cfg.type === "pine"){ peOpen(r.cfg.scriptId); return; }
   legendFill(null); legendPlace();
 }));
@@ -1345,7 +1387,7 @@ function indData(skipPine){
     if(r.cfg.type === "pine"){ if(!skipPine) pineRun(r); continue; }
     if(r.cfg.type === "pftools"){ pfToolsCalc(r); continue; }
     if(r.cfg.type === "volume"){
-      const v = bars.map(b => ({time:b.time, value:volData[b.time] || 0, color:volColor(b)}));
+      const v = bars.map(b => ({time:b.time, value:volData[b.time] || 0, color:volColorR(r, b)}));
       r.hist.setData(v);
       if(r.ma){ const n = Math.max(1, +r.cfg.maLen || 20), out = []; let sum = 0;
         for(let i = 0; i < v.length; i++){ sum += v[i].value; if(i >= n) sum -= v[i - n].value; if(i >= n - 1) out.push({time:v[i].time, value:sum / n}); }
@@ -1358,7 +1400,7 @@ function indTick(bar){
     if(r.cfg.type === "pftools"){ pfToolsCalc(r); continue; }
     if(r.cfg.type === "pine"){ pineTick(r, bar); continue; }
     if(r.cfg.type === "volume"){
-      r.hist.update({time:bar.time, value:volData[bar.time] || 0, color:volColor(bar)});
+      r.hist.update({time:bar.time, value:volData[bar.time] || 0, color:volColorR(r, bar)});
       if(r.ma){ const n = Math.max(1, +r.cfg.maLen || 20), d = r.hist.data(); if(d.length >= n){
         let sum = 0; for(let i = d.length - n; i < d.length; i++) sum += d[i].value; r.ma.update({time:bar.time, value:sum / n}); } }
     }
@@ -1393,8 +1435,8 @@ function renderIndPick(){
     `<div class="ind"><div class="ih"><b>${t.name}</b><span class="sp"></span><button data-add="${k}">+ Add</button></div><div class="help" style="margin:0">${t.desc}</div></div>`).join("");
   const mine = [...PINE.scripts].sort((a, b) => a.name.localeCompare(b.name));
   h += `<div class="sec" style="display:flex;align-items:center">My scripts<span style="flex:1"></span><button class="ghost" data-pnew style="padding:0 4px;font-size:11.5px;text-transform:none;letter-spacing:0">+ New script</button></div>`
-    + (mine.length ? mine.map(sc => `<div class="ind"><div class="ih"><b>${esc(sc.name)}</b><span class="sp"></span>
-        <button class="ghost" data-pedit="${sc.id}" title="Open in the Pine Editor">{ }</button><button data-padd="${sc.id}">+ Add</button></div></div>`).join("")
+    + (mine.length ? mine.map(sc => `<div class="ind"><div class="ih"><b>${esc(sc.name)}</b>${pineIsLib(sc.source) ? `<span class="muted" style="font-size:11px" title="Other scripts use it with import">library</span>` : ""}<span class="sp"></span>
+        <button class="ghost" data-pedit="${sc.id}" title="Open in the Pine Editor">{ }</button>${pineIsLib(sc.source) ? "" : `<button data-padd="${sc.id}">+ Add</button>`}</div></div>`).join("")
       : `<div class="ind muted" style="font-size:12px">${PINE.loaded ? "No scripts yet. Open the <b>Pine</b> editor (top bar), paste or write a script, and Save." : "Loading…"}</div>`);
   $("#indBody").innerHTML = h;
   $("#indBody").querySelectorAll("[data-add]").forEach(b => b.onclick = () => { const l = indList(); l.push({type: b.dataset.add, id: Date.now().toString(36)}); indSave(l); indBuild(); renderIndPick(); });
@@ -1406,11 +1448,11 @@ function renderIndPick(){
     const i = +el.dataset.i;
     el.querySelector('[data-a="del"]').onclick = () => { const l = indList(); l.splice(i, 1); indSave(l); indBuild(); renderIndPick(); };
     if(el.dataset.pine){
-      el.querySelector('[data-a="pset"]').onclick = () => { const r = INDS.find(x => x.cfg.id === el.dataset.pine); if(r){ $("#indPick").classList.add("hide"); pineInputs(r); } };
+      el.querySelector('[data-a="pset"]').onclick = () => { const r = INDS.find(x => x.cfg.id === el.dataset.pine); if(r){ $("#indPick").classList.add("hide"); indSettings(r); } };
       el.querySelector('[data-a="psrc"]').onclick = () => { $("#indPick").classList.add("hide"); peOpen(list[i].scriptId); };
       return;
     }
-    el.querySelector('[data-a="set"]').onclick = () => el.querySelector(".iset").classList.toggle("hide");
+    el.querySelector('[data-a="set"]').onclick = () => { const r = INDS.find(x => x.cfg.id === list[i].id); if(r){ $("#indPick").classList.add("hide"); indSettings(r); } };
     el.querySelectorAll(".iset [data-k]").forEach(inp => inp.addEventListener("change", () => {
       const l = indList(); l[i][inp.dataset.k] = inp.type === "checkbox" ? inp.checked : inp.type === "number" ? (+inp.value || 1) : inp.value;
       indSave(l); indBuild();
@@ -1423,6 +1465,7 @@ $("#indClose").onclick = () => $("#indPick").classList.add("hide");
 for(const id of ["#indPick", "#cfgPick", "#tfPick"]) $(id).addEventListener("click", e => { if(!e.target.closest("#indClose,#cfgClose")) e.stopPropagation(); });
 document.addEventListener("click", e => { if(!e.target.closest("#indPick,#bInd")) $("#indPick").classList.add("hide"); });
 function volColor(b){ const C = chartCfg(); return rgbaHex(b.close >= b.open ? C.up : C.down, 0.45); }
+function volColorR(r, b){ const s = r.cfg.style || {}, c = b.close >= b.open ? s.up : s.down; return c ? pcol(c) : volColor(b); }   // Volume's Style tab
 function rgbaHex(hex, a){ const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(hex || ""); if(!m) return hex;
   return `rgba(${parseInt(m[1], 16)},${parseInt(m[2], 16)},${parseInt(m[3], 16)},${a})`; }
 let bidLine = null, askLine = null, lastLine = null, lastQuote = null;
@@ -1566,7 +1609,7 @@ $("#bCfg").onclick = e => { e.stopPropagation(); renderCfg(); $("#cfgPick").clas
 $("#cfgClose").onclick = () => $("#cfgPick").classList.add("hide");
 $("#cfgReset").onclick = () => { prefSet("chart", {}); renderCfg(); applyChartCfg(); };
 document.addEventListener("click", e => { if(!e.target.closest("#cfgPick,#bCfg")) $("#cfgPick").classList.add("hide"); });
-function setTf(k){ tf = k; prefSet("tf2", tf); tfButtons(); loadHistory(); }
+function setTf(k){ tf = k; prefSet("tf2", tf); tfButtons(); indVisCheck(); loadHistory(); }
 function tfButtons(){
   $("#tf").innerHTML = "";
   const list = tfFav.includes(tf) ? tfFav : [...tfFav, tf];
@@ -1658,6 +1701,7 @@ function aggBars(rows, plan){
   return bars;
 }
 function renderCandles(rows, plan){
+  HROWS = rows;
   RAW = aggBars(rows, plan);
   volCum = null;
   showRaw();
@@ -1686,6 +1730,7 @@ function showRaw(){
 function applyNewCandles(rows, plan){
   const bars = aggBars(rows, plan), old = RAW;
   if(!old.length || !bars.length || bars[0].time !== old[0].time && bars.length < old.length){ renderCandles(rows, plan); return; }
+  HROWS = rows;
   const live = lastBar && lastBar.time > bars[bars.length - 1].time ? {...lastBar} : null;   // a bar the ticks started that the server hasn't got yet
   RAW = live ? bars.concat([live]) : bars;
   lastBar = RAW[RAW.length - 1];
@@ -1698,7 +1743,7 @@ async function loadHistory(){
   const my = ++histToken, msg = $("#chartMsg");
   msg.textContent = "Loading…"; msg.classList.remove("hide");
   const plan = tfPlan(tf); curPlan = plan;
-  const days = histDays(plan), key = cur.s + "|" + plan.res, wantFrom = Math.floor(Date.now() / 1000) - days * 86400;
+  const key = cur.s + "|" + plan.res, days = Math.max(histDays(plan), (HX[key] || {}).days || 0), wantFrom = Math.floor(Date.now() / 1000) - days * 86400;
   const saved = await CDB.get(key);
   if(my !== histToken) return;
   const have = saved && saved.rows && saved.rows.length && saved.from <= wantFrom + 86400;
@@ -1724,6 +1769,59 @@ async function loadHistory(){
     CDB.put(key, {from: wantFrom, rows: fresh});
     renderCandles(fresh, plan);
   }
+}
+/* older candles when you scroll (or zoom out) to the chart's left edge, like TradingView: each step asks for as many
+   days again as the timeframe opens with, as far back as Fyers has candles. Only your own scrolling triggers it
+   (not the chart fitting itself), and one step at a time. HX[key].days: how far back this chart now reaches. */
+const HX = {};
+let HROWS = [], histUserAt = 0;
+function histPill(text, ms){
+  let p = $("#histPill"); if(!p){ p = document.createElement("div"); p.id = "histPill"; $("#chart").append(p); }
+  p.textContent = text; p.classList.toggle("hide", !text);
+  clearTimeout(p._t); if(text && ms) p._t = setTimeout(() => p.classList.add("hide"), ms);
+}
+async function histMore(){
+  if(!cur || !curPlan || !HROWS.length || !(S.fyers || {}).logged_in) return;
+  const plan = curPlan, key = cur.s + "|" + plan.res, h = HX[key] || (HX[key] = {days: histDays(plan), miss: 0});
+  if(h.busy || h.end) return;
+  h.busy = true;
+  const my = histToken, oldest = HROWS[0][0];
+  const reach = Math.ceil((Date.now() / 1000 - oldest) / 86400) + 1;          // days the chart reaches now
+  const days = Math.max(h.days, reach) + plan.days * (h.miss ? 4 : 1);       // a gap (holidays): a bigger step once
+  histPill("Loading older candles…");
+  const j = await api(`/api/history?symbol=${encodeURIComponent(cur.s)}&res=${plan.res}&days=${days}&until=${oldest}`);
+  h.busy = false;
+  if(my !== histToken || !cur || cur.s + "|" + curPlan.res !== key) return histPill("");
+  if(!j.ok){ histPill(j.error || "Couldn't load older candles", 4000); return; }
+  const older = (j.candles || []).filter(r => r[0] < oldest);
+  h.days = days;
+  if(!older.length){
+    if(++h.miss >= 2){ h.end = true; histPill("No older candles at Fyers for this contract", 4000); }
+    else histPill("");
+    return;
+  }
+  h.miss = 0;
+  const rows = older.concat(HROWS), from = Math.floor(Date.now() / 1000) - days * 86400;
+  CDB.get(key).then(saved => {                  // this browser's copy keeps the older part too
+    const newer = saved && saved.rows ? saved.rows.filter(r => r[0] >= oldest) : HROWS;
+    CDB.put(key, {from: Math.min(from, saved && saved.from || from), rows: older.concat(newer).slice(-120000)});
+  });
+  const ts = chart.timeScale(), vr = ts.getVisibleLogicalRange(), n0 = DISP.length, live = lastBar;
+  HROWS = rows;
+  RAW = aggBars(rows, plan);
+  if(live){ const L = RAW[RAW.length - 1];         // the live bar the ticks are building stays as it is
+    if(!L || live.time > L.time) RAW.push(live); else if(live.time === L.time) RAW[RAW.length - 1] = live; }
+  lastBar = RAW[RAW.length - 1];
+  dispSet();
+  const added = DISP.length - n0;
+  if(vr && added > 0) ts.setVisibleLogicalRange({from: vr.from + added, to: vr.to + added});   // the view stays where it was
+  indData();
+  histPill(`${older.length.toLocaleString("en-IN")} older candles loaded`, 1800);
+}
+function histWatch(){
+  const box = $("#chart"), user = () => { histUserAt = Date.now(); };
+  for(const ev of ["wheel", "pointerdown", "pointermove", "touchmove", "keydown"]) box.addEventListener(ev, e => {
+    if(ev === "pointermove" && !e.buttons) return; user(); }, {passive: true});
 }
 let curPlan = null, histRetry = 0, volData = {};   // volData: volume per bar on the chart (DISP)
 function liveBar(t){
@@ -1973,7 +2071,7 @@ async function boot(){
   if(p.get("fyers") === "error") toast("Fyers login failed: " + (p.get("msg") || ""));
   if(p.has("fyers")) history.replaceState(null, "", "/");
   if(!(S.fyers||{}).configured) openDrawer();
-  buildChart(); tfButtons(); renderWatch();
+  buildChart(); histWatch(); tfButtons(); renderWatch();
   await paperInit();
   pagesStart();                                // #trades, #history ... in the address opens that page
   if(cur){ $("#cSym").textContent = symLabel(cur.s); loadHistory();

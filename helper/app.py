@@ -635,9 +635,10 @@ _hist_inflight: dict = {}
 
 
 @app.get("/api/history")
-async def history(request: Request, symbol: str, res: str = "5", days: int = 5, since: int = 0):
+async def history(request: Request, symbol: str, res: str = "5", days: int = 5, since: int = 0, until: int = 0):
     """Candles from the saved store (helper/candles.py): Fyers is asked only for what's new (at most every 45 s)
     or for older days not saved yet. since: only candles from that time (the page's own saved copy has the rest).
+    until: only candles before that time (the chart loading older candles as you scroll left).
     Identical requests that arrive together share one call."""
     u, r = _urt(request)
     if res not in fyers_link.RES:
@@ -658,6 +659,8 @@ async def history(request: Request, symbol: str, res: str = "5", days: int = 5, 
         _hist_inflight.pop(key, None)
     if since:
         rows = [r for r in rows if r[0] >= since]
+    if until:
+        rows = [r for r in rows if r[0] < until]
     return {"ok": True, "candles": rows}
 
 

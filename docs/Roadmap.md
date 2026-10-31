@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 1 Nov 2026 (v0.19.0). This is the one task list for the project.
+Updated 1 Nov 2026 (v0.20.0). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -85,6 +85,7 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Done
 
+- [x] **v0.20.0** (1 Nov): bugs reported 1 Nov fixed: indicator settings like TradingView (Inputs / Style / Visibility, the indicator's own timeframe with "wait for timeframe closes"); Pine `import` (TradingView/ta built in, your own saved libraries); older candles load when you scroll left; Fyers' `no_data` no longer fails a history request (Pivot Points' "Not enough data" error).
 - [x] **v0.19.0** (1 Nov): the phone layout, like MT5's app (asked 31 Oct): bottom tabs (Quotes · Chart · Trade · History · More), full-height chart with one-tap SELL / BUY, order sheet, position and order sheets (SL / TP steppers, BE, trailing, close), full screen and landscape, LIVE badge and KILL.
 - [x] **v0.18.0** (31 Oct): P&F toolkit second set (horizontal counts, traps, catapults, poles, triangles, turtle, anchor follow-through).
 - [x] **v0.17.0** (31 Oct): every indicator on every chart type, P&F included (Pine compatibility test); the P&F toolkit (trend lines and breaks, signals, anchors, vertical counts).

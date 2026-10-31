@@ -14,6 +14,37 @@ async function pineLoad(force){
   return PINE.loading;
 }
 function pineScript(id){ return PINE.scripts.find(s => s.id === id); }
+/* Pine `import user/name/version`: found among your saved scripts first - one saved under the import's own name
+   ("TradingView/ta"), then any library whose library("...") title is that name - then the libraries built into the
+   app (web/pine_libs: TradingView/ta). Libraries a library imports are found the same way. */
+const PINE_BUILTIN_LIBS = {"tradingview/ta": "/static/pine_libs/TradingView_ta.pine"};
+const pineLibText = {};
+function pineLibTitle(src){ const m = /^\s*library\s*\(\s*(?:title\s*=\s*)?(["'])(.*?)\1/m.exec(src || ""); return m ? m[2] : null; }
+function pineIsLib(src){ return pineLibTitle(src) != null && !/^\s*(?:indicator|strategy)\s*\(/m.test(src || ""); }
+function pineImports(src){
+  const out = [], re = /^\s*import\s+([\w.\-]+)\/(\w+)\/(\d+)/gm; let m;
+  while((m = re.exec(src || ""))) out.push({path: `${m[1]}/${m[2]}/${m[3]}`, user: m[1], name: m[2]});
+  return out;
+}
+async function pineLibFind(im){
+  if(!PINE.loaded) await pineLoad();
+  const lc = x => String(x || "").toLowerCase(), full = lc(im.user + "/" + im.name);
+  const named = PINE.scripts.find(s => pineIsLib(s.source) && (lc(s.name) === full || lc(s.name).startsWith(full + "/")));
+  if(named) return named.source;
+  const own = PINE.scripts.find(s => pineIsLib(s.source) && lc(pineLibTitle(s.source)) === lc(im.name));
+  if(own) return own.source;
+  const url = PINE_BUILTIN_LIBS[full];
+  if(url){ if(!pineLibText[url]) pineLibText[url] = fetch(url + "?v=" + (window.APP_V || "")).then(r => r.ok ? r.text() : null).catch(() => null);
+    const t = await pineLibText[url]; if(t == null) delete pineLibText[url]; return t; }
+  return null;
+}
+async function pineLibs(src){
+  const libs = {}, missing = [], seen = new Set();
+  const walk = async code => { for(const im of pineImports(code)){ if(seen.has(im.path)) continue; seen.add(im.path);
+    const t = await pineLibFind(im); if(t == null){ missing.push(im.path); continue; } libs[im.path] = t; await walk(t); } };
+  await walk(src);
+  return {libs, missing};
+}
 function pineTitleOf(src){ const m = /^\s*(?:indicator|study)\s*\(\s*(?:title\s*=\s*)?(["'])(.*?)\1/m.exec(src || ""); return m ? m[2] : ""; }
 function pineGuessOverlay(src){ return /^\s*(?:indicator|study)\s*\([\s\S]*?\boverlay\s*=\s*true/m.test(src || ""); }
 
@@ -25,7 +56,7 @@ function pineWorker(){
   pineW = new Worker("/static/pine_worker.js?v=" + (window.APP_V || ""), {type: "module"});
   pineW.onmessage = e => {
     const d = e.data || {};
-    if(d.need){ pineNeed(d.need).then(c => { try{ pineW && pineW.postMessage({data: {id: d.need.id, candles: c}}); }catch(x){} }); return; }
+    if(d.need){ pineNeed(d.need).then(c => { try{ pineW && pineW.postMessage({data: {id: d.need.id, candles: c.error ? [] : c, error: c.error}}); }catch(x){} }); return; }
     const w = pineWait[d.id]; if(w){ delete pineWait[d.id]; clearTimeout(w.timer); w.resolve(d); }
   };
   pineW.onerror = e => { const m = (e && e.message) || "the script engine failed to start"; pineReset(m); };
@@ -71,7 +102,7 @@ function pineInfo(){
 const pineCache = {};
 async function pineNeed(n){
   const key = pineTfKey(n.tf), plan = key && tfPlan(key);
-  if(!plan || !cur) return [];
+  if(!plan || !cur) return {error: `timeframe "${n.tf}" isn't supported here`};
   let s = String(n.ticker || "");
   if(!s || s.split(":").pop().toUpperCase() === cur.s.split(":").pop().toUpperCase()) s = cur.s;
   else if(!s.includes(":")) s = cur.s.split(":")[0] + ":" + s;
@@ -80,7 +111,7 @@ async function pineNeed(n){
   if(hit && Date.now() - hit.at < 60000) bars = hit.bars;
   else {
     const j = await api(`/api/history?symbol=${encodeURIComponent(s)}&res=${plan.res}&days=${plan.days}`);
-    if(!j.ok) return [];
+    if(!j.ok) return {error: `${key} candles of ${s.split(":").pop()} didn't load: ${j.error || "error"}`};
     bars = (j.candles || []).map(c => ({time: c[0] + 19800, open: c[1], high: c[2], low: c[3], close: c[4], vol: c[5] || 0}));
     if(plan.agg){ const out = [];
       for(const b of bars){ const k = bucket(b.time, plan), o = out[out.length - 1];
@@ -128,6 +159,22 @@ function palpha(css, a){
   return r ? `rgba(${r[1]},${r[2]},${r[3]},${(r[4] != null ? +r[4] : 1) * a})` : css;
 }
 const PINE_BLUE = "#2962FF";
+/* any CSS colour the scripts use -> "#RRGGBBAA" (the key your colour changes are saved under) */
+function phex8(c){
+  if(c == null || typeof c !== "string") return null;
+  let m = /^#([\da-f])([\da-f])([\da-f])$/i.exec(c); if(m) return ("#" + m[1] + m[1] + m[2] + m[2] + m[3] + m[3] + "FF").toUpperCase();
+  m = /^#([\da-f]{6})([\da-f]{2})?$/i.exec(c); if(m) return ("#" + m[1] + (m[2] || "FF")).toUpperCase();
+  m = /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)/i.exec(c);
+  if(m){ const h = v => Math.max(0, Math.min(255, Math.round(+v))).toString(16).padStart(2, "0"); return ("#" + h(m[1]) + h(m[2]) + h(m[3]) + h((m[4] == null ? 1 : +m[4]) * 255)).toUpperCase(); }
+  return null;
+}
+/* Settings › Style: your changes over the script's own look. r.cfg.style = {plots: {name: {...}}, hlines, fills, bg,
+   shapes, barcolor, prec, lbl (labels on the price scale), sv (values in the status line), inl (inputs in the status line)} */
+function pstyle(r, group, name){ const g = ((r.cfg.style || {})[group] || {}); return name == null ? g : (g[name] || {}); }
+function premap(o, c){ if(c == null || c === "" || !o || !o.colors) return c; const k = phex8(c); return k && k in o.colors ? o.colors[k] : c; }
+const PLOT_TYPES = [["style_line", "Line"], ["style_linebr", "Line with breaks"], ["style_stepline", "Step line"], ["style_steplinebr", "Step line with breaks"],
+  ["style_histogram", "Histogram"], ["style_columns", "Columns"], ["style_area", "Area"], ["style_areabr", "Area with breaks"], ["style_circles", "Circles"], ["style_cross", "Cross"]];
+const LSTYLE = ls => /dott/.test(ls || "") ? 1 : /dash/.test(ls || "") ? 2 : 0;    // Pine line style -> chart line style
 
 /* ------------------------------------------------------------------ on the chart */
 /* called by indBuild for {type:"pine"} entries: decides the pane, makes an anchor series for the pane's drawings */
@@ -149,7 +196,7 @@ function pineBuild(r){
     r.anchor0.attachPrimitive(r.prim0);
   }
   r.tbl = document.createElement("div"); r.tbl.className = "pine-tbls"; pq("#chart").append(r.tbl);
-  r.cleanup = () => { r.tbl && r.tbl.remove(); r.dead = true; if(r.pine && r.pine.sid) pineDrop(r.pine.sid); clearTimeout(r.pine && r.pine.tickTimer); };
+  r.cleanup = () => { r.tbl && r.tbl.remove(); r.dead = true; if(r.pine && r.pine.sid) pineDrop(r.pine.sid); clearTimeout(r.pine && r.pine.tickTimer); clearTimeout(r.pine && r.pine.retryT); };
 }
 function pineCleanup(r){ if(r.cleanup) r.cleanup(); }
 /* hlines and drawings count in the pane's price range (otherwise an hline-only pane has no scale) */
@@ -180,15 +227,29 @@ async function pineRun(r){
   P.running = true; P.dirty = false; P.lastRun = Date.now(); P.calc = true;
   if(P.sid) pineDrop(P.sid);
   const sid = P.sid = r.cfg.id + ":" + (++pineGen);
-  const res = await pineExec({op: "run", sid, code: sc.source, inputs: r.cfg.inputs || {}, candles, ticker: cur.s, tf: pineTf(), info: pineInfo()}, 120000);
+  const {libs, missing} = await pineLibs(sc.source);
+  const res = await pineExec({op: "run", sid, code: sc.source, inputs: r.cfg.inputs || {}, props: pineProps(r), libs, missing, candles, ticker: cur.s, tf: pineTf(), info: pineInfo()}, 180000);
   P.running = false; P.calc = false;
   if(r.dead || r.pine !== P){ pineDrop(sid); return; }
   if(res.inputs && res.inputs.length) P.meta = res.inputs;
+  if(res.mtf) P.mtf = res.mtf;
+  P.warn = res.ok ? res.warn || null : null;
   if(!res.ok){ P.err = res.error + (res.line ? ` (line ${res.line})` : ""); P.sid = null; }
   else { P.err = null; P.ms = res.ms; pineTimes(P, res); pineApply(r, res, sc); }
+  // other-timeframe candles didn't load (Fyers busy...): try again in 30 s, up to 3 times
+  clearTimeout(P.retryT);
+  if(res.needFailed || res.warn){ if((P.retries = (P.retries || 0) + 1) <= 3) P.retryT = setTimeout(() => { if(!r.dead && r.pine === P) pineRun(r); }, 30000); }
+  else P.retries = 0;
   legendFill(null);
   if(P.dirty) setTimeout(() => pineRun(r), 50);
   else if(P.tickDirty) setTimeout(() => pineTick(r), 0);
+}
+/* the indicator's timeframe you chose in Settings (only for scripts whose indicator() has timeframe =) */
+function pineProps(r){
+  const p = {};
+  if(r.cfg.tf != null) p.timeframe = r.cfg.tf;
+  if(r.cfg.gaps != null) p.timeframe_gaps = !!r.cfg.gaps;
+  return Object.keys(p).length ? p : undefined;
 }
 function pineDrop(sid){ try{ pineW && pineW.postMessage({op: "drop", sid}); }catch(e){} }
 /* the bars the worker ran on -> chart times and their place on the chart */
@@ -242,10 +303,12 @@ function pineApply(r, res, sc){
   const tickDp = (String((cur && cur.tick) || 0.05).split(".")[1] || "").length;
   const pm = /^\s*(?:indicator|study)\s*\([\s\S]*?\bprecision\s*=\s*(\d+)/m.exec(sc.source || "");   // only when the script sets it
   P.prec = pm ? Math.min(8, +pm[1]) : (r.overlay ? tickDp : null);
+  const sp = (r.cfg.style || {}).prec; if(sp != null && sp !== "") P.prec = Math.max(0, Math.min(8, +sp));
   const pf = P.prec != null ? {type: "price", precision: P.prec, minMove: Math.pow(10, -P.prec)} : {type: "price", precision: 2, minMove: 0.01};
   P.idx = new Map(P.times.map((t, i) => [t, i]));
   const tm = ms => Math.round(ms / 1000) + 19800;
   P.vals = {}; P.cols = {}; P.order = []; P.shapes = []; P.bg = []; P.fills = []; P.hlv = []; P.hmap = {};
+  P.raw = {plots: [], hlines: [], fills: [], bg: [], barcolor: [], shapes: []};          // what Settings › Style lists
   const keep = new Set();
   let barc = null;
   // hlines first (fills can refer to them)
@@ -260,34 +323,49 @@ function pineApply(r, res, sc){
     if(st === "hline"){
       let v = null; for(let i = vals.length - 1; i >= 0 && v == null; i--) if(vals[i] != null && isFinite(vals[i])) v = +vals[i];
       P.hmap[name] = v;
-      if(v != null && !hidden){ P.hlv.push(v);
-        const ls = String(o.linestyle || "dashed");
-        hspec.push({price: v, color: pcol(o.color, "#787B86"), lineWidth: +o.linewidth || 1, lineStyle: /dott/.test(ls) ? 1 : /solid/.test(ls) ? 0 : 2,
+      const hs = pstyle(r, "hlines", name);
+      P.raw.hlines.push({name, color: o.color || "#787B86", width: +o.linewidth || 1, ls: String(o.linestyle || "dashed")});
+      if(v != null && !hidden && !hs.off){ P.hlv.push(v);
+        const ls = String(hs.ls != null ? ["solid", "dotted", "dashed"][hs.ls] : o.linestyle || "dashed");
+        hspec.push({price: v, color: pcol(premap(hs, o.color), "#787B86"), lineWidth: +hs.width || +o.linewidth || 1, lineStyle: /dott/.test(ls) ? 1 : /solid/.test(ls) ? 0 : 2,
           axisLabelVisible: false, lineVisible: true, title: ""}); }
       continue;
     }
-    if(st === "fill"){ if(!hidden) P.fills.push({a: o.plot1, b: o.plot2, color: o.color, cols}); continue; }
-    if(st === "background"){ if(!hidden) P.bg.push({color: o.color, cols}); continue; }
-    if(st === "barcolor"){ if(!hidden) barc = cols; continue; }
-    if(FULL_SHAPE.test(st)){ if(!hidden) P.shapes.push({o, vals, cols, opts}); continue; }
+    // your colour changes (Settings › Style), and the colours each plot uses (listed there)
+    const grp = st === "fill" ? "fills" : st === "background" ? "bg" : st === "barcolor" ? "barcolor" : FULL_SHAPE.test(st) ? "shapes" : "plots";
+    const ps = pstyle(r, grp, name), used = new Set();
+    if(st !== "label" && !/^drawing_|^table|^linefill/.test(st)){
+      for(let i = 0; i < P.n; i++){ const c = cols[i]; if(c){ const k = phex8(c); if(k) used.add(k); } if(used.size > 8) break; }
+      if(!used.size && o.color && phex8(o.color)) used.add(phex8(o.color));
+      if(o.display !== "none") P.raw[grp].push({name, title: grp === "fills" ? `${o.plot1 || "?"} – ${o.plot2 || "?"}` : grp === "bg" ? "Background" : grp === "barcolor" ? "Bar colours" : name,
+        colors: [...used].slice(0, 8), st, width: +o.linewidth || 1, ls: o.linestyle || "", kind: grp === "plots" ? PLOT_KIND(st) : null});
+      if(ps.colors) for(let i = 0; i < P.n; i++) if(cols[i]) cols[i] = premap(ps, cols[i]);
+    }
+    const off = !!ps.off;
+    if(st === "fill"){ if(!hidden && !off) P.fills.push({a: o.plot1, b: o.plot2, color: premap(ps, o.color), cols}); continue; }
+    if(st === "background"){ if(!hidden && !off) P.bg.push({color: premap(ps, o.color), cols}); continue; }
+    if(st === "barcolor"){ if(!hidden && !off) barc = cols; continue; }
+    if(FULL_SHAPE.test(st)){ if(!hidden && !off) P.shapes.push({o: ps.colors ? {...o, color: premap(ps, o.color)} : o, vals, cols, opts}); continue; }
     if(st === "label" || /^drawing_|^table|^linefill/.test(st)) continue;
-    if(hidden) continue;
-    const kind = PLOT_KIND(st), color = pcol(o.color, PINE_BLUE), lw = Math.max(1, Math.min(4, +o.linewidth || 1));
-    const base = {title: "", visible: true, lastValueVisible: true, priceLineVisible: false, priceFormat: pf,
+    if(hidden || off) continue;
+    const st2 = ps.type ? String(ps.type) : st;
+    const kind = PLOT_KIND(st2), color = pcol(premap(ps, o.color), PINE_BLUE), lw = Math.max(1, Math.min(4, +ps.width || +o.linewidth || 1));
+    const SG = r.cfg.style || {};
+    const base = {title: "", visible: true, lastValueVisible: SG.lbl !== false && ps.lv !== false, priceLineVisible: !!ps.pl, priceLineColor: color, priceFormat: pf,
       autoscaleInfoProvider: r.overlay ? undefined : orig => pineMerge(orig(), [...(P.hlv || []), ...(P.dys || [])])};
     let opt;
     if(kind === "line"){
-      const dots = /circles|cross/.test(st);
-      opt = {...base, color, lineWidth: lw, lineType: /step/.test(st) ? 1 : 0, lineVisible: !dots, pointMarkersVisible: dots, pointMarkersRadius: dots ? lw + 1 : undefined, crosshairMarkerVisible: !dots};
+      const dots = /circles|cross/.test(st2);
+      opt = {...base, color, lineWidth: lw, lineStyle: ps.ls != null ? +ps.ls : LSTYLE(o.linestyle), lineType: /step/.test(st2) ? 1 : 0, lineVisible: !dots, pointMarkersVisible: dots, pointMarkersRadius: dots ? lw + 1 : undefined, crosshairMarkerVisible: !dots};
     } else if(kind === "hist") opt = {...base, color, base: +o.histbase || 0};
-    else if(kind === "area") opt = {...base, lineColor: color, topColor: palpha(color, 0.35), bottomColor: palpha(color, 0.03), lineWidth: lw};
+    else if(kind === "area") opt = {...base, lineColor: color, topColor: palpha(color, 0.35), bottomColor: palpha(color, 0.03), lineWidth: lw, lineStyle: ps.ls != null ? +ps.ls : LSTYLE(o.linestyle)};
     else opt = {...base, upColor: color, downColor: color, wickUpColor: pcol(o.wickcolor, color), wickDownColor: pcol(o.wickcolor, color), borderVisible: true,
       borderUpColor: pcol(o.bordercolor, color), borderDownColor: pcol(o.bordercolor, color)};
     const fo = !!o.force_overlay && !r.overlay;
     if(fo){ delete opt.autoscaleInfoProvider; opt.priceFormat = {type: "price", precision: tickDp, minMove: Math.pow(10, -tickDp)}; }
     const api = pineSeries(r, name, kind, opt, fo ? 0 : r.pane);
     keep.add(name); P.order.push({name, color, kind, legend: !/^(pane|none|data_window)$/.test(String(o.display || "all"))});
-    const out = [], gaps = /br$/.test(st) || kind !== "line";
+    const out = [], gaps = /br$/.test(st2) || kind !== "line";
     for(let i = 0; i < P.n; i++){
       const t = P.times[i], v = vals[i], c = cols[i];
       if(kind === "candle"){
@@ -637,17 +715,21 @@ function pineFmt(P, v){
   const a = Math.abs(v); return v.toLocaleString("en-IN", {maximumFractionDigits: a >= 1000 ? 2 : a >= 1 ? 2 : 4});
 }
 function pineInputsLine(r){
-  const P = r.pine, m = (P.meta || []).filter(x => x.display !== "none" && !/color|bool|text_area|session/.test(x.type));
+  const P = r.pine, m = (P.meta || []).filter(x => (x.display == null || /all|status/.test(x.display)) && !/color|bool|text_area|session/.test(x.type));
   return m.slice(0, 6).map(x => { const k = x.title || x.name || x.id, v = (r.cfg.inputs || {})[k] ?? x.defval; return Array.isArray(v) ? "" : String(v); }).filter(Boolean).join(" ");
 }
 /* the read-out's name part and values part (index.html adds the buttons, hide / collapse states) */
 function pineLegendParts(r, t){
-  const P = r.pine;
+  const P = r.pine, SG = r.cfg.style || {};
   let name = `<b>${pesc(P.title)}</b>`;
-  const inl = P.meta ? pineInputsLine(r) : ""; if(inl) name += `<span class="lk">${pesc(inl)}</span>`;
+  const used = P.mtf && P.mtf.used; if(used) name += `<span class="lk">${pesc(typeof pineTfKey === "function" ? pineTfKey(used) || used : used)}</span>`;
+  const inl = P.meta && SG.inl !== false ? pineInputsLine(r) : ""; if(inl) name += `<span class="lk">${pesc(inl)}</span>`;
   let vals = "";
-  if(P.err) vals = ` <span class="down">⚠ ${pesc(P.err.length > 90 ? P.err.slice(0, 90) + "…" : P.err)}</span>`;
+  if(r.offTf) vals = ` <span class="lk">hidden on this timeframe</span>`;
+  else if(P.err) vals = ` <span class="down" title="${pesc(P.err)}">⚠ ${pesc(P.err.length > 90 ? P.err.slice(0, 90) + "…" : P.err)}</span>`;
+  else if(P.res && SG.sv === false) vals = P.warn ? ` <span class="warnc" title="${pesc(P.warn)}">⚠</span>` : "";
   else if(P.res){
+    if(P.warn) vals += ` <span class="warnc" title="${pesc(P.warn)}">⚠ other-timeframe candles missing</span>`;
     let i = t != null ? P.idx.get(t) : undefined; if(i == null) i = P.n - 1;
     for(const o of P.order){ const v = P.vals[o.name][i], c = P.cols[o.name][i];
       if(o.kind === "candle" || !o.legend) continue;
@@ -670,60 +752,7 @@ function pineVisible(r){
   }
 }
 
-/* ------------------------------------------------------------------ inputs dialog */
-function pineInputs(r){
-  let box = pq("#pineIn");
-  if(!box){ box = document.createElement("div"); box.id = "pineIn"; document.body.append(box); }
-  const P = r.pine, meta = P.meta || [], vals = r.cfg.inputs || {};
-  const keyOf = m => m.title || m.name || m.varId || m.id;
-  const opt = (o) => typeof o === "object" && o ? [o.value ?? o.title, o.title ?? o.value] : [o, o];
-  const TFS = [["", "Chart"], ["1", "1m"], ["3", "3m"], ["5", "5m"], ["15", "15m"], ["30", "30m"], ["60", "1h"], ["120", "2h"], ["240", "4h"], ["D", "1D"], ["W", "1W"], ["M", "1M"]];
-  let html = `<div class="pih"><b>${pesc(P.title)}</b><span class="muted"> · inputs</span><span style="flex:1"></span><button class="ghost" data-x>✕</button></div><div class="pib">`;
-  const bars = +r.cfg.bars || PINE_BARS, BARS = [500, 1000, 1500, 3000, 5000, 10000, 20000, 50000];
-  html += `<label class="pir" title="How many of the latest candles the script runs on. More = longer history, a slower first run; live updates stay fast."><span>Bars of history <span class="muted">(app setting)</span></span>
-    <select data-bars>${(BARS.includes(bars) ? BARS : [...BARS, bars].sort((a, b) => a - b)).map(n => `<option value="${n}" ${n === bars ? "selected" : ""}>${n.toLocaleString("en-IN")}</option>`).join("")}</select></label>
-    <label class="pir" title="Every price: the live bar is re-run on each price (TradingView's way). On candle close: once per new candle - for heavy scripts on long histories."><span>Update <span class="muted">(app setting)</span></span>
-    <select data-upd><option value="tick">With every price</option><option value="close" ${r.cfg.update === "close" ? "selected" : ""}>On candle close</option></select></label>
-    <div class="muted" style="font-size:11.5px;margin-top:4px">${P.n ? `Runs on ${P.n.toLocaleString("en-IN")} bars now${P.n < bars ? " (all the chart has loaded)" : ""} · full run ${P.ms ?? "–"} ms · live update ${P.tms ?? "–"} ms` : ""}</div>`;
-  if(!meta.length) html += `<div class="muted" style="padding:8px 0">This script has no inputs${P.err ? " (or it didn't compile)" : ""}.</div>`;
-  let grp = null;
-  meta.forEach((m, n) => {
-    if((m.group || "") !== grp){ grp = m.group || ""; if(grp) html += `<div class="pig">${pesc(grp)}</div>`; }
-    const k = keyOf(m), v = k in vals ? vals[k] : m.defval, ty = m.type, id = "pin" + n;
-    let ctl;
-    if(ty === "bool") ctl = `<input type="checkbox" id="${id}" data-n="${n}" ${v ? "checked" : ""}>`;
-    else if(ty === "color"){ const hex = /^#[\da-f]{6}/i.exec(String(v || "#2962FF")); ctl = `<input type="color" id="${id}" data-n="${n}" value="${hex ? hex[0] : "#2962ff"}">`; }
-    else if((m.options && m.options.length) || ty === "source") ctl = `<select id="${id}" data-n="${n}">${(m.options || ["open", "high", "low", "close", "hl2", "hlc3", "ohlc4", "hlcc4"]).map(o => { const [ov, ot] = opt(o); return `<option value="${pesc(ov)}" ${String(ov) === String(v) ? "selected" : ""}>${pesc(ot)}</option>`; }).join("")}</select>`;
-    else if(ty === "timeframe") ctl = `<select id="${id}" data-n="${n}">${(TFS.some(x => x[0] === String(v)) ? TFS : [...TFS, [String(v), String(v)]]).map(([a, b]) => `<option value="${a}" ${a === String(v ?? "") ? "selected" : ""}>${b}</option>`).join("")}</select>`;
-    else if(ty === "int" || ty === "float" || ty === "price") ctl = `<input type="number" id="${id}" data-n="${n}" value="${pesc(v)}" ${m.minval != null ? `min="${m.minval}"` : ""} ${m.maxval != null ? `max="${m.maxval}"` : ""} step="${m.step || (ty === "int" ? 1 : "any")}">`;
-    else if(ty === "text_area") ctl = `<textarea id="${id}" data-n="${n}" rows="3">${pesc(v)}</textarea>`;
-    else ctl = `<input type="text" id="${id}" data-n="${n}" value="${pesc(v)}">`;
-    html += `<label class="pir" for="${id}"${m.tooltip ? ` title="${pesc(m.tooltip)}"` : ""}><span>${pesc(m.title || m.name || k)}</span>${ctl}</label>`;
-  });
-  html += `</div><div class="pif"><button data-def>Defaults</button><span style="flex:1"></span><button class="primary" data-x>OK</button></div>`;
-  box.innerHTML = html; box.classList.remove("hide");
-  const save = (fn) => { const l = indList(), it = l.find(x => x.id === r.cfg.id); if(!it) return; fn(it); r.cfg.inputs = it.inputs; indSave(l); pineRun(r); };
-  box.querySelectorAll("[data-n]").forEach(inp => inp.addEventListener("change", () => {
-    const m = meta[+inp.dataset.n], k = keyOf(m);
-    let v = inp.type === "checkbox" ? inp.checked : inp.value;
-    if(m.type === "int") v = Math.round(+v); else if(m.type === "float" || m.type === "price") v = +v;
-    if(m.type === "color"){ const a = /^#[\da-f]{6}([\da-f]{2})$/i.exec(String(((r.cfg.inputs || {})[k] ?? m.defval) || "")); v = inp.value.toUpperCase() + (a ? a[1] : ""); }
-    if(m.type === "int" || m.type === "float"){ if(m.minval != null && v < m.minval) v = m.minval; if(m.maxval != null && v > m.maxval) v = m.maxval; }
-    save(it => { it.inputs = {...(it.inputs || {}), [k]: v}; });
-  }));
-  box.querySelector("[data-upd]").onchange = e => {
-    const l = indList(), it = l.find(x => x.id === r.cfg.id); if(!it) return;
-    if(e.target.value === "close") it.update = "close"; else delete it.update;
-    indSave(l); r.cfg.update = it.update;
-  };
-  box.querySelector("[data-bars]").onchange = e => {
-    const l = indList(), it = l.find(x => x.id === r.cfg.id); if(!it) return;
-    it.bars = +e.target.value; indSave(l); r.cfg.bars = it.bars;
-    loadHistory();                                // more bars may need more days of candles; the saved copies make this quick
-  };
-  box.querySelector("[data-def]").onclick = () => { save(it => { it.inputs = {}; }); setTimeout(() => pineInputs(INDS.find(x => x.cfg.id === r.cfg.id) || r), 300); };
-  box.querySelectorAll("[data-x]").forEach(b => b.onclick = () => box.classList.add("hide"));
-}
+/* the settings dialog (Inputs / Style / Visibility) is in indset.js */
 
 /* ------------------------------------------------------------------ the Pine Editor */
 const PE = {cm: null, id: null, saved: "", savedName: "", t: null, cmLoad: null};
@@ -823,12 +852,14 @@ async function peCheck(){
   const code = PE.cm.getValue(), con = pq("#pdCon");
   let {candles} = pineCandles(300);
   if(!candles.length){ let t = Date.UTC(2026, 0, 1, 3, 30), p = 100; candles = Array.from({length: 120}, () => { const c = {open: p, high: p + 1, low: p - 1, close: p += (Math.random() - 0.5), volume: 1, openTime: t, closeTime: t + 299999}; t += 300000; return c; }); }
-  const res = await pineExec({code, inputs: {}, candles, ticker: cur ? cur.s : "X", tf: pineTf(), info: pineInfo()}, 10000);
+  const {libs, missing} = await pineLibs(code);
+  const res = await pineExec({code, inputs: {}, libs, missing, candles, ticker: cur ? cur.s : "X", tf: pineTf(), info: pineInfo()}, 15000);
   if(!PE.cm || PE.cm.getValue() !== code) return;     // typed again meanwhile
   peMark(res.ok ? null : res.line);
   if(res.ok){
     const ind = res.indicator || {}, n = Object.keys(res.plots || {}).filter(k => !/^__/.test(k)).length;
-    con.innerHTML = `<span class="up">✓ No errors</span> · ${pesc(ind.title || "")} · ${n} plot${n === 1 ? "" : "s"} · ${ind.overlay ? "on the candles" : "own pane"} · ${res.ms} ms`
+    con.innerHTML = (pineIsLib(code) ? `<span class="up">✓ No errors</span> · library "${pesc(pineLibTitle(code))}": other scripts use it with <b>import &lt;anyone&gt;/${pesc(pineLibTitle(code))}/1</b> (it isn't added to the chart itself) · ${res.ms} ms`
+      : `<span class="up">✓ No errors</span> · ${pesc(ind.title || "")} · ${n} plot${n === 1 ? "" : "s"} · ${ind.overlay ? "on the candles" : "own pane"} · ${res.ms} ms`)
       + `<span class="muted"> · Ctrl+S save · Ctrl+Enter ${pq("#pdAdd").textContent.toLowerCase()}</span>`
       + (res.logs && res.logs.length ? `<div class="pd-logs">${res.logs.slice(-30).map(l => pesc(l)).join("<br>")}</div>` : "");
   } else {
@@ -854,6 +885,7 @@ async function peSave(asNew){
 async function peAdd(){
   const res = await peCheck();
   if(res && !res.ok){ toast("Fix the error first"); return; }
+  if(PE.cm && pineIsLib(PE.cm.getValue())){ if(peDirty() || !PE.id) await peSave(); toast("Saved. A library isn't drawn on the chart: scripts that import it use it."); return; }
   if(!PE.id || peDirty()){ const s = await peSave(); if(!s) return; }
   const l = indList();
   if(l.some(x => x.type === "pine" && x.scriptId === PE.id)){ toast("Updated on the chart"); peTitle(); return; }

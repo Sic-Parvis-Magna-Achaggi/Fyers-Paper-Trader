@@ -99,4 +99,15 @@ plot(dayofweek, "Day")
 plot(math.round(math.log(close), 4), "Log")
 plot(ta.change(close), "Change")
 plot(ta.highest(high, 20) - ta.lowest(low, 20), "Range 20")`, plots: 5},
+  {name: "import a library (TradingView/ta)", code: `//@version=6
+indicator("C Import", overlay=true)
+import TradingView/ta/11 as TVta
+[l, s] = TVta.chandelier(22, 22, 3.0)
+[st, dir] = TVta.supertrend(3, 10)
+plot(l, "Long exit")
+plot(s, "Short exit")
+plot(st, "Supertrend")`, plots: 3},
+  {name: "the indicator's own timeframe (timeframe = 1 hour)", code: `//@version=6
+indicator("C Own TF", overlay=true, timeframe = "60", timeframe_gaps = false)
+plot(ta.ema(close, 5), "1h EMA")`, plots: 1},
 ];

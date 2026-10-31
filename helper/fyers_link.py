@@ -197,6 +197,8 @@ class FyersLink:
         if r.status_code == 401 or j.get("code") in (-15, -16, -17, -8):
             self.drop_token(j.get("message", "token rejected"))
             raise PermissionError("Fyers session expired - log in again")
+        if j.get("s") == "no_data":       # history: no candles in that range (before a contract was listed,
+            return j                       # holidays) - an empty answer, not an error ({'candles': [], 's': 'no_data'})
         if j.get("s") != "ok":
             raise RuntimeError(j.get("message") or str(j))
         return j

@@ -1,0 +1,551 @@
+//@version=6
+// @description The app's own implementation of the functions in TradingView's "ta" library (import TradingView/ta/<version>),
+// written from the standard published formulas, so scripts that import it run here. It is not TradingView's code:
+// if a value ever differs from TradingView, save TradingView's library source in the Pine Editor (a script that
+// starts with library("ta")): your saved copy is then used instead of this one.
+// Not included: ht() and wpo() (no published formula to match).
+library("ta", overlay = true)
+
+// ------------------------------------------------------------------ helpers with "series" lengths
+// @function EMA whose length may change bar to bar.
+export ema2(series float src, series float length) =>
+    float alpha = 2.0 / (length + 1)
+    var float result = na
+    result := na(result) ? src : alpha * src + (1 - alpha) * result
+    result
+
+// @function RMA (Wilder's average) whose length may change bar to bar.
+export rma2(series float source, series float length) =>
+    float alpha = 1.0 / length
+    var float result = na
+    result := na(result) ? source : alpha * source + (1 - alpha) * result
+    result
+
+// @function ATR whose length may change bar to bar.
+export atr2(series float length) =>
+    rma2(ta.tr(true), length)
+
+// ------------------------------------------------------------------ moving averages
+// @function Double EMA.
+export dema(float source, simple int length) =>
+    float e1 = ta.ema(source, length)
+    float e2 = ta.ema(e1, length)
+    2 * e1 - e2
+
+// @function Double EMA, series length.
+export dema2(series float src, series float length) =>
+    float e1 = ema2(src, length)
+    float e2 = ema2(e1, length)
+    2 * e1 - e2
+
+// @function Triple EMA.
+export tema(float source, simple int length) =>
+    float e1 = ta.ema(source, length)
+    float e2 = ta.ema(e1, length)
+    float e3 = ta.ema(e2, length)
+    3 * (e1 - e2) + e3
+
+// @function Triple EMA, series length.
+export tema2(float source, series float length) =>
+    float e1 = ema2(source, length)
+    float e2 = ema2(e1, length)
+    float e3 = ema2(e2, length)
+    3 * (e1 - e2) + e3
+
+// @function Triangular moving average.
+export trima(float source, series int length) =>
+    ta.sma(ta.sma(source, math.ceil(length / 2.0)), math.floor(length / 2.0) + 1)
+
+// @function Triangular moving average (older name).
+export trima2(series float src, series int length) =>
+    trima(src, length)
+
+// @function Tillson T3.
+export t3(float source, simple int length, simple float vf) =>
+    float e1 = ta.ema(source, length)
+    float e2 = ta.ema(e1, length)
+    float e3 = ta.ema(e2, length)
+    float e4 = ta.ema(e3, length)
+    float e5 = ta.ema(e4, length)
+    float e6 = ta.ema(e5, length)
+    float c1 = -vf * vf * vf
+    float c2 = 3 * vf * vf + 3 * vf * vf * vf
+    float c3 = -6 * vf * vf - 3 * vf - 3 * vf * vf * vf
+    float c4 = 1 + 3 * vf + vf * vf * vf + 3 * vf * vf
+    c1 * e6 + c2 * e5 + c3 * e4 + c4 * e3
+
+// @function Tillson T3, series length.
+export t3Alt(float source, series float length, simple float vf) =>
+    float e1 = ema2(source, length)
+    float e2 = ema2(e1, length)
+    float e3 = ema2(e2, length)
+    float e4 = ema2(e3, length)
+    float e5 = ema2(e4, length)
+    float e6 = ema2(e5, length)
+    float c1 = -vf * vf * vf
+    float c2 = 3 * vf * vf + 3 * vf * vf * vf
+    float c3 = -6 * vf * vf - 3 * vf - 3 * vf * vf * vf
+    float c4 = 1 + 3 * vf + vf * vf * vf + 3 * vf * vf
+    c1 * e6 + c2 * e5 + c3 * e4 + c4 * e3
+
+// @function Ehlers' Fractal Adaptive Moving Average.
+export frama(float source, series int length) =>
+    int n = math.max(2, length - length % 2)
+    int h = n / 2
+    float n1 = (ta.highest(high, h) - ta.lowest(low, h)) / h
+    float n2 = (ta.highest(high, h)[h] - ta.lowest(low, h)[h]) / h
+    float n3 = (ta.highest(high, n) - ta.lowest(low, n)) / n
+    float dim = n1 > 0 and n2 > 0 and n3 > 0 ? (math.log(n1 + n2) - math.log(n3)) / math.log(2) : na
+    float alpha = na(dim) ? 1.0 : math.max(0.01, math.min(1.0, math.exp(-4.6 * (dim - 1))))
+    var float result = na
+    result := na(result) ? source : alpha * source + (1 - alpha) * result
+    result
+
+// @function Kaufman's Efficiency Ratio.
+export er(float source, int length) =>
+    float move = math.abs(source - source[length])
+    float noise = math.sum(math.abs(ta.change(source)), length)
+    noise != 0 ? move / noise : 0.0
+
+// @function Kaufman's Adaptive Moving Average.
+export kama(float source, int erLen, float fastLen, float slowLen) =>
+    float fastSC = 2.0 / (fastLen + 1)
+    float slowSC = 2.0 / (slowLen + 1)
+    float sc = math.pow(er(source, erLen) * (fastSC - slowSC) + slowSC, 2)
+    var float result = na
+    result := na(result) ? source : result + sc * (source - result)
+    result
+
+// ------------------------------------------------------------------ oscillators and bands
+// @function Awesome Oscillator.
+export ao(float src = hl2, int shortLength = 5, int longLength = 34) =>
+    ta.sma(src, shortLength) - ta.sma(src, longLength)
+
+// @function Aroon: [up, down].
+export aroon(simple int length) =>
+    float up = 100 * (ta.highestbars(high, length + 1) + length) / length
+    float down = 100 * (ta.lowestbars(low, length + 1) + length) / length
+    [up, down]
+
+// @function Coppock curve.
+export coppock(float source, simple int longLength, simple int shortLength, simple int smoothLength) =>
+    ta.wma(ta.roc(source, longLength) + ta.roc(source, shortLength), smoothLength)
+
+// @function DeMarker.
+export dm(simple int length) =>
+    float deMax = high > high[1] ? high - high[1] : 0.0
+    float deMin = low < low[1] ? low[1] - low : 0.0
+    float a = ta.sma(deMax, length)
+    float b = ta.sma(deMin, length)
+    a + b != 0 ? a / (a + b) : na
+
+// @function Donchian channel: [high, low, middle].
+export donchian(series int length) =>
+    float hi = ta.highest(high, length)
+    float lo = ta.lowest(low, length)
+    [hi, lo, math.avg(hi, lo)]
+
+// @function Ease of Movement.
+export eom(simple int length, simple int div = 10000) =>
+    ta.sma(div * ta.change(hl2) * (high - low) / volume, length)
+
+// @function Fisher Transform.
+export ft(float source, simple int length) =>
+    float hi = ta.highest(source, length)
+    float lo = ta.lowest(source, length)
+    var float value = 0.0
+    var float fish = 0.0
+    float raw = hi != lo ? 0.66 * ((source - lo) / (hi - lo) - 0.5) + 0.67 * value : 0.67 * value
+    value := math.max(-0.999, math.min(0.999, raw))
+    fish := 0.5 * math.log((1 + value) / (1 - value)) + 0.5 * fish
+    fish
+
+// @function Inverse Fisher Transform.
+export ift(float source) =>
+    (math.exp(2 * source) - 1) / (math.exp(2 * source) + 1)
+
+// @function Ichimoku: [tenkan, kijun, senkou span 1, senkou span 2, chikou] (not shifted: plot them with offsets).
+export ichimoku(series int conLength = 9, series int baseLength = 26, series int senkouLength = 52) =>
+    float tenkan = math.avg(ta.highest(high, conLength), ta.lowest(low, conLength))
+    float kijun = math.avg(ta.highest(high, baseLength), ta.lowest(low, baseLength))
+    float span1 = math.avg(tenkan, kijun)
+    float span2 = math.avg(ta.highest(high, senkouLength), ta.lowest(low, senkouLength))
+    [tenkan, kijun, span1, span2, close]
+
+// @function Klinger Volume Oscillator: [kvo, trigger].
+export kvo(simple int fastLen, simple int slowLen, simple int trigLen) =>
+    float sv = ta.change(hlc3) >= 0 ? volume : -volume
+    float k = ta.ema(sv, fastLen) - ta.ema(sv, slowLen)
+    [k, ta.ema(k, trigLen)]
+
+// @function Price Zone Oscillator.
+export pzo(simple int length) =>
+    float v = ta.ema(math.sign(ta.change(close)) * close, length)
+    float t = ta.ema(close, length)
+    t != 0 ? 100 * v / t : na
+
+// @function Root mean square.
+export rms(float source, series int length) =>
+    math.sqrt(math.sum(source * source, length) / length)
+
+// @function Random Walk Index: [high, low].
+export rwi(simple int length) =>
+    float d = ta.atr(length) * math.sqrt(length)
+    [(high - low[length]) / d, (high[length] - low) / d]
+
+// @function Schaff Trend Cycle.
+export stc(float source, simple int fast, simple int slow, simple int cycle, simple int d1, simple int d2) =>
+    float macd = ta.ema(source, fast) - ta.ema(source, slow)
+    float k = nz(fixnan(ta.stoch(macd, macd, macd, cycle)))
+    float d = ta.ema(k, d1)
+    float kd = nz(fixnan(ta.stoch(d, d, d, cycle)))
+    float s = ta.ema(kd, d2)
+    math.max(math.min(s, 100), 0)
+
+// @function Full stochastic: [%K, %D].
+export stochFull(simple int periodK, simple int smoothK, simple int periodD) =>
+    float k = ta.sma(ta.stoch(close, high, low, periodK), smoothK)
+    [k, ta.sma(k, periodD)]
+
+// @function Stochastic RSI: [%K, %D].
+export stochRsi(simple int lengthRsi, simple int periodK, simple int smoothK, simple int periodD, float source = close) =>
+    float r = ta.rsi(source, lengthRsi)
+    float k = ta.sma(ta.stoch(r, r, r, periodK), smoothK)
+    [k, ta.sma(k, periodD)]
+
+// @function Supertrend: [value, direction] (direction -1 = up trend, 1 = down trend, as ta.supertrend).
+export supertrend(series float factor, simple int atrLength, simple bool wicks = false) =>
+    float atr = ta.atr(atrLength)
+    float hiP = wicks ? high : close
+    float loP = wicks ? low : close
+    float upperBand = hl2 + factor * atr
+    float lowerBand = hl2 - factor * atr
+    float prevLower = nz(lowerBand[1])
+    float prevUpper = nz(upperBand[1])
+    lowerBand := lowerBand > prevLower or loP[1] < prevLower ? lowerBand : prevLower
+    upperBand := upperBand < prevUpper or hiP[1] > prevUpper ? upperBand : prevUpper
+    int direction = na
+    float st = na
+    float prevSt = st[1]
+    if na(atr[1])
+        direction := 1
+    else if prevSt == prevUpper
+        direction := hiP > upperBand ? -1 : 1
+    else
+        direction := loP < lowerBand ? 1 : -1
+    st := direction == -1 ? lowerBand : upperBand
+    [st, direction]
+
+// @function Supertrend with a series ATR length.
+export supertrend2(series float factor, series float atrLength, simple bool wicks = false) =>
+    float atr = atr2(atrLength)
+    float hiP = wicks ? high : close
+    float loP = wicks ? low : close
+    float upperBand = hl2 + factor * atr
+    float lowerBand = hl2 - factor * atr
+    float prevLower = nz(lowerBand[1])
+    float prevUpper = nz(upperBand[1])
+    lowerBand := lowerBand > prevLower or loP[1] < prevLower ? lowerBand : prevLower
+    upperBand := upperBand < prevUpper or hiP[1] > prevUpper ? upperBand : prevUpper
+    int direction = na
+    float st = na
+    float prevSt = st[1]
+    if na(atr[1])
+        direction := 1
+    else if prevSt == prevUpper
+        direction := hiP > upperBand ? -1 : 1
+    else
+        direction := loP < lowerBand ? 1 : -1
+    st := direction == -1 ? lowerBand : upperBand
+    [st, direction]
+
+// @function Sentiment Zone Oscillator.
+export szo(float source, simple int length) =>
+    float r = source > source[1] ? 1.0 : -1.0
+    100 * tema(r, length) / length
+
+// @function TRIX: [trix, signal, histogram].
+export trix(float source, simple int length, simple int signalLength, simple bool exponential = true) =>
+    float t = 10000 * ta.change(ta.ema(ta.ema(ta.ema(math.log(source), length), length), length))
+    float s = exponential ? ta.ema(t, signalLength) : ta.sma(t, signalLength)
+    [t, s, t - s]
+
+// @function Ultimate Oscillator.
+export uo(series int fastLen, series int midLen, series int slowLen) =>
+    float hi = math.max(high, close[1])
+    float lo = math.min(low, close[1])
+    float bp = close - lo
+    float tr = hi - lo
+    float a1 = math.sum(bp, fastLen) / math.sum(tr, fastLen)
+    float a2 = math.sum(bp, midLen) / math.sum(tr, midLen)
+    float a3 = math.sum(bp, slowLen) / math.sum(tr, slowLen)
+    100 * (4 * a1 + 2 * a2 + a3) / 7
+
+// @function Vertical Horizontal Filter.
+export vhf(float source, simple int length) =>
+    float noise = math.sum(math.abs(ta.change(source)), length)
+    noise != 0 ? (ta.highest(source, length) - ta.lowest(source, length)) / noise : na
+
+// @function Vortex Indicator: [VI+, VI-].
+export vi(simple int length) =>
+    float str = math.sum(ta.atr(1), length)
+    [math.sum(math.abs(high - low[1]), length) / str, math.sum(math.abs(low - high[1]), length) / str]
+
+// @function Volume Zone Oscillator.
+export vzo(simple int length) =>
+    float v = ta.ema(math.sign(ta.change(close)) * volume, length)
+    float t = ta.ema(volume, length)
+    t != 0 ? 100 * v / t : na
+
+// @function Williams fractals: [up, down], found `period` bars after the fractal bar (plot with offset = -period).
+export williamsFractal(series int period) =>
+    int n = period
+    bool upDown = true
+    bool up0 = true
+    bool up1 = true
+    bool up2 = true
+    bool up3 = true
+    bool up4 = true
+    bool dnUp = true
+    bool dn0 = true
+    bool dn1 = true
+    bool dn2 = true
+    bool dn3 = true
+    bool dn4 = true
+    for i = 1 to n
+        upDown := upDown and high[n - i] < high[n]
+        up0 := up0 and high[n + i] < high[n]
+        up1 := up1 and high[n + 1] <= high[n] and high[n + i + 1] < high[n]
+        up2 := up2 and high[n + 1] <= high[n] and high[n + 2] <= high[n] and high[n + i + 2] < high[n]
+        up3 := up3 and high[n + 1] <= high[n] and high[n + 2] <= high[n] and high[n + 3] <= high[n] and high[n + i + 3] < high[n]
+        up4 := up4 and high[n + 1] <= high[n] and high[n + 2] <= high[n] and high[n + 3] <= high[n] and high[n + 4] <= high[n] and high[n + i + 4] < high[n]
+        dnUp := dnUp and low[n - i] > low[n]
+        dn0 := dn0 and low[n + i] > low[n]
+        dn1 := dn1 and low[n + 1] >= low[n] and low[n + i + 1] > low[n]
+        dn2 := dn2 and low[n + 1] >= low[n] and low[n + 2] >= low[n] and low[n + i + 2] > low[n]
+        dn3 := dn3 and low[n + 1] >= low[n] and low[n + 2] >= low[n] and low[n + 3] >= low[n] and low[n + i + 3] > low[n]
+        dn4 := dn4 and low[n + 1] >= low[n] and low[n + 2] >= low[n] and low[n + 3] >= low[n] and low[n + 4] >= low[n] and low[n + i + 4] > low[n]
+    [upDown and (up0 or up1 or up2 or up3 or up4), dnUp and (dn0 or dn1 or dn2 or dn3 or dn4)]
+
+// @function Moving Average Convergence Divergence with series lengths: [macd, signal, histogram].
+export macd2(float source, series float fastLen, series float slowLen, series float sigLen) =>
+    float m = ema2(source, fastLen) - ema2(source, slowLen)
+    float s = ema2(m, sigLen)
+    [m, s, m - s]
+
+// @function Percentage Price Oscillator: [ppo, signal, histogram].
+export ppo(float source, simple int fastLen, simple int slowLen, simple int sigLen) =>
+    float sl = ta.ema(source, slowLen)
+    float p = sl != 0 ? 100 * (ta.ema(source, fastLen) - sl) / sl : na
+    float s = ta.ema(p, sigLen)
+    [p, s, p - s]
+
+// @function Percentage Price Oscillator with series lengths.
+export ppo2(float source, series float fastLen, series float slowLen, series float sigLen) =>
+    float sl = ema2(source, slowLen)
+    float p = sl != 0 ? 100 * (ema2(source, fastLen) - sl) / sl : na
+    float s = ema2(p, sigLen)
+    [p, s, p - s]
+
+// @function DecisionPoint Price Momentum Oscillator: [pmo, signal].
+export pmo(float source, simple int length1, simple int length2, simple int sigLen) =>
+    float prev = nz(source[1])
+    float roc = prev != 0 ? 100 * (source / prev) - 100 : 0.0
+    var float c1 = 0.0
+    var float c2 = 0.0
+    c1 := (roc - c1) * (2.0 / length1) + c1
+    c2 := (10 * c1 - c2) * (2.0 / length2) + c2
+    [c2, ta.ema(c2, sigLen)]
+
+// @function Pring's Special K: [special K, signal 1, signal 2].
+export specialK(float source, simple int sigLen1, simple int sigLen2) =>
+    float k = ta.sma(ta.roc(source, 10), 10) + ta.sma(ta.roc(source, 15), 10) * 2 + ta.sma(ta.roc(source, 20), 10) * 3 + ta.sma(ta.roc(source, 30), 15) * 4 + ta.sma(ta.roc(source, 40), 50) + ta.sma(ta.roc(source, 65), 65) * 2 + ta.sma(ta.roc(source, 75), 75) * 3 + ta.sma(ta.roc(source, 100), 100) * 4 + ta.sma(ta.roc(source, 195), 130) + ta.sma(ta.roc(source, 265), 130) * 2 + ta.sma(ta.roc(source, 390), 130) * 3 + ta.sma(ta.roc(source, 530), 195) * 4
+    [k, ta.sma(k, sigLen1), ta.sma(k, sigLen2)]
+
+// @function Ulcer Index.
+export ulcerIndex(float source, int length) =>
+    float hh = ta.highest(source, length)
+    float dd = 100 * (source - hh) / hh
+    math.sqrt(math.sum(dd * dd, length) / length)
+
+// ------------------------------------------------------------------ stops and exits
+// @function Chandelier Exit: [long exit, short exit] (highest high / lowest low of `length` bars -/+ ATR x mult).
+export chandelier(simple int length, simple int atrLength, float mult) =>
+    float a = ta.atr(atrLength) * mult
+    [ta.highest(high, length) - a, ta.lowest(low, length) + a]
+
+// @function Chandelier Exit with a series ATR length.
+export chandelier2(series int length, series float atrLength, float mult) =>
+    float a = atr2(atrLength) * mult
+    [ta.highest(high, length) - a, ta.lowest(low, length) + a]
+
+// @function Volatility Stop: [stop, up trend].
+export vStop(series float source, simple int atrLength, series float atrFactor = 1) =>
+    var float mx = na
+    var float mn = na
+    var bool uptrend = true
+    var float stop = na
+    float atrM = nz(ta.atr(atrLength) * atrFactor, ta.tr)
+    if not na(source)
+        mx := na(mx) ? source : math.max(mx, source)
+        mn := na(mn) ? source : math.min(mn, source)
+        stop := nz(uptrend ? math.max(nz(stop, mx - atrM), mx - atrM) : math.min(nz(stop, mn + atrM), mn + atrM), source)
+        bool was = uptrend
+        uptrend := source - stop >= 0.0
+        if uptrend != was
+            mx := source
+            mn := source
+            stop := uptrend ? mx - atrM : mn + atrM
+    [stop, uptrend]
+
+// @function Volatility Stop with a series ATR length.
+export vStop2(series float source, series float atrLength, series float atrFactor = 1) =>
+    var float mx = na
+    var float mn = na
+    var bool uptrend = true
+    var float stop = na
+    float atrM = nz(atr2(atrLength) * atrFactor, ta.tr)
+    if not na(source)
+        mx := na(mx) ? source : math.max(mx, source)
+        mn := na(mn) ? source : math.min(mn, source)
+        stop := nz(uptrend ? math.max(nz(stop, mx - atrM), mx - atrM) : math.min(nz(stop, mn + atrM), mn + atrM), source)
+        bool was = uptrend
+        uptrend := source - stop >= 0.0
+        if uptrend != was
+            mx := source
+            mn := source
+            stop := uptrend ? mx - atrM : mn + atrM
+    [stop, uptrend]
+
+// ------------------------------------------------------------------ small tools
+// @function Compound annual growth rate (%) between two times (ms) and prices; na if under a day apart.
+export cagr(int entryTime, float entryPrice, int exitTime, float exitPrice) =>
+    float days = (exitTime - entryTime) / 86400000.0
+    days < 1 or entryPrice <= 0 ? na : (math.pow(exitPrice / entryPrice, 365.0 / days) - 1) * 100
+
+// @function Change in percent from oldValue to newValue.
+export changePercent(series float newValue, series float oldValue) =>
+    (newValue - oldValue) / math.abs(oldValue) * 100
+
+// @function The highest value of `source` since `cond` was last true.
+export highestSince(series bool cond, series float source = high) =>
+    var float result = na
+    if cond
+        result := source
+    else if not na(result)
+        result := math.max(result, source)
+    result
+
+// @function The lowest value of `source` since `cond` was last true.
+export lowestSince(series bool cond, series float source = low) =>
+    var float result = na
+    if cond
+        result := source
+    else if not na(result)
+        result := math.min(result, source)
+    result
+
+// @function All-time high of `src` on the chart's history (removed from TradingView's library in v7).
+export allTimeHigh(series float src = high) =>
+    var float result = na
+    result := na(result) ? src : math.max(result, src)
+    result
+
+// @function All-time low of `src` on the chart's history (removed from TradingView's library in v7).
+export allTimeLow(series float src = low) =>
+    var float result = na
+    result := na(result) ? src : math.min(result, src)
+    result
+
+// ------------------------------------------------------------------ volume
+// @function Up volume, down volume (negative) and their sum (delta) of each bar, from lower-timeframe bars.
+export requestUpAndDownVolume(string lowerTimeframe) =>
+    [lo, lc, lv] = request.security_lower_tf(syminfo.tickerid, lowerTimeframe, [open, close, volume])
+    var float lastClose = na
+    float upV = 0.0
+    float dnV = 0.0
+    int n = array.size(lv)
+    if n > 0
+        for i = 0 to n - 1
+            float o = array.get(lo, i)
+            float c = array.get(lc, i)
+            float v = array.get(lv, i)
+            bool up = c > o or (c == o and not na(lastClose) and c > lastClose)
+            bool dn = c < o or (c == o and not na(lastClose) and c < lastClose)
+            if up
+                upV += v
+            else if dn
+                dnV -= v
+            lastClose := c
+    [upV, dnV, upV + dnV]
+
+// @function Volume delta of each bar from lower-timeframe bars: [open, highest, lowest, close] of the running
+// delta. With a cumulativePeriod (e.g. "D") it accumulates and restarts at each new period (cumulative volume delta).
+export requestVolumeDelta(string lowerTimeframe, string cumulativePeriod = "") =>
+    [lo, lc, lv] = request.security_lower_tf(syminfo.tickerid, lowerTimeframe, [open, close, volume])
+    var float lastClose = na
+    var float cum = 0.0
+    bool restart = cumulativePeriod == "" or timeframe.change(cumulativePeriod)
+    float openV = restart ? 0.0 : cum
+    float run = openV
+    float mx = openV
+    float mn = openV
+    int n = array.size(lv)
+    if n > 0
+        for i = 0 to n - 1
+            float o = array.get(lo, i)
+            float c = array.get(lc, i)
+            float v = array.get(lv, i)
+            float d = c > o ? v : c < o ? -v : not na(lastClose) and c > lastClose ? v : not na(lastClose) and c < lastClose ? -v : 0.0
+            run += d
+            mx := math.max(mx, run)
+            mn := math.min(mn, run)
+            lastClose := c
+    cum := run
+    [openV, mx, mn, run]
+
+// @function Relative volume: [this bar's volume (cumulative from the period start when isCumulative), the average
+// at the same time into the last `length` anchor periods, their ratio].
+export relativeVolume(simple int length, simple string anchorTimeframe = "D", simple bool isCumulative = true, simple bool adjustRealtime = false) =>
+    var array<float> pastAt = array.new<float>()
+    var array<int> pastStart = array.new<int>()
+    var array<float> curVols = array.new<float>()
+    var array<int> curOffs = array.new<int>()
+    var int periodStart = time
+    var float cumV = 0.0
+    bool newPeriod = timeframe.change(anchorTimeframe)
+    if newPeriod
+        pastStart.push(curVols.size())
+        if pastStart.size() > length + 1
+            int drop = pastStart.shift()
+            for k = 0 to drop - 1
+                curVols.shift()
+                curOffs.shift()
+            for k = 0 to pastStart.size() - 1
+                pastStart.set(k, pastStart.get(k) - drop)
+        periodStart := time
+        cumV := 0.0
+    cumV += nz(volume)
+    float v = isCumulative ? cumV : nz(volume)
+    int off = time - periodStart
+    // the same offset into each of the last `length` complete periods
+    float sum = 0.0
+    int cnt = 0
+    int np = pastStart.size()
+    if np > 1
+        for p = math.max(0, np - 1 - length) to np - 2
+            int a = pastStart.get(p)
+            int b = pastStart.get(p + 1) - 1
+            float best = na
+            if b >= a
+                for k = a to b
+                    if curOffs.get(k) <= off
+                        best := curVols.get(k)
+            if not na(best)
+                sum += best
+                cnt += 1
+    curVols.push(v)
+    curOffs.push(off)
+    float avg = cnt > 0 ? sum / cnt : na
+    float ratio = na(avg) or avg == 0 ? na : (adjustRealtime and barstate.isrealtime and timeframe.isintraday ? v / (avg * math.min(1.0, (timenow - time) / (time_close - time))) : v / avg)
+    [v, avg, ratio]

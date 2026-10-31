@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.19.0)
+# Paper and live trading: how it works (v0.20.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -204,7 +204,7 @@ Turn it on or off in Chart settings (⚙).
 ## Volume and the order book
 
 - **Volume under the candles:** the volume strip at the bottom of the candle pane, on/off in Chart settings (⚙).
-- **Volume indicator:** in the Indicators menu (ƒx). It puts volume bars in their own pane, with an optional moving average. Drag the divider to resize the pane; the height is remembered.
+- **Volume indicator:** in the Indicators menu (ƒx). It puts volume bars in their own pane, with an optional moving average. Drag the divider to resize the pane; the height is remembered. Its ⚙ has the MA length (Inputs), the rising / falling bar colours and the MA's colour, width and style (Style), and the timeframes it shows on (Visibility).
 - **Book tab** (trade panel) shows the chart contract's order book:
   - the top 5 bid and ask levels, with quantity, number of orders and depth bars;
   - total buy vs sell quantity, with a ratio bar;
@@ -221,7 +221,7 @@ Turn it on or off in Chart settings (⚙).
 - **ƒx → My scripts** lists your library: **+ Add** puts a script on the chart, **{ }** opens it in the editor. You can add the same script twice with different inputs.
 - On the chart, each script's read-out shows its values for the bar under the cursor. Point at a read-out for its buttons:
   - **👁** hides the indicator, or shows it again (a hidden script stops running);
-  - **⚙** opens its inputs (or double-click the name);
+  - **⚙** opens its settings (or double-click the name): see *Indicator settings* below;
   - **{ }** opens the code;
   - **✕** removes it.
 
@@ -232,11 +232,28 @@ Turn it on or off in Chart settings (⚙).
 - `overlay=true` scripts draw on the candles; others get their own pane.
 - **Supported:** plots (lines, step, circles, histogram, columns, area), hline, fill, bgcolor, barcolor, plotshape / plotchar / plotarrow, plotcandle, labels, lines, boxes, linefills, polylines, tables, inputs and request.security() for other timeframes.
 - Times are Indian time.
-- **Bars of history** (⚙, per indicator): how many of the latest candles the script runs on, 500 to 50,000 (default 1,500). The chart loads the extra days it needs.
+- **Bars of history** (⚙ › Inputs, per indicator): how many of the latest candles the script runs on, 500 to 50,000 (default 1,500). The chart loads the extra days it needs. If you scroll back further than that, the script's lines stop there: raise this to see them further back.
+- **Libraries (`import`).** `import TradingView/ta/<version> as ta` works out of the box: the app has its own implementation of that library's functions (Chandelier Exit, Supertrend, Volatility Stop, DEMA / TEMA / T3 / KAMA / FRAMA, Aroon, Stoch RSI, Ichimoku, KVO, Vortex, TRIX, PPO, PMO, Ulcer Index, volume delta and more), written from the standard formulas, not TradingView's code (`ht()` and `wpo()` aren't included). For any other library, open it on TradingView, copy its source (it starts with `library("Name")`), paste it into a new script in the Pine Editor and **Save**: `import anyone/Name/<version>` then finds it. If you save a library under the import's full name (for example *TradingView/ta*), that copy is used first, before the app's own. A library isn't drawn on the chart (ƒx marks it *library*, with no + Add). A script that imports a library you don't have says so, and what to do.
 - **Live updates** work like TradingView's. The full history runs once, then each price re-runs only the live bar. A new candle triggers one full re-run in the background, so drawings stay exact.
 - **Update** (⚙): *with every price* (the default) or *on candle close*. On candle close means one run per candle, which suits heavy scripts on long histories. The settings box shows the full-run and live-update times.
 - A script stuck in an endless loop is stopped with an error; the page keeps working.
 - Scripts run on PineTS, which covers most of Pine v5 / v6 but not every function. If one of your scripts errors, or draws differently from TradingView, send it over.
+
+## Indicator settings (⚙ on the read-out, or double-click its name)
+
+Like TradingView's, for every indicator on the chart (your Pine scripts, Volume, the P&F toolkit). Changes show at once and are saved on the server with the chart's indicators; **Cancel** puts back what was there when you opened it, **Defaults** resets the tab you're on.
+- **Inputs:** the script's inputs, grouped as the script groups them (inputs written with the same `inline` share a row). Plus the app's own *Bars of history* and *Update*.
+  - **Timeframe** and **Wait for timeframe closes**, for a script whose `indicator()` has `timeframe =` (as on TradingView). Pick a higher timeframe and the script calculates on those candles. With *Wait for timeframe closes* on, each value appears on the chart bar where its higher-timeframe bar closes (no repainting); off, it fills every bar until the next close. The live higher-timeframe bar shows on the latest bar. A timeframe lower than the chart's is refused. The read-out shows the timeframe in use.
+- **Style:** each plot with its colours (a plot coloured by a condition lists each colour it uses; change any of them, with opacity), on / off, plot type (line, line with breaks, step line, histogram, columns, area, circles, cross), width and line style, and a price line at its latest value. The script's levels (`hline`: on / off, colour, width, style), fills, backgrounds, shapes and bar colours (on / off, colours). Then **Precision**, **Labels on the price scale**, **Values in the status line** and **Inputs in the status line**. Lines, labels and boxes a script draws take their colours and widths from its own inputs (Inputs tab), as on TradingView.
+- **Visibility:** which timeframes it shows on: minutes, hours, days, weeks and months, each on / off with a range (for example minutes 1 to 15 only). On other timeframes the read-out says *hidden on this timeframe* and a Pine script doesn't run.
+
+## Chart history: scroll back for older candles
+
+- A chart opens with recent candles (about 1,000 bars, more if a Pine script asks for more). **Scroll or zoom out to the left edge and older candles load**, a step at a time, as on TradingView; the chart stays on the candles you were looking at. A pill at the bottom left says what's happening.
+- It goes back as far as Fyers has candles for that contract. A futures contract starts on its listing day: when there's nothing older, the pill says *No older candles at Fyers for this contract* and it stops asking.
+- Only your own scrolling loads more (not the chart fitting itself), and one step at a time, so it stays well inside Fyers' data limits.
+- The older candles you load stay on that chart (same contract and timeframe) until you reload the page.
+- **Other timeframes for Pine** (`request.security`, an indicator's own timeframe): the app waits up to 90 seconds for those candles (a Fyers request can queue behind others). If they don't arrive, the read-out says so in amber (or, if the script couldn't calculate without them, its error says why) and it tries again in 30 seconds, up to 3 times. Before 1 Nov 2026, Fyers' "no data" answer for the days before a contract was listed made the whole daily request fail, which is why Pivot Points said *Not enough data available*.
 
 ## Saved candles
 
@@ -248,7 +265,7 @@ Candles are saved on the server and in your browser.
 
 ## Saved on the server
 
-Everything here is per user. Your Pine scripts and the indicators on your chart (with their inputs), your watchlist, pinned timeframes, last chart, theme, panel on/off, ticket defaults (risk mode and amount, product, R) and remembered stop distances are saved on the server. Rules and trailing settings are saved per paper account. Any device, after any login, opens the same set-up.
+Everything here is per user. Your Pine scripts and libraries, the indicators on your chart (with their inputs, style, timeframe and visibility), your watchlist, pinned timeframes, last chart, theme, panel on/off, ticket defaults (risk mode and amount, product, R) and remembered stop distances are saved on the server. Rules and trailing settings are saved per paper account. Any device, after any login, opens the same set-up.
 
 ## Every ₹ figure is net
 

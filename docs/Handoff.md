@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 1 Nov 2026, version **0.19.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 1 Nov 2026, version **0.20.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -11,7 +11,7 @@ an old zip. Every release: changelog text, a one-line commit message, the versio
 updated; `tests/routes_check.py` passes; the guide updated when behaviour changes; the project copies of the guide
 and roadmap updated too.
 
-## How the code is laid out (v0.19)
+## How the code is laid out (v0.20)
 
 - `helper/app.py`: FastAPI routes. Login is username + password + TOTP code; sensitive routes need a fresh code
   (HTTP 428, the page asks and retries). `X-Acct` header picks the paper account.
@@ -44,7 +44,9 @@ and roadmap updated too.
 - `web/vendor/lightweight-charts.standalone.production.js` is 5.2.1 with one patch (the histogram hover guard,
   noted at the top of the file): keep it if the library is ever updated, unless the new version fixes the bug.
 - `web/index.html` (main page and chart), `web/paper.js` (ticket, chart tool, positions), `web/pages.js` (Trades,
-  History, Book, Account, Log pages), `web/pine.js` + `web/pine_worker.js` (Pine Script, PineTS), `web/security.js`
+  History, Book, Account, Log pages), `web/pine.js` + `web/pine_worker.js` (Pine Script, PineTS), `web/indset.js`
+  (every indicator's settings dialog: Inputs / Style / Visibility; `indVisOn()` decides visibility by timeframe),
+  `web/pine_libs/` (Pine libraries built into the app: `TradingView_ta.pine`), `web/security.js`
   (login gates, 2FA set-up, step-up, Security and Users settings, account switcher), `web/live.js` (LIVE badge, KILL,
   live warnings, the Fyers stop on each position, the Live card, the Paper <-> Live dialog; it wraps paperUpdate,
   renderPlan, pgPositions and pgAccount).
@@ -96,6 +98,30 @@ owner's Fyers login) for CRUDEOIL and NIFTY futures. If exact volume is close to
 the normal feed; if not, the owner asks Fyers for a trade feed. Snapshot files grow by roughly tens of MB a day per
 busy contract (gzip): turn recording off on the Log page once the question is settled.
 
+## Indicators, Pine libraries and chart history (v0.20.0)
+
+- **Settings per indicator** live on its entry in prefs `indicators`: `inputs`, `style` (Pine: `{plots|hlines|fills|bg|
+  barcolor|shapes: {name: {off, colors: {"#RRGGBBAA": "#RRGGBBAA"}, width, type, ls, pl, lv}}, prec, lbl, sv, inl}`;
+  Volume: `{up, down, maWidth, maLs}`), `vis` (`{m|h|D|W|M: [on, from, to]}`), `tf` / `gaps` (Pine's indicator
+  timeframe). `pineApply()` lays `style` over the script's own look and fills `P.raw` (what the Style tab lists, the
+  script's own colours as `#RRGGBBAA` keys). An indicator not shown on the chart's timeframe gets `r.offTf` (built
+  hidden; `indVisCheck()` on a timeframe change rebuilds only when that changes).
+- **Indicator timeframe:** the worker reads `indicator(timeframe =)` (PineTS keeps it in `ind._sourcePropArgs` /
+  `ind.prop`, but doesn't act on it), runs the script on that timeframe's candles (asked of the page like
+  request.security) and maps values onto the chart bars in `mapToChart()`. Such sessions re-run in full on ticks.
+- **Imports:** the page resolves them (`pineLibs()` in pine.js: a saved script named like the import path, then a
+  saved `library("Name")`, then `PINE_BUILTIN_LIBS`) and sends `{path: source}` with each run; the worker gives
+  PineTS a resolver over that. `TradingView_ta.pine` is our own implementation (standard formulas; ta.supertrend's
+  port checked equal to Pine's built-in). PineTS quirk found writing it: a history reference with a parameter index
+  inside a ternary branch (`c ? x[length] : y`) evaluated wrong in a library function: compute it into a variable first.
+- **Chart history:** `HX[symbol|res].days` is how far back a chart reaches after you scroll left (`histMore()`:
+  `/api/history?...&until=<oldest>`; only user scrolling triggers it, `histUserAt`); `HROWS` are the raw rows on
+  the chart. `fyers_link._check()` treats Fyers' `{"s": "no_data"}` as an empty answer (it used to fail whole
+  chunked requests reaching back before a contract's listing).
+- **Not confirmed against real Fyers:** that Fyers really answers `no_data` (per its community examples) for ranges
+  before listing and how far back its intraday candles go; the owner's real Pivot Points / Chandelier scripts on
+  real candles.
+
 ## Rule: every indicator on every chart type (owner, 31 Oct 2026)
 
 Volume, every Pine script and every future indicator / Pine feature must work on every chart type, P&F included.
@@ -120,3 +146,5 @@ indicator option to add (not built).
    journal, saved layouts, multi-charts, the measurement tool and the drawing tools (roadmap items 3-7 and 9, in
    that order; item 8, CFD prices, is on hold).
 4. The owner tries the phone layout (v0.19.0) on his phone; fix what he reports.
+5. The owner checks v0.20.0 on real Fyers: Pivot Points and the Chandelier exit on GOLDPETAL 2m, scrolling back,
+   and the Style / Visibility tabs on his own scripts.

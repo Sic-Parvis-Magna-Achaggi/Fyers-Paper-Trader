@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.20.0 — 1 Nov 2026 — Indicator settings, Pine libraries, older candles
+
+Fixed (reported 1 Nov)
+- **Indicator settings were only inputs.** Every indicator now has TradingView's three tabs (⚙ on the read-out, or
+  double-click its name): **Inputs** (grouped like the script, `inline` inputs on one row), **Style** (each plot's
+  colours with opacity, on / off, plot type, width, line style, price line; levels, fills, backgrounds, shapes and
+  bar colours; precision, labels on the price scale, values and inputs in the status line) and **Visibility** (which
+  minutes / hours / days / weeks / months it shows on). Volume has its own colours and MA style. Saved on the server;
+  Cancel puts things back; Defaults resets a tab.
+- **The indicator's own timeframe.** A script whose `indicator()` has `timeframe =` gets **Timeframe** and **Wait for
+  timeframe closes** in Inputs and calculates on that timeframe: values on the bar where each higher-timeframe bar
+  closes (or filling the bars between, with Wait off), the live bar on the latest. The read-out shows the timeframe.
+- **`import` failed ("no import resolver is configured").** Libraries now resolve: `TradingView/ta` is built in (the
+  app's own implementation of its functions from the standard formulas, checked against Pine's own ta.supertrend
+  etc.; not TradingView's code; `ht()` and `wpo()` not included), and any library you paste into the Pine Editor and
+  save answers `import anyone/<its name>/<version>`. A library you don't have gives a message saying what to do. ƒx
+  marks saved libraries and doesn't offer to add them to the chart.
+- **Older candles were missing.** The chart opened with ~6 days of 2-minute candles and nothing loaded behind them.
+  Scroll (or zoom out) to the left edge and older candles now load a step at a time, as on TradingView, keeping your
+  view, as far back as Fyers has them (it says when a contract's history starts).
+- **Pivot Points: "Not enough data available".** Fyers answers `no_data` for days before a contract was listed; the
+  app treated that as an error, so the 2-year daily request Pivot Points makes through request.security failed
+  completely. `no_data` is now an empty answer. Other-timeframe candles also get 90 s (was 15 s) to arrive; if they
+  don't, the read-out or the error says why and the script retries in 30 s (up to 3 times).
+
+Added
+- `/api/history` takes `until` (only candles before that time: the chart's scroll-back).
+- `web/indset.js` (the settings dialog), `web/pine_libs/TradingView_ta.pine` (the built-in library).
+- Tests: `tests/indicator_settings_flow.js` (31 checks: history scroll-back and its end, daily candles across a
+  listing date, Pivot Points Standard on 2m, imports, your own library, the indicator timeframe with and without
+  gaps, Style, Volume style, Visibility, saved after reload); two scripts added to the Pine battery (an import, an
+  indicator timeframe), passing on every chart type; the mock server now "lists" contracts 200 days back and answers
+  `no_data` before that, as Fyers does.
+
 ## v0.19.0 — 1 Nov 2026 — The phone layout
 
 Added

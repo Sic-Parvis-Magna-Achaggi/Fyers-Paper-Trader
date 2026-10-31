@@ -16,13 +16,15 @@ FYERS_HELPER_DATA=/tmp/fyers_test node tests/security_flow.js      # upgrade log
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/live_flow.js          # Live on (client ID + 2FA), a trade, its Fyers stop, kill switch, back to Paper
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/charttypes_flow.js    # every chart type with Volume + 2 Pine scripts lined up, live ticks
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/pine_compat_flow.js   # the Pine battery (tests/pine_compat.js) on every chart type; the P&F toolkit
+FYERS_HELPER_DATA=/tmp/fyers_test node tests/indicator_settings_flow.js  # indicator settings (Inputs / Style / Visibility, own timeframe), Pine imports, chart scroll-back, Pivot Points on daily candles
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/mobile_flow.js        # the phone layout on an emulated Pixel 7: order sheet, positions, tabs, full screen (resets the admin's paper account)
 ```
 
 `fake_broker.py` is a fake Fyers order API (place / modify / cancel / order book / positions and order updates). It
 follows the Fyers rules live mode relies on (stops trigger on the last price; no type change on MCX; no SL-M on
 options or BSE; a sell stop can't be at or above the last price) and records any moment two exit orders are open
-for one position. `mock_server.py` uses it, so Live accounts work in the browser tests without Fyers.
+for one position. `mock_server.py` uses it, so Live accounts work in the browser tests without Fyers. The mock's contracts were
+"listed" 200 days ago (FAKE_LISTED_DAYS): before that its history answers Fyers' `no_data`, as a real contract does.
 
 After `security_flow.js` the admin has 2FA. Other browser tests log in with `require("./login.js")(page)`, which
 types the password and a fresh code read from the test data (a code can't be used twice, so it may wait up to 30 s).

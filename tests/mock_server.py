@@ -42,6 +42,11 @@ def fake_get(self, url, params):
         IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
         a = int(dt.datetime.fromisoformat(params["range_from"]).replace(tzinfo=IST).timestamp())
         b = min(int(time.time()), int(dt.datetime.fromisoformat(params["range_to"]).replace(tzinfo=IST).timestamp()) + 86400)
+        # contracts here were "listed" LISTED_DAYS ago: before that Fyers answers no_data (as it does for a real contract)
+        listed = int(time.time()) - LISTED_DAYS * 86400
+        if b < listed:
+            return {"candles": [], "message": "", "s": "no_data"}
+        a = max(a, listed)
         out = []
         t = (a // sec + 1) * sec
         while t <= b and len(out) < 20000:
@@ -55,6 +60,7 @@ def fake_get(self, url, params):
 
 
 FL._get = fake_get
+LISTED_DAYS = int(os.environ.get("FAKE_LISTED_DAYS", "200"))
 
 # Live accounts: Fyers' order API and order-update socket are faked too (tests/fake_broker.py)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

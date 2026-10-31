@@ -27,7 +27,8 @@ let br;
       const r = await pg.evaluate(async code => {
         const {candles} = pineCandles(1500);
         const set = new Set(candles.map(c => c.openTime));
-        const res = await pineExec({op: "run", code, inputs: {}, candles, ticker: cur.s, tf: pineTf(), info: pineInfo()}, 60000);
+        const {libs, missing} = await pineLibs(code);          // (imports: TradingView/ta is built in)
+        const res = await pineExec({op: "run", code, inputs: {}, libs, missing, candles, ticker: cur.s, tf: pineTf(), info: pineInfo()}, 60000);
         if(!res.ok) return {ok: false, error: res.error, n: candles.length};
         const plots = Object.entries(res.plots || {}).filter(([k, p]) => (p.data || []).some(d => d[1] != null && d[1] !== false));
         const stray = plots.filter(([k, p]) => p.data.some(d => !set.has(d[0]))).map(([k]) => k);
