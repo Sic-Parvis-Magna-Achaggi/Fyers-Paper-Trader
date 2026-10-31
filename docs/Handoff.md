@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 31 Oct 2026, version **0.17.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 31 Oct 2026, version **0.18.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -11,7 +11,7 @@ an old zip. Every release: changelog text, a one-line commit message, the versio
 updated; `tests/routes_check.py` passes; the guide updated when behaviour changes; the project copies of the guide
 and roadmap updated too.
 
-## How the code is laid out (v0.17)
+## How the code is laid out (v0.18)
 
 - `helper/app.py`: FastAPI routes. Login is username + password + TOTP code; sensitive routes need a fresh code
   (HTTP 428, the page asks and retries). `X-Acct` header picks the paper account.
@@ -95,7 +95,8 @@ Volume, every Pine script and every future indicator / Pine feature must work on
 How it holds: indicators only ever read `DISP` (the shown bars); Pine gets them through `pineBar()` in pine.js (closeTime
 = next bar's open for non-time types; P&F `close` = middle or last box). Before every release run
 `tests/pine_compat_flow.js`; when a Pine feature is added, add a script using it to `tests/pine_compat.js`.
-The P&F toolkit is `CT.pfTools` (ctype.js) drawn by `PfToolsPrim` (index.html, built-in indicator "pftools").
+The P&F toolkit is `CT.pfTools` (ctype.js: lines, signals, anchors, counts, hcounts, patterns) drawn by `PfToolsPrim`
+(index.html, built-in indicator "pftools"; labels go through a priority queue so they never overlap).
 
 ## Chart types (v0.15.0, Point & Figure v0.16.0)
 

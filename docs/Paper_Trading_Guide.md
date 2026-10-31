@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.17.0)
+# Paper and live trading: how it works (v0.18.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -155,8 +155,18 @@ Drawn on Point & Figure charts (on other chart types its read-out says so and it
 - **Signals** at the box that triggers them: **DTB** (Double Top Buy: an X column one box above the previous X column's top), **DBS** (Double Bottom Sell), **TTB / TBS** (triple top / bottom: the two previous tops, or bottoms, were equal). Filled = fresh (the first signal after one the other way), outlined = continuation. Zoomed far out, only fresh signals show.
 - **Anchor columns:** columns of 15+ boxes (settable), shaded, with their high and low as dashed levels to the right (the latest 3, settable).
 - **Vertical counts:** from finished columns of 5+ boxes (settable): target = boxes × box size × reversal, up from an X column's low or down from an O column's high. A count shows once a later column breaks the count column's high (low), and disappears when the target is reached: **VC ↑ 5,654** (the latest 2 per side, settable).
+- **Horizontal counts:** at each breakout out of a congestion, the columns from the breakout back to the wall (the first column that had reached the breakout level), at least 5 wide (settable): target = width × box size × reversal, from the congestion's low (up) or high (down), the conservative count. Shown until reached: **HC ↑ 5,682**.
+- **Patterns**, marked under the column (bullish) or over it (bearish), each family with its own switch:
+  - **Bull trap:** a triple top buy only one box above the tops, then an O column giving a double bottom sell (bearish). **Bear trap:** the mirror (bullish).
+  - **Catapult:** a triple top buy, a pullback that neither gives a sell signal nor breaks the pattern's low, then a double top buy (and the bearish mirror).
+  - **High pole:** an X column 3+ boxes above the previous X top, then an O column retracing more than half of it (a bearish warning). **Low pole:** the mirror (bullish).
+  - **Triangle:** lower tops and higher bottoms over 4 columns, then a double top buy (bottom sell). **Ascending / descending triangle:** equal tops with rising bottoms (equal bottoms with falling tops), then the breakout.
+  - **Turtle:** a column beyond the highest high (lowest low) of the previous 20 columns (settable).
+  - **AFT (anchor follow-through):** after an anchor column, the next column on its side goes beyond it; its stop (the pullback's extreme) is drawn as a short dashed line.
+  - Rules from StockCharts / Dorsey; turtle and AFT from Definedge's published one-line descriptions (their full rules aren't public, so details may differ).
+- **Labels never overlap:** they're placed by importance (breaks, fresh signals, traps / catapults / triangles, anchors / turtle / AFT, poles, continuation signals) and one that would cover another is left out. Zoom in to see more.
 - The read-out shows which line price is on and the last signal.
-- Definedge's own tools (PMOX, XO Zone %, Noiseless RSI, Oops and their other patterns) aren't included: their rules are in Definedge's logged-in library. Paste one in and it can be built exactly.
+- Not included: **mini tops / bottoms** and Definedge's own indicators and patterns (PMOX, XO Zone %, Noiseless RSI, Oops...): their rules are in Definedge's logged-in library and aren't published. Paste one in and it can be built exactly.
 
 ## Order-flow check (admin, Log page)
 

@@ -73,17 +73,21 @@ let br;
   await pg.screenshot({ path: SHOT + "pine_on_pf.png" });
   // the P&F toolkit: trend lines and breaks, signals, anchors, counts, worked out on the chart's own columns
   const tk = await pg.evaluate(async () => {
-    indSave([{type: "pftools", id: "tk", anchorBoxes: 10}]); indBuild();
+    indSave([{type: "pftools", id: "tk"}]); indBuild();
     await new Promise(r => setTimeout(r, 1200));
     const r = INDS.find(x => x.cfg.type === "pftools"), T = r && r.res;
     const again = T && CT.pfTools(DISP, CT_SIZE, ctCfg().pfRev || 3, r.cfg);
     return T ? {lines: T.lines.length, broken: T.lines.filter(l => l.broken).length, signals: T.signals.length, fresh: T.signals.filter(s => s.fresh).length,
       anchors: T.anchors.length, counts: T.counts.filter(v => v.active && !v.achieved).length, same: JSON.stringify(again) === JSON.stringify(T),
+      hc: T.hcounts.length, hcOpen: T.hcounts.filter(v => !v.achieved).length, pats: T.patterns.length,
+      kinds: [...new Set(T.patterns.map(q => q.kind))].join(" "), patOnBar: T.patterns.every(q => q.col < DISP.length && (q.dir === 1 || q.dir === -1)),
       alt: T.lines.every((l, i) => !i || l.dir === -T.lines[i - 1].dir), legend: document.querySelector("#lgd1") && document.querySelector("#lgd1").textContent} : null;
   });
   ok(tk && tk.lines > 1 && tk.broken === tk.lines - 1 && tk.alt, `P&F toolkit: ${tk && tk.lines} trend lines, each broken one followed by the opposite line, the last one running`);
   ok(tk && tk.signals > 0 && tk.fresh > 0, `P&F toolkit: ${tk && tk.signals} buy / sell signals (${tk && tk.fresh} fresh)`);
-  ok(tk && tk.anchors >= 0 && tk.same, `P&F toolkit: ${tk && tk.anchors} anchor columns (10+ boxes), ${tk && tk.counts} open vertical counts; matches the analysis of the chart's columns`);
+  ok(tk && tk.anchors >= 0 && tk.same, `P&F toolkit: ${tk && tk.anchors} anchor columns (15+ boxes), ${tk && tk.counts} open vertical counts; matches the analysis of the chart's columns`);
+  ok(tk && tk.pats > 0 && tk.patOnBar, `P&F toolkit: ${tk && tk.pats} patterns on the chart's columns (${tk && tk.kinds})`);
+  ok(tk && tk.hc > 0, `P&F toolkit: ${tk && tk.hc} horizontal counts (${tk && tk.hcOpen} open)`);
   ok(tk && /bullish|bearish/.test(tk.legend || ""), `P&F toolkit: the read-out shows the trend and the last signal ("${tk && (tk.legend || "").replace(/\s+/g, " ").slice(0, 80)}")`);
   await pg.waitForTimeout(500);
   await pg.screenshot({ path: SHOT + "pf_toolkit.png" });

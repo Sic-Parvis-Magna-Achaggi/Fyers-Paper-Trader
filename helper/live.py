@@ -275,11 +275,11 @@ class LiveEngine(Paper):
     def plan(self, req: dict, place=False) -> dict:
         out = super().plan(req, place)
         out["live"] = True
+        if self.L.get("halted"):                         # the real reason nothing can be placed: shown first
+            out["blocked"] = "Live trading is paused after the kill switch - press Resume on the Account page"
         if not out.get("blocked"):
             why = None
-            if self.L.get("halted"):
-                why = "Live trading is paused after the kill switch - press Resume on the Account page"
-            elif not (self.link and self.link.token()):
+            if not (self.link and self.link.token()):
                 why = "log in to Fyers first (the daily login)"
             elif out.get("sl") is None:
                 why = "a Live trade needs a stop loss (it's placed at Fyers as soon as the trade opens)"

@@ -1015,12 +1015,19 @@ class PfToolsPrim {
       const X = i => { if(i < n) return ts.timeToCoordinate(DISP[i].time); const xl = ts.timeToCoordinate(DISP[n - 1].time); return xl == null ? null : xl + (i - n + 1) * sp; };
       const Y = v => series.priceToCoordinate(v);
       const font = s => `${s}px "IBM Plex Mono", monospace`;
-      const tag = (x, y, text, col, fill, above) => {
+      // labels go into a list and are drawn by importance; one that would overlap a label already drawn is left out
+      const placed = [], labels = [];
+      const tagNow = (x, y, text, col, fill, above) => {
         ctx.font = font(10); const w = ctx.measureText(text).width + 6, h = 13, yy = above ? y - h - 2 : y + 2;
+        const R = [x - w / 2 - 1, yy - 1, x + w / 2 + 1, yy + h + 1];
+        if(placed.some(q => R[0] < q[2] && R[2] > q[0] && R[1] < q[3] && R[3] > q[1])) return false;
+        placed.push(R);
         ctx.fillStyle = fill ? col : cssVar("--panel"); ctx.strokeStyle = col; ctx.lineWidth = 1;
         ctx.fillRect(x - w / 2, yy, w, h); ctx.strokeRect(x - w / 2 + .5, yy + .5, w - 1, h - 1);
         ctx.fillStyle = fill ? "#fff" : col; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(text, x, yy + h / 2 + .5);
+        return true;
       };
+      const tag = (x, y, text, col, fill, above, prio = 5, after) => labels.push({x, y, text, col, fill, above, prio, after});
       // anchor columns: a faint band behind the column, and its high / low as dashed levels to the right
       if(c.anchors) for(const a of T.anchors.slice(-Math.max(1, c.anchorShow || 3))){
         const x = X(a.col), yh = Y(a.hiP), yl = Y(a.loP); if(x == null || yh == null || yl == null) continue;
@@ -1029,7 +1036,7 @@ class PfToolsPrim {
         ctx.setLineDash([4, 4]); ctx.strokeStyle = rgbaHex(col, 0.7); ctx.lineWidth = 1;
         for(const y of [yh, yl]){ ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(size.width, y); ctx.stroke(); }
         ctx.setLineDash([]);
-        tag(x, yh, `Anchor ${a.n}`, col, false, true);
+        tag(x, yh, `Anchor ${a.n}`, col, false, true, 3);
       }
       // 45-degree trend lines: solid while running, faded once broken, with the break marked
       if(c.trend) for(const L of T.lines){
@@ -1041,27 +1048,48 @@ class PfToolsPrim {
         ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
         if(L.broken){
           ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x1, y1, 3.5, 0, 2 * Math.PI); ctx.fill();
-          tag(x1, y1, L.dir > 0 ? "▼ break" : "▲ break", L.dir > 0 ? C.down : C.up, true, L.dir < 0);
+          tag(x1, y1, L.dir > 0 ? "▼ break" : "▲ break", L.dir > 0 ? C.down : C.up, true, L.dir < 0, 0);
         }
       }
-      // open vertical counts: active, not reached yet - the latest few per side
-      if(c.counts){
-        const open = T.counts.filter(v => v.active && !v.achieved);
-        for(const d of [1, -1]) for(const v of open.filter(v => v.dir === d).slice(-Math.max(1, c.countShow || 2))){
+      // open counts: vertical (active, not reached) and horizontal (not reached) - the latest few per side, each kind
+      const countLines = (list, label, dash) => {
+        for(const d of [1, -1]) for(const v of list.filter(v => v.dir === d).slice(-Math.max(1, c.countShow || 2))){
           const x = X(v.col), y = Y(v.targetP); if(x == null || y == null) continue;
           const col = d > 0 ? C.up : C.down;
-          ctx.setLineDash([2, 3]); ctx.strokeStyle = col; ctx.lineWidth = 1;
+          ctx.setLineDash(dash); ctx.strokeStyle = col; ctx.lineWidth = 1;
           ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(size.width - 64, y); ctx.stroke(); ctx.setLineDash([]);
           ctx.font = font(10.5); ctx.fillStyle = col; ctx.textAlign = "right"; ctx.textBaseline = d > 0 ? "bottom" : "top";
-          ctx.fillText(`VC ${d > 0 ? "↑" : "↓"} ${fmt(v.targetP, tick)}`, size.width - 66, y + (d > 0 ? -2 : 2));
+          ctx.fillText(`${label} ${d > 0 ? "↑" : "↓"} ${fmt(v.targetP, tick)}`, size.width - 66, y + (d > 0 ? -2 : 2));
+        }
+      };
+      if(c.counts) countLines(T.counts.filter(v => v.active && !v.achieved), "VC", [2, 3]);
+      if(c.hcounts) countLines(T.hcounts.filter(v => !v.achieved), "HC", [7, 3]);
+      // patterns: under the column (bullish) or over it (bearish); several on one column stack up
+      if(c.patterns){
+        const stack = {};
+        const family = k => /trap|catapult/.test(k) ? ["pTraps", 2] : /triangle/.test(k) ? ["pTriangles", 2] : /pole/.test(k) ? ["pPoles", 4] : /turtle/.test(k) ? ["pTurtle", 3] : ["pAft", 3];
+        for(const q of T.patterns){
+          const [fam, prio] = family(q.kind); if(c[fam] === false) continue;
+          const x = X(q.col); if(x == null || x < -40 || x > size.width) continue;
+          const b = DISP[q.col]; if(!b) continue;
+          const up = q.dir > 0, y0 = Y(up ? b.low : b.high); if(y0 == null) continue;
+          const key = q.col + (up ? "u" : "d"), n = stack[key] = (stack[key] || 0) + 1;
+          const y = up ? y0 + 6 + (n - 1) * 15 : y0 - 6 - (n - 1) * 15;
+          const stop = q.stopP != null ? Y(q.stopP) : null;
+          tag(x, y, CT.PF_PATTERNS[q.kind] || q.kind, up ? C.up : C.down, false, !up, prio, stop == null ? null : () => {   // AFT: its stop, a short dashed line
+            ctx.setLineDash([3, 3]); ctx.strokeStyle = up ? C.down : C.up; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(x - sp, stop); ctx.lineTo(x + 3 * sp, stop); ctx.stroke(); ctx.setLineDash([]);
+          });
         }
       }
       // buy / sell signals at their trigger box: filled = fresh, outlined = continuation
       if(c.signals) for(const s of T.signals){
         const x = X(s.col), y = Y(s.price); if(x == null || y == null || x < -20 || x > size.width) continue;
-        if(sp < 9 && !s.fresh) continue;                // zoomed far out: only fresh signals
-        tag(x, y, s.kind, s.dir > 0 ? C.up : C.down, s.fresh, s.dir < 0);
+        tag(x, y, s.kind, s.dir > 0 ? C.up : C.down, s.fresh, s.dir < 0, s.fresh ? 1 : 6);
       }
+      // the break labels and anchor tags were queued too: draw everything, most important first, newest first
+      labels.map((l, i) => ({...l, i})).sort((a, b) => a.prio - b.prio || b.i - a.i)
+        .forEach(l => { if(tagNow(l.x, l.y, l.text, l.col, l.fill, l.above) && l.after) l.after(); });
     });
   }
 }
@@ -1132,11 +1160,14 @@ const IND_TYPES = {
   volume: {name: "Volume", desc: "Volume bars in their own pane, with an optional moving average",
     defaults: {ma: true, maLen: 20, maColor: "#e0b341"},
     settings: [["ma", "Moving average", "bool"], ["maLen", "MA length", "int"], ["maColor", "MA colour", "color"]]},
-  pftools: {name: "P&F toolkit", desc: "Point & Figure charts: 45° trend lines with their breaks, Double / Triple Top Buy and Bottom Sell signals, anchor columns and vertical counts",
-    defaults: {trend: true, signals: true, anchors: true, anchorBoxes: 15, anchorShow: 3, counts: true, countMin: 5, countShow: 2},
+  pftools: {name: "P&F toolkit", desc: "Point & Figure charts: 45° trend lines with their breaks, Double / Triple Top Buy and Bottom Sell signals, patterns (traps, catapults, poles, triangles, turtle, anchor follow-through), anchor columns, vertical and horizontal counts",
+    defaults: {trend: true, signals: true, patterns: true, pTraps: true, pTriangles: true, pPoles: true, pTurtle: true, pAft: true, turtleN: 20, anchors: true, anchorBoxes: 15, anchorShow: 3, counts: true, countMin: 5, hcounts: true, hcMin: 5, countShow: 2},
     settings: [["trend", "45° trend lines and breaks", "bool"], ["signals", "Buy / sell signals (DTB, TTB, DBS, TBS)", "bool"],
+               ["patterns", "Patterns", "bool"], ["pTraps", "· traps and catapults", "bool"], ["pTriangles", "· triangles", "bool"], ["pPoles", "· high / low poles", "bool"],
+               ["pTurtle", "· turtle breakouts", "bool"], ["turtleN", "  turtle: beyond the last (columns)", "int"], ["pAft", "· anchor follow-through", "bool"],
                ["anchors", "Anchor columns", "bool"], ["anchorBoxes", "Anchor: at least (boxes)", "int"], ["anchorShow", "Anchors shown (latest)", "int"],
-               ["counts", "Vertical counts (open targets)", "bool"], ["countMin", "Count columns: at least (boxes)", "int"], ["countShow", "Counts shown per side", "int"]]},
+               ["counts", "Vertical counts (open targets)", "bool"], ["countMin", "Count columns: at least (boxes)", "int"],
+               ["hcounts", "Horizontal counts (open targets)", "bool"], ["hcMin", "Congestion: at least (columns)", "int"], ["countShow", "Counts shown per side (each kind)", "int"]]},
 };
 let INDS = [];                                   // what's on the chart now: {cfg, pane, series[], data()}
 function indList(){ return (prefGet("indicators", []) || []).filter(c => IND_TYPES[c.type] || c.type === "pine"); }
@@ -1261,9 +1292,10 @@ function legendFill(param){
       const T = r.res;
       if(!T) vals = ` <span class="muted">Point & Figure charts only</span>`;
       else {
-        const L = T.lines[T.lines.length - 1], S = T.signals[T.signals.length - 1];
+        const L = T.lines[T.lines.length - 1], S = T.signals[T.signals.length - 1], Q = T.patterns[T.patterns.length - 1];
         vals = (L ? ` <span class="${L.dir > 0 ? "up" : "down"}">${L.dir > 0 ? "▲ above the bullish line" : "▼ below the bearish line"}</span>` : "")
-          + (S ? ` <span class="lk">last</span><span class="${S.dir > 0 ? "up" : "down"}">${S.kind} ${fmt(S.price, tick)}</span>` : "");
+          + (S ? ` <span class="lk">last</span><span class="${S.dir > 0 ? "up" : "down"}">${S.kind} ${fmt(S.price, tick)}</span>` : "")
+          + (Q && r.cfg.patterns ? ` <span class="lk">pattern</span><span class="${Q.dir > 0 ? "up" : "down"}">${CT.PF_PATTERNS[Q.kind]}${Q.stopP != null ? " (stop " + fmt(Q.stopP, tick) + ")" : ""}</span>` : "");
       }
     }
     else if(r.cfg.type === "volume"){

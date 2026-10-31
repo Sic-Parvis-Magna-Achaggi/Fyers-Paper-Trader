@@ -6,6 +6,10 @@ It runs on our own server and serves its own page, so there is nothing to instal
 
 **Address:** https://68-183-245-178.sslip.io
 
+## Version 0.18.0: P&F toolkit, second set
+
+- **Horizontal counts and patterns** on P&F: traps, catapults, poles, triangles, turtle breakouts, anchor follow-through.
+
 ## Version 0.17.0: every indicator on P&F, and the P&F toolkit
 
 - **Every indicator and Pine script works on every chart type,** Point & Figure included, checked before every release.

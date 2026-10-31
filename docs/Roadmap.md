@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 31 Oct 2026 (v0.17.0). This is the one task list for the project.
+Updated 31 Oct 2026 (v0.18.0). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -26,7 +26,8 @@ Updated 31 Oct 2026 (v0.17.0). This is the one task list for the project.
      - **Rule (owner, 31 Oct 2026): every indicator works on P&F charts, not just a few: Volume, every Pine script, and any indicator or Pine feature added in future.** P&F columns are ordinary bars to indicators; a Pine compatibility test (many Pine features, on every chart type) runs before every release, and nothing ships that fails it on P&F.
      - [x] Every indicator on P&F: Pine gets ordinary bars on every chart type (a column closes when the next opens; `close` = the column middle by default, or the last box); the Pine compatibility test (9 scripts, every chart type) runs before every release. MA, BB, RSI and anything else are Pine scripts and work there. *(v0.17.0)*
      - [x] First set: the P&F toolkit (ƒx): 45° trendlines with breaks and the next line after each break; DTB / DBS / TTB / TBS at their trigger box (fresh or continuation); anchor columns (15+ boxes) and their levels; open vertical counts. *(v0.17.0)*
-     - [ ] Next: horizontal counts, mini tops / bottoms, more patterns (catapult, pole, triangles, traps, anchor follow-through, turtle breakout).
+     - [x] Second set: horizontal counts; patterns: bull / bear traps, catapults, high / low poles, triangles (symmetrical, ascending, descending), turtle breakouts, anchor follow-through; labels placed without overlaps; a switch per pattern family. *(v0.18.0)*
+     - [ ] Mini tops / bottoms: Definedge doesn't publish the rule (the owner can paste it from Definedge's library).
      - [ ] Definedge's own indicators (PMOX, XO Zone %, Noiseless RSI, Smart Don, Oops patterns): their exact rules are in Definedge's logged-in library; built only from their published definitions (the owner can paste them), never guessed.
    - [ ] **Footprint: real trades only, never an estimate** (agreed 31 Oct 2026). Fyers' API documents no trade-by-trade feed (the tick-by-tick socket is 50-level depth only, NSE / NFO, 1 symbol on Standard); its normal feed sends snapshots with the last trade's price and size and the day's volume.
      - [x] The recorder: the server records every feed snapshot for chosen contracts (default CRUDEOIL and NIFTY futures) and reports how much of the volume arrives as single, exact trades (Log page, admin). *(v0.16.0)*
@@ -75,6 +76,7 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Done
 
+- [x] **v0.18.0** (31 Oct): P&F toolkit second set (horizontal counts, traps, catapults, poles, triangles, turtle, anchor follow-through).
 - [x] **v0.17.0** (31 Oct): every indicator on every chart type, P&F included (Pine compatibility test); the P&F toolkit (trend lines and breaks, signals, anchors, vertical counts).
 - [x] **v0.16.0** (31 Oct): Point & Figure chart type; the order-flow check (records the feed to measure whether it carries every trade).
 - [x] **v0.15.0** (31 Oct): chart types (Heikin-Ashi, Renko, range bars, line break, hollow, bars, line, area) with indicators on every type (item 2's first part).

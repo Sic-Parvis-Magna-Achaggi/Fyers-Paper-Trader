@@ -170,12 +170,26 @@ const CT = {
      anchors: columns of at least `anchorBoxes` boxes, with their high and low. {col, dir, n, hi, lo}
      counts:  vertical counts from finished columns of at least `countMin` boxes: target = boxes x box x reversal from
               the column's low (X) or high (O); active once a later column breaks the column's high (low); achieved
-              when price reaches the target. {col, dir, n, target, active, activeCol, achieved}  */
+              when price reaches the target. {col, dir, n, target, active, activeCol, achieved}
+     hcounts: horizontal counts at each breakout out of a congestion: the columns from the breakout back to the wall (the
+              first column that reached the breakout level), at least `hcMin` wide; target = width x box x reversal
+              from the congestion's low (up) or high (down) - the conservative count. {col, dir, w, wall, target,
+              achieved}
+     patterns (StockCharts / Dorsey rules; Definedge's published descriptions for the last two):
+              bull trap: a triple top buy exactly one box above the tops, then an O column that gives a double bottom
+                sell (bear trap: the mirror); catapult: a triple top buy, a pullback that neither gives a sell signal nor
+                breaks the pattern's low, then a double top buy (7 columns); high pole: an X column 3+ boxes above the
+                previous X top, then an O column retracing more than half of it (low pole: the mirror); triangle: lower
+                tops and higher bottoms over 4 columns, then a double top buy / bottom sell; ascending (descending)
+                triangle: two equal tops (bottoms) with rising bottoms (falling tops), then the breakout; turtle: a
+                column beyond the highest high (lowest low) of the previous `turtleN` columns; anchor follow-through:
+                the next column on the anchor's side that goes beyond the anchor column (stop: the pullback's
+                extreme). {col, kind, dir, k?, stop?}  */
   pfTools(cols, box, rev, o){
-    o = {anchorBoxes: 15, countMin: 5, ...(o || {})};
+    o = {anchorBoxes: 15, countMin: 5, hcMin: 5, turtleN: 20, ...(o || {})};
     const K = v => Math.round(v / box);
     const c = cols.map(b => ({dir: b.pf, hi: K(b.high), lo: K(b.low)}));
-    const out = {lines: [], signals: [], anchors: [], counts: []};
+    const out = {lines: [], signals: [], anchors: [], counts: [], hcounts: [], patterns: []};
     if(!c.length) return out;
     // trend lines
     let L = c[0].dir > 0 ? {dir: 1, c0: 0, k0: c[0].lo - 1} : {dir: -1, c0: 0, k0: c[0].hi + 1};
@@ -217,14 +231,85 @@ const CT = {
       }
       out.counts.push({col: i, dir: x.dir, n, target, active: activeCol != null, activeCol, achieved});
     }
+    // horizontal counts: from every breakout out of a congestion
+    for(const s of out.signals){
+      const i = s.col, k = s.k, d = s.dir;
+      let wall = null;
+      for(let j = i - 1; j >= 0 && i - j <= 40; j--){
+        if(d > 0 ? c[j].hi >= k : c[j].lo <= k){ wall = j; break; }
+      }
+      if(wall == null) continue;
+      const w = i - wall + 1;
+      if(w < o.hcMin) continue;
+      let lo = Infinity, hi = -Infinity;
+      for(let j = wall; j <= i; j++){ lo = Math.min(lo, c[j].lo); hi = Math.max(hi, c[j].hi); }
+      const target = d > 0 ? lo + w * rev : hi - w * rev;
+      let achieved = false;
+      for(let j = i; j < c.length; j++) if(d > 0 ? c[j].hi >= target : c[j].lo <= target){ achieved = true; break; }
+      out.hcounts.push({col: i, dir: d, w, wall, target, achieved});
+    }
+    // patterns
+    const sigAt = {}; for(const s of out.signals) sigAt[s.col] = s;
+    const add = (col, kind, dir, extra) => out.patterns.push({col, kind, dir, ...(extra || {})});
+    for(let i = 0; i < c.length; i++){
+      const x = c[i], s = sigAt[i];
+      // traps: a triple top (bottom) breakout of exactly one box, then the opposite double signal
+      if(s && (s.kind === "TTB" || s.kind === "TBS") && i + 1 < c.length && i >= 1){
+        const nx = c[i + 1];
+        if(s.dir > 0 && x.hi === s.k && nx.lo < c[i - 1].lo) add(i + 1, "bull_trap", -1, {k: c[i - 1].lo - 1});
+        if(s.dir < 0 && x.lo === s.k && nx.hi > c[i - 1].hi) add(i + 1, "bear_trap", 1, {k: c[i - 1].hi + 1});
+      }
+      // catapults: triple breakout, a pullback that holds, then a double signal the same way
+      if(s && (s.kind === "TTB" || s.kind === "TBS") && i >= 4 && i + 2 < c.length){
+        const pb = c[i + 1], go = c[i + 2];
+        let plo = Infinity, phi = -Infinity; for(let j = i - 4; j <= i; j++){ plo = Math.min(plo, c[j].lo); phi = Math.max(phi, c[j].hi); }
+        if(s.dir > 0 && pb.lo >= plo && pb.lo >= c[i - 1].lo && go.hi > x.hi) add(i + 2, "catapult_bull", 1, {k: x.hi + 1});
+        if(s.dir < 0 && pb.hi <= phi && pb.hi <= c[i - 1].hi && go.lo < x.lo) add(i + 2, "catapult_bear", -1, {k: x.lo - 1});
+      }
+      // poles: a column 3+ boxes beyond the previous one on its side, then a retracement of more than half of it
+      if(i >= 2 && i + 1 < c.length){
+        const n = x.hi - x.lo + 1, nx = c[i + 1];
+        if(x.dir > 0 && x.hi - c[i - 2].hi >= 3 && x.hi - nx.lo > n / 2) add(i + 1, "high_pole", -1);
+        if(x.dir < 0 && c[i - 2].lo - x.lo >= 3 && nx.hi - x.lo > n / 2) add(i + 1, "low_pole", 1);
+      }
+      // triangles: 4 columns of lower tops and higher bottoms (or equal tops / bottoms), then the breakout
+      if(s && i >= 4){
+        const t1 = c[i - 4], b1 = c[i - 3], t2 = c[i - 2], b2 = c[i - 1];
+        if(s.dir > 0){
+          if(t2.hi < t1.hi && b2.lo > b1.lo) add(i, "triangle_bull", 1, {k: s.k});
+          else if(t2.hi === t1.hi && b2.lo > b1.lo) add(i, "asc_triangle", 1, {k: s.k});
+        } else {
+          if(t2.lo > t1.lo && b2.hi < b1.hi) add(i, "triangle_bear", -1, {k: s.k});
+          else if(t2.lo === t1.lo && b2.hi < b1.hi) add(i, "desc_triangle", -1, {k: s.k});
+        }
+      }
+      // turtle breakouts: beyond the extreme of the previous N columns
+      if(i >= o.turtleN){
+        let hh = -Infinity, ll = Infinity; for(let j = i - o.turtleN; j < i; j++){ hh = Math.max(hh, c[j].hi); ll = Math.min(ll, c[j].lo); }
+        if(x.dir > 0 && x.hi > hh) add(i, "turtle_bull", 1, {k: hh + 1});
+        if(x.dir < 0 && x.lo < ll) add(i, "turtle_bear", -1, {k: ll - 1});
+      }
+      // anchor follow-through: the next column on the anchor's side goes beyond the anchor column
+      if(i >= 2 && c[i - 2].hi - c[i - 2].lo + 1 >= o.anchorBoxes){
+        const a = c[i - 2];
+        if(a.dir > 0 && x.dir > 0 && x.hi > a.hi) add(i, "aft_bull", 1, {k: a.hi + 1, stop: c[i - 1].lo});
+        if(a.dir < 0 && x.dir < 0 && x.lo < a.lo) add(i, "aft_bear", -1, {k: a.lo - 1, stop: c[i - 1].hi});
+      }
+    }
     // back to prices
     const P = k => +(k * box).toFixed(6);
     out.lines = out.lines.map(l => ({...l, p0: P(l.k0)}));
     out.signals = out.signals.map(s => ({...s, price: P(s.k)}));
     out.anchors = out.anchors.map(a => ({...a, hiP: P(a.hi), loP: P(a.lo)}));
     out.counts = out.counts.map(v => ({...v, targetP: P(v.target)}));
+    out.hcounts = out.hcounts.map(v => ({...v, targetP: P(v.target)}));
+    out.patterns = out.patterns.map(q => ({...q, price: q.k != null ? P(q.k) : null, stopP: q.stop != null ? P(q.stop) : null}));
     return out;
   },
+
+  PF_PATTERNS: {bull_trap: "Bull trap", bear_trap: "Bear trap", catapult_bull: "Catapult", catapult_bear: "Catapult",
+    high_pole: "High pole", low_pole: "Low pole", triangle_bull: "Triangle", triangle_bear: "Triangle", asc_triangle: "Asc. triangle",
+    desc_triangle: "Desc. triangle", turtle_bull: "Turtle", turtle_bear: "Turtle", aft_bull: "AFT", aft_bear: "AFT"},
 
   lineBreak(raw, n){
     n = Math.max(1, n | 0);

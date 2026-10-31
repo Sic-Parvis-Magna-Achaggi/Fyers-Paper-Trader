@@ -71,6 +71,42 @@ ok(vc0 && vc0.targetP === 133 && vc0.active && vc0.activeCol === 2 && !vc0.achie
 const vc5 = T.counts.find(v => v.col === 5);
 ok(vc5 && vc5.dir === -1 && vc5.targetP === 88 && vc5.active && vc5.activeCol === 7, "P&F vertical count down: column 5 (7 boxes) targets 109 - 21 = 88, active since column 7 broke 103", vc5);
 
+// P&F toolkit 2: patterns and horizontal counts (box 1, reversal 3), each on a small hand-made chart
+const pat = (cols, o) => CT.pfTools(cols, 1, 3, o).patterns.map(q => `${q.col}:${q.kind}` + (q.price != null ? `@${q.price}` : "") + (q.stopP != null ? `/stop ${q.stopP}` : "")).join(" ");
+let pp = pat([C(1, 100, 110), C(-1, 105, 109), C(1, 106, 110), C(-1, 104, 109), C(1, 105, 111), C(-1, 102, 110)]);
+ok(/5:bull_trap@103/.test(pp), "bull trap: triple top buy exactly one box over (111), then a double bottom sell (below 104)", pp);
+pp = pat([C(-1, 100, 110), C(1, 101, 105), C(-1, 100, 104), C(1, 101, 106), C(-1, 99, 105), C(1, 100, 108)]);
+ok(/5:bear_trap@107/.test(pp), "bear trap: triple bottom sell exactly one box under (99), then a double top buy (above 106)", pp);
+pp = pat([C(1, 100, 110), C(-1, 105, 109), C(1, 106, 110), C(-1, 104, 109), C(1, 105, 112), C(-1, 106, 111), C(1, 107, 113)]);
+ok(/6:catapult_bull@113/.test(pp) && !/bull_trap/.test(pp), "catapult: triple top buy (2 boxes: no trap), pullback holds above 104, then a double top buy at 113", pp);
+pp = pat([C(1, 100, 105), C(-1, 102, 104), C(1, 103, 110), C(-1, 104, 109)]);
+ok(/3:high_pole/.test(pp), "high pole: X 5 boxes above the previous top (110 vs 105), then O retraces 6 of its 8 boxes", pp);
+pp = pat([C(-1, 105, 110), C(1, 106, 108), C(-1, 99, 107), C(1, 100, 104)]);
+ok(/3:low_pole/.test(pp), "low pole: O 6 boxes below the previous bottom (99 vs 105), then X retraces 5 of its 9 boxes", pp);
+pp = pat([C(1, 100, 110), C(-1, 101, 109), C(1, 102, 108), C(-1, 103, 107), C(1, 104, 109)]);
+ok(/4:triangle_bull@109/.test(pp), "triangle: lower top (108 < 110), higher bottom (103 > 101), then a double top buy at 109", pp);
+pp = pat([C(1, 100, 110), C(-1, 101, 109), C(1, 102, 110), C(-1, 103, 109), C(1, 104, 111)]);
+ok(/4:asc_triangle@111/.test(pp), "ascending triangle: equal tops (110), rising bottoms (101, 103), then the breakout at 111", pp);
+pp = pat([C(1, 100, 105), C(-1, 102, 104), C(1, 103, 106), C(-1, 101, 105), C(1, 102, 107)], {turtleN: 4});
+ok(/4:turtle_bull@107/.test(pp), "turtle (4 columns here): X above the highest high of the previous 4 columns (106) at 107", pp);
+pp = pat([C(1, 100, 112), C(-1, 108, 111), C(1, 109, 113)], {anchorBoxes: 10});
+ok(/2:aft_bull@113\/stop 108/.test(pp), "anchor follow-through: anchor X (13 boxes), pullback to 108, next X above the anchor at 113, stop 108", pp);
+// the mirrors (prices reflected around 210: X <-> O)
+const M = cols => cols.map(x => C(-x.pf, 210 - x.high, 210 - x.low));
+pp = pat(M([C(1, 100, 110), C(-1, 105, 109), C(1, 106, 110), C(-1, 104, 109), C(1, 105, 112), C(-1, 106, 111), C(1, 107, 113)]));
+ok(/6:catapult_bear@97/.test(pp), "bearish catapult (the mirror) at 97", pp);
+pp = pat(M([C(1, 100, 110), C(-1, 101, 109), C(1, 102, 110), C(-1, 103, 109), C(1, 104, 111)]));
+ok(/4:desc_triangle@99/.test(pp), "descending triangle (the mirror): equal bottoms, falling tops, breakdown at 99", pp);
+pp = pat(M([C(1, 100, 105), C(-1, 102, 104), C(1, 103, 106), C(-1, 101, 105), C(1, 102, 107)]), {turtleN: 4});
+ok(/4:turtle_bear@103/.test(pp), "bearish turtle (the mirror) at 103", pp);
+pp = pat(M([C(1, 100, 112), C(-1, 108, 111), C(1, 109, 113)]), {anchorBoxes: 10});
+ok(/2:aft_bear@97\/stop 102/.test(pp), "bearish anchor follow-through (the mirror) at 97, stop 102", pp);
+const hcb = CT.pfTools(M([C(1, 100, 110), C(-1, 104, 109), C(1, 105, 108), C(-1, 104, 107), C(1, 105, 108), C(-1, 104, 107), C(1, 105, 111)]), 1, 3).hcounts;
+ok(hcb.length === 1 && hcb[0].dir === -1 && hcb[0].targetP === 88, "bearish horizontal count (the mirror): 106 - 18 = 88", hcb);
+const hc = CT.pfTools([C(1, 100, 110), C(-1, 104, 109), C(1, 105, 108), C(-1, 104, 107), C(1, 105, 108), C(-1, 104, 107), C(1, 105, 111)], 1, 3).hcounts;
+ok(hc.length === 1 && hc[0].col === 6 && hc[0].wall === 1 && hc[0].w === 6 && hc[0].targetP === 122 && !hc[0].achieved,
+   "horizontal count: breakout at 109 (column 6), wall at column 1 (it reached 109): 6 columns x 1 x 3 = 18 from the base low 104 = 122", hc);
+
 // sizes: ATR, rounded to the tick
 const s = CT.size([bar(1, 10, 12, 9, 11), bar(2, 11, 13, 10, 12), bar(3, 12, 14, 11, 13)], "atr", 0, 2, 0.05);
 ok(s === 3, "ATR(2) of ranges 3, 3 = 3", s);

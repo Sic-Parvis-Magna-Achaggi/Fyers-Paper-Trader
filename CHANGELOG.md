@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.18.0 — 31 Oct 2026 — P&F toolkit, second set
+
+Added
+- **Horizontal counts** on the P&F toolkit: at each breakout out of a congestion (at least 5 columns, settable),
+  width x box x reversal from the congestion's low / high; shown until reached (HC).
+- **Patterns** (each family has its own switch): bull and bear traps, bullish and bearish catapults, high and low
+  poles, symmetrical / ascending / descending triangles, turtle breakouts (beyond the last 20 columns, settable),
+  anchor follow-through (AFT) with its stop. StockCharts / Dorsey rules; turtle and AFT from Definedge's published
+  descriptions.
+- Labels are placed by importance and never overlap; the read-out also shows the latest pattern.
+- **Tests:** every pattern and both counts, bullish and bearish, on hand-made columns (`tests/ctype_test.js`); on a
+  real chart in `tests/pine_compat_flow.js`.
+
+Fixed
+- Live: after the kill switch the order ticket always says trading is paused (before, another rule's message could
+  show first).
+
+Not included
+- Mini tops / bottoms: Definedge doesn't publish the rule.
+
 ## v0.17.0 — 31 Oct 2026 — Every indicator on P&F, and the P&F toolkit
 
 Added
