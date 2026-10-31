@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 1 Nov 2026, version **0.20.5**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 1 Nov 2026, version **0.20.6**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -66,6 +66,8 @@ and roadmap updated too.
 Test-kit quirk (1 Nov): `navigation_flow.js`'s "Go to a date on 1D" check fails some runs (landed a day late; 2 of 5
 runs on 1 Nov, on v0.20.2 code too). Cause not found; it's a test-kit issue so far (the mock stamps day candles at
 00:00 UTC, real Fyers at IST midnight). Re-run it if it fails; worth a proper look when touching Go to.
+`live_flow.js`'s "history: the trade, closed by the kill switch" failed once in 4 runs on 1 Nov (passed on re-run):
+probably the history read before the kill switch's close was booked. Same advice.
 
 ## Users on the server
 
@@ -121,6 +123,12 @@ busy contract (gzip): turn recording off on the Log page once the question is se
   the view's left edge passes the script's first bar (`pineViewCheck()` on every visible-range change, 500 ms
   debounce). Keep the full re-run on each new bar: PineTS updateTail alone drifts on `var` / stateful values across
   bars that arrived tick by tick (checked: up to 12 points on a running total, 0 within a bar).
+- **v0.20.6:** history is never asked with `cont_flag` (Fyers' continuous series spliced the expiring OCT GOLDPETAL into
+  NOV's 30 Oct). `candles.py`: `_migrate()` (meta `fetch_v` = "2") drops saved FUT / CE / PE candles once; `_replace()`
+  deletes the whole days it re-fetched before saving Fyers' answer (not on an empty answer). Browser: IndexedDB store
+  is "fyers-candles-2" (the old one is deleted); `loadHistory()` asks the server from 3 days before its last saved
+  candle and replaces its copy from there. To confirm on real Fyers: that a NOV contract's history without
+  cont_flag is the NOV contract on every day (it should be: cont_flag isn't mandatory per Fyers' docs).
 - **v0.20.5:** `noTradeDrop(rows)` (index.html) runs in `aggBars()` and in pine.js `pineNeed()`: rows with no volume
   whose O / H / L / C differ from the last kept close are dropped (Fyers' after-close candles at the closing price).
   Chart pref `hideNoTrade` (default true). `HROWS` keeps Fyers' rows as sent; the server's candles.db is untouched.

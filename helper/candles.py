@@ -27,8 +27,43 @@ def _conn(folder: str = ""):
         _db.execute("CREATE TABLE IF NOT EXISTS bars (sym TEXT, res TEXT, t INTEGER, o REAL, h REAL, l REAL, c REAL, v REAL,"
                     " PRIMARY KEY (sym, res, t)) WITHOUT ROWID")
         _db.execute("CREATE TABLE IF NOT EXISTS cover (sym TEXT, res TEXT, first_day TEXT, fetched REAL, PRIMARY KEY (sym, res))")
+        _db.execute("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)")
         _db.commit()
+        _migrate(_db, folder)
     return _db
+
+
+# v0.20.6: candles fetched before were asked for with cont_flag=1 (Fyers' continuous series), so futures and options
+# may hold another contract's candles (GOLDPETAL NOV's 30 Oct was the expiring OCT contract). Those are dropped once
+# and fetched again, exactly, the next time a chart asks. Stocks and indices have no other contract: they stay.
+FETCH_V = "2"
+DERIV = ("%FUT", "%CE", "%PE")
+
+
+def _migrate(db, folder):
+    row = db.execute("SELECT v FROM meta WHERE k='fetch_v'").fetchone()
+    if row and row[0] == FETCH_V:
+        return
+    n = 0
+    for pat in DERIV:
+        n += db.execute("DELETE FROM bars WHERE sym LIKE ?", (pat,)).rowcount
+        db.execute("DELETE FROM cover WHERE sym LIKE ?", (pat,))
+    db.execute("INSERT OR REPLACE INTO meta VALUES ('fetch_v', ?)", (FETCH_V,))
+    db.commit()
+    if n:
+        log.info("Saved candles %s: %d futures / options candles dropped (fetched as Fyers' continuous series); "
+                 "they load again from Fyers as charts open", folder or "(shared)", n)
+
+
+def _replace(folder, symbol, res, start: dt.date, end: dt.date, rows):
+    """Fyers' answer for whole days start..end replaces what was saved for those days, so a candle Fyers no longer has
+    (or a corrected day) leaves nothing behind. An empty answer changes nothing."""
+    if not rows:
+        return
+    c = _conn(folder)
+    c.execute("DELETE FROM bars WHERE sym=? AND res=? AND t>=? AND t<?",
+              (symbol, res, _day_start(start), _day_start(end + dt.timedelta(days=1))))
+    _save(folder, symbol, res, rows)
 
 
 def _save(folder, symbol, res, rows):
@@ -71,7 +106,7 @@ def get(link, symbol: str, res: str, days: int, since: int = 0) -> list:
             try:
                 rows = link.history_range(symbol, res, start, first)
                 with _lock:
-                    _save(F, symbol, res, rows)
+                    _replace(F, symbol, res, start, first, rows)
                     _conn(F).execute("UPDATE cover SET first_day=? WHERE sym=? AND res=?", (start.isoformat(), symbol, res))
                     _conn(F).commit()
                 first = start
@@ -84,9 +119,10 @@ def get(link, symbol: str, res: str, days: int, since: int = 0) -> list:
                 last = _conn(F).execute("SELECT MAX(t) FROM bars WHERE sym=? AND res=?", (symbol, res)).fetchone()[0]
             frm = dt.datetime.fromtimestamp(last, IST).date() if last else first
             try:
-                rows = link.history_range(symbol, res, max(frm, today - dt.timedelta(days=cap)), today)
+                a = max(frm, today - dt.timedelta(days=cap))
+                rows = link.history_range(symbol, res, a, today)
                 with _lock:
-                    _save(F, symbol, res, rows)
+                    _replace(F, symbol, res, a, today, rows)
                     _conn(F).execute("UPDATE cover SET fetched=? WHERE sym=? AND res=?", (time.time(), symbol, res))
                     _conn(F).commit()
             except Exception as e:                       # Fyers busy / logged out: the saved candles still serve

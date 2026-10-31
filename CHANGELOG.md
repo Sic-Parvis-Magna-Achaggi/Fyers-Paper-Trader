@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.20.6 — 1 Nov 2026 — Charts show the contract you opened (not Fyers' continuous series)
+
+Fixed
+- **A futures chart could show another contract's candles** (owner, 1 Nov: GOLDPETAL NOV on 30 Oct looked different on
+  2m and 15m, and in a private window). Every history request carried `cont_flag=1`, Fyers' "continuous data of futures
+  and options", which fills a date with whichever contract Fyers maps there. Fetched again after Friday's close,
+  GOLDPETAL NOV's 30 Oct came back as the expiring OCT contract: 319 lots all day on 15m (vs 165,000-180,000 on the
+  days before), last trade at 16:58 (expiry-day trading ends at 17:00), then its settlement price 14,201 with no
+  volume to the close. The browser still had Friday's real NOV candles, so the private window (the server's copy)
+  and your usual window disagreed. Now:
+  - history is asked for the exact contract (no cont_flag);
+  - a day fetched again from Fyers replaces that whole day on the server (a candle Fyers no longer sends leaves
+    nothing behind; an empty answer changes nothing);
+  - once, on the first start of this version: the futures / options candles saved on the server are dropped (stocks
+    and indices stay), and this browser's saved copies are deleted, so each chart loads again from Fyers when opened
+    (one or two requests per chart, inside the request budget);
+  - each time a chart opens, the browser takes the last 3 days from the server (the server's own copy, no Fyers
+    request), so a day the server corrects reaches every device.
+
+Tests
+- `tests/candles_test.py` (7 checks, new): no cont_flag; the clean-out (futures / options dropped once, stocks kept);
+  a day fetched again replaces the saved day; an empty answer keeps it.
+- `tests/navigation_flow.js` (27 checks): a wrong candle 2 days back in the browser's copy is corrected from the
+  server; the old browser store is deleted. The mock answers a request with cont_flag with a marker price and logs it
+  ("CONT_FLAG ASKED"); none in a full run.
+
 ## v0.20.5 — 1 Nov 2026 — Empty after-close candles left off the chart
 
 Fixed

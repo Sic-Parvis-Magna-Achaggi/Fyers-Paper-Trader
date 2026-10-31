@@ -99,6 +99,23 @@ let br;
   await pg.evaluate(async () => { ctSave({type: "candles"}); await openBySymbol("MCX:CRUDEOIL26NOVFUT"); });
   await pg.waitForFunction(() => cur && cur.s === "MCX:CRUDEOIL26NOVFUT" && RAW.length > 100, null, { timeout: 30000 });
 
+  // ---------------------------------------------------------------- this browser's copy of the candles (owner, 1 Nov: an old copy
+  // and the server disagreed): the last 3 days come from the server every time a chart opens
+  const bc = await pg.evaluate(async () => {
+    const key = cur.s + "|" + curPlan.res, saved = await CDB.get(key);
+    const i = saved.rows.findIndex(r => r[0] > Date.now() / 1000 - 2 * 86400), t = saved.rows[i][0];
+    saved.rows[i] = [t, 9999, 9999, 9999, 9999, 0];                 // a wrong candle in this browser's copy, 2 days back
+    saved.rows.push([saved.rows[saved.rows.length - 1][0] - 30, 8888, 8888, 8888, 8888, 5]);   // and one the server doesn't have
+    saved.rows.sort((a, b) => a[0] - b[0]);
+    await CDB.put(key, saved);
+    await loadHistory(); await new Promise(r => setTimeout(r, 1500));
+    const after = await CDB.get(key);
+    const dbs = indexedDB.databases ? (await indexedDB.databases()).map(d => d.name) : ["?"];
+    return {chart: RAW.some(b => b.high >= 8888), copy: after.rows.some(r => r[2] >= 8888), dbs};
+  });
+  ok(!bc.chart && !bc.copy, "a wrong candle 2 days back in this browser's copy is replaced by the server's when the chart opens");
+  ok(!bc.dbs.includes("fyers-candles"), `the old browser store (continuous-series copies) is deleted (stores: ${bc.dbs.join(", ")})`);
+
   // ---------------------------------------------------------------- Go to
   await pg.evaluate(() => ctSave({type: "candles"}));
   await pg.waitForFunction(() => DISP.length > 100 && curPlan.res === "2", null, { timeout: 30000 });

@@ -1713,7 +1713,10 @@ async function openSymbol(row){
    Indicators that want more bars (Pine "Bars of history") make the chart load more days. */
 const CDB = {
   p: null,
-  open(){ return this.p || (this.p = new Promise(res => { try{ const r = indexedDB.open("fyers-candles", 1);
+  // "-2" (v0.20.6): copies saved before were Fyers' continuous series for futures / options (another contract's
+  // candles on some days); the old store is deleted and every chart loads again from the server
+  open(){ return this.p || (this.p = new Promise(res => { try{ try{ indexedDB.deleteDatabase("fyers-candles"); }catch(e){}
+    const r = indexedDB.open("fyers-candles-2", 1);
     r.onupgradeneeded = () => r.result.createObjectStore("c"); r.onsuccess = () => res(r.result); r.onerror = () => res(null); }catch(e){ res(null); } })); },
   async get(k){ const db = await this.open(); if(!db) return null;
     return new Promise(res => { try{ const q = db.transaction("c").objectStore("c").get(k); q.onsuccess = () => res(q.result || null); q.onerror = () => res(null); }catch(e){ res(null); } }); },
@@ -1814,7 +1817,9 @@ async function loadHistory(){
   const have = saved && saved.rows && saved.rows.length && saved.from <= wantFrom + 86400;
   if(have) renderCandles(saved.rows.filter(r => r[0] >= wantFrom - 86400), plan);      // at once, from this browser
   if(!(S.fyers||{}).logged_in){ if(!have){ msg.textContent = "Log in to Fyers to load charts."; series.setData([]); } return; }
-  const since = have ? saved.rows[saved.rows.length - 1][0] : 0;
+  // the last 3 days come from the server every time (cheap: its own copy), so a day the server has corrected since
+  // replaces this browser's copy; older days are kept as saved
+  const since = have ? saved.rows[saved.rows.length - 1][0] - 3 * 86400 : 0;
   const j = await api(`/api/history?symbol=${encodeURIComponent(cur.s)}&res=${plan.res}&days=${days}${since ? "&since=" + since : ""}`);
   if(my !== histToken) return;
   if(!j.ok){
@@ -1826,7 +1831,7 @@ async function loadHistory(){
   histRetry = 0;
   const fresh = j.candles || [];
   if(have){
-    const cut = fresh.length ? fresh[0][0] : Infinity;
+    const cut = since || (fresh.length ? fresh[0][0] : Infinity);     // the server's answer is the whole story from `since`
     const merged = saved.rows.filter(r => r[0] < cut).concat(fresh).slice(-120000);
     CDB.put(key, {from: saved.from, rows: merged});
     applyNewCandles(merged.filter(r => r[0] >= wantFrom - 86400), plan);

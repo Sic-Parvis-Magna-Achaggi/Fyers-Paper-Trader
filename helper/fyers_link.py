@@ -230,7 +230,10 @@ class FyersLink:
         return self.history_range(symbol, res, end - dt.timedelta(days=days), end)
 
     def history_range(self, symbol: str, res: str, start, end) -> list:
-        """Candles between two dates (inclusive, IST), in chunks Fyers accepts."""
+        """Candles between two dates (inclusive, IST), in chunks Fyers accepts. Always the contract asked for: no
+        cont_flag. cont_flag=1 is Fyers' "continuous" series, which fills a date with whichever contract was the near
+        month then: GOLDPETAL NOV's 30 Oct came back as the expiring OCT contract (319 lots, trading till 16:58,
+        then its settlement price 14,201 until the close)."""
         if res not in RES:
             raise ValueError("bad resolution")
         chunk = CHUNK.get(res, 99)
@@ -238,7 +241,7 @@ class FyersLink:
         while a <= end:
             b = min(end, a + dt.timedelta(days=chunk))
             j = self._get(f"{DATA}/history", {"symbol": symbol, "resolution": res, "date_format": "1",
-                                              "range_from": a.isoformat(), "range_to": b.isoformat(), "cont_flag": "1"})
+                                              "range_from": a.isoformat(), "range_to": b.isoformat()})
             out += j.get("candles", [])
             a = b + dt.timedelta(days=1)
         seen, uniq = set(), []

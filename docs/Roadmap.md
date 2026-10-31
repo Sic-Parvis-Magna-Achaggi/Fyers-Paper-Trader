@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 1 Nov 2026 (v0.20.5). This is the one task list for the project.
+Updated 1 Nov 2026 (v0.20.6). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -85,6 +85,7 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Done
 
+- [x] **v0.20.6** (1 Nov): charts show the contract you opened: history no longer asks for Fyers' continuous series (GOLDPETAL NOV's 30 Oct came back as the expiring OCT contract); saved futures / options candles reloaded once; the browser re-takes the last 3 days from the server (reported 1 Nov).
 - [x] **v0.20.5** (1 Nov): empty candles at the closing price after MCX closes (no volume, away from the last trade) left off the chart, P&F, indicators and Pine; Chart settings switch (reported 1 Nov).
 - [x] **v0.20.4** (1 Nov): P&F zoomed out shows X's and O's (flattened to the column's width, then solid / hollow columns), never thin lines (reported 1 Nov).
 - [x] **v0.20.3** (1 Nov): phone: the order sheet shrinks to a bubble in the SELL / BUY bar's place (net ₹ at SL / TP, R, PLACE, ✕), so the whole chart stays in view while you drag the lines; touching the chart shrinks it; SELL / BUY can open straight to the bubble (asked 1 Nov).

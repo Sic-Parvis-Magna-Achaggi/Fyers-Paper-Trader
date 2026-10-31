@@ -9,6 +9,7 @@ python3 tests/squareoff_test.py                       # square-off engine test (
 python3 tests/live_test.py                            # live engine against the fake Fyers order API (no browser, ~2 min)
 node tests/ctype_test.js                              # chart types (Heikin-Ashi, Renko, range, line break, P&F) with worked numbers
 python3 tests/feedcheck_test.py                       # the order-flow check's counting (exact / merged trades)
+python3 tests/candles_test.py                         # saved candles: exact contract (no cont_flag), clean-out, a day fetched again replaces it
 
 python3 tests/make_old_data.py /tmp/fyers_test        # fresh v0.12-style data, admin password OldPass12345
 FYERS_HELPER_DATA=/tmp/fyers_test python3 tests/mock_server.py &   # the app on http://localhost:8766
