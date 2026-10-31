@@ -6,7 +6,7 @@
    Loaded after the page's own script (it wraps onTick, openSymbol, feedPill, setFull, paperUpdate, renderTicket ...). */
 "use strict";
 const M = {on: false, ms: "chart", sheet: null, tkKey: "", posId: null, ordId: null, draft: {}, hist: null, histDays: 1,
-           histOpen: {}, autoFs: false, closeArm: null, tradeKey: ""};
+           histOpen: {}, autoFs: false, closeArm: null, tradeKey: "", min: false};
 const mq = s => document.querySelector(s);
 const prodName = p => ({INTRADAY: "Intraday", MARGIN: "Carry", CNC: "Delivery"})[p] || p || "";
 const mqa = s => [...document.querySelectorAll(s)];
@@ -44,6 +44,11 @@ function mBuild(){
       <button id="mSize" title="Default size and product"></button>
       <button id="mBuy"><span>BUY</span><b>–</b></button>
     </div>
+    <div id="mBub"><div class="bw">
+      <button class="bx" title="Cancel this trade">✕</button>
+      <button class="bi" title="Open the order sheet"><span class="l1"></span><span class="l2"></span></button>
+      <button class="bp">PLACE</button>
+    </div></div>
     <nav id="mNav">${["quotes", "chart", "trade", "history", "more"].map(k =>
       `<button data-ms="${k}"><svg viewBox="0 0 24 24">${ICON[k]}</svg><span>${k[0].toUpperCase() + k.slice(1)}</span>${k === "trade" ? '<i class="nb hide" id="mNb"></i>' : ""}</button>`).join("")}</nav>
     <div class="mscr" id="ms_quotes"></div>
@@ -62,6 +67,14 @@ function mBuild(){
   mq("#mSell").onclick = () => mTicket(-1);
   mq("#mSize").onclick = mSizeSheet;
   mq("#mSheetBg").onclick = mClose;
+  // the order shrunk to a bubble (in the SELL / BUY bar's place, so the whole chart stays in view)
+  mq("#mBub .bi").onclick = () => mMin(false);
+  mq("#mBub .bx").onclick = () => { disarm(); mClose(); };
+  mq("#mBub .bp").onclick = async () => { await place(); if(!P.armed) mClose(); };
+  // touching the chart while the order sheet is up shrinks it to the bubble (the drag on the chart carries on)
+  document.addEventListener("pointerdown", e => {
+    if(M.on && M.sheet === "ticket" && !M.min && e.target.closest && e.target.closest("#chart")) mMin(true);
+  }, true);
 }
 function mApply(){
   const want = mWant();
@@ -160,22 +173,22 @@ function mFeed(cls){ const d = mq("#mFeed"); if(d) d.className = cls || ""; }
 /* ---------------------------------------------------------------- bottom sheets */
 function mOpen(kind, html, opt = {}){
   const was = M.sheet;
-  M.sheet = kind;
+  M.sheet = kind; M.min = false; document.body.classList.remove("tkmin");
   if(was === "ticket" && kind !== "ticket" && P.armed) disarm();     // another sheet: the trade being set up is dropped
   const sh = mq("#mSheet"), bg = mq("#mSheetBg");
   sh.className = "open " + (opt.cls || "");
   bg.className = "open " + (opt.cls || "");
   sh.innerHTML = `<div class="sgrip"></div>` + html;
   sh.scrollTop = 0;
-  const g = sh.querySelector(".sgrip"); if(g) g.onclick = () => { if(M.sheet === "ticket") sh.classList.toggle("mini"); else mClose(); };
+  const g = sh.querySelector(".sgrip"); if(g) g.onclick = () => { if(M.sheet === "ticket") mMin(true); else mClose(); };
   const x = sh.querySelector("[data-x]"); if(x) x.onclick = () => { if(M.sheet === "ticket") disarm(); mClose(); };
   return sh;
 }
 function mClose(){
   const sh = mq("#mSheet"); if(!sh) return;
   const was = M.sheet;
-  M.sheet = null; M.posId = M.ordId = null; M.tkKey = ""; M.draft = {}; M.closeArm = null;
-  sh.className = ""; mq("#mSheetBg").className = "";
+  M.sheet = null; M.posId = M.ordId = null; M.tkKey = ""; M.draft = {}; M.closeArm = null; M.min = false;
+  sh.className = ""; mq("#mSheetBg").className = ""; document.body.classList.remove("tkmin");
   if(was === "ticket" && P.armed) disarm();
 }
 // a +/- price box: the input, and buttons that move it by one tick
@@ -202,8 +215,43 @@ function mTicket(side){
   if(!P.armed || P.T.side !== side) arm(side);         // (arm() on the side that's already on would switch it off)
   if(!P.armed) return;
   M.tkKey = "";
+  const keepMin = M.sheet === "ticket" && M.min;
   mOpen("ticket", `<div id="mTk"></div>`, {cls: "ticket"});
   mTicketFill();
+  if(keepMin || prefGet("mobTicket", "full") === "bubble") mMin(true);
+}
+// shrink the order sheet to the bubble (on) or bring it back (off). Nothing about the trade changes either way.
+function mMin(on){
+  if(M.sheet !== "ticket") return;
+  const sh = mq("#mSheet");
+  if(on){ const a = document.activeElement; if(a && sh.contains(a)) a.blur(); }   // a half-typed price is applied first
+  M.min = !!on;
+  sh.classList.toggle("min", M.min);
+  document.body.classList.toggle("tkmin", M.min);
+  mBubFill();
+}
+function mBubFill(){
+  if(M.sheet !== "ticket" || !M.min) return;
+  const b = mq("#mBub"); if(!b) return;
+  const p = P.plan, T = P.T, live = typeof liveOn === "function" && liveOn(), buy = T.side > 0;
+  const est = p && p.risk_estimated ? "≈" : "";
+  const r0 = n => (n < 0 ? "−₹" : "₹") + Math.round(Math.abs(n)).toLocaleString("en-IN");   // whole ₹, like the chart's zone labels
+  const side = `<b class="${buy ? "up" : "down"}">${buy ? "BUY" : "SELL"}</b>`;
+  const l1 = p ? `${side} ${p.lots || 0} lot${p.lots === 1 ? "" : "s"} · ${p.type === "market" ? "market" : esc(p.type) + " " + fmt(p.entry, p.tick)} · ${esc(prodName(T.product))}`
+    : `${side} ${esc(short(T.s))}`;
+  const l2 = !p ? `<span class="${P.pvErr && !/^waiting/.test(P.pvErr) ? "down" : "muted"}">${esc(P.pvErr || "Working out size and costs…")}</span>`
+    : p.blocked ? `<span class="down">${esc(p.blocked)}</span>`
+    : !p.lots ? `<span class="down">1 lot risks ${r0(p.risk_1lot)}: more than your size allows</span>`
+    : `<span class="down">SL ${p.risk != null ? est + r0(-p.risk) : "none"}</span> · <span class="up">TP ${p.reward != null ? est + r0(p.reward) + (p.rr != null ? " · " + p.rr + "R" : "") : "none"}</span>`;
+  const f1 = b.querySelector(".l1"), f2 = b.querySelector(".l2");
+  if(f1.innerHTML !== l1) f1.innerHTML = l1;
+  if(f2.innerHTML !== l2) f2.innerHTML = l2;
+  b.querySelector(".bw").className = "bw " + (buy ? "buy" : "sell") + (live ? " live" : "");
+  const bp = b.querySelector(".bp");
+  bp.disabled = !p || !!p.blocked || !p.lots || P.placing;
+  bp.className = "bp " + (buy ? "buy" : "sell") + (live ? " live" : "");
+  bp.textContent = live ? "LIVE · PLACE" : "PLACE";
+  bp.title = p ? (live ? "LIVE · " : "") + placeLabel(p) : "Place";
 }
 function mTkStruct(){
   const row = tkRow() || {}, T = P.T, pe = mq("#tkProd");
@@ -214,7 +262,7 @@ function mTicketBuild(){
   const row = tkRow() || {}, T = P.T, typ = orderType(), opt = row.f === "OPT";
   const prods = [...(mq("#tkProd") || {options: []}).options].map(o => [o.value, o.textContent]);
   box.innerHTML = `
-    <div class="shead"><b>${esc(short(T.s))}</b><span class="muted sm">lot ${row.lot || "–"}${row.mult > 1 ? " × " + row.mult : ""} · tick ${row.tick || "–"}</span><button data-x title="Cancel">✕</button></div>
+    <div class="shead"><b>${esc(short(T.s))}</b><span class="muted sm">lot ${row.lot || "–"}${row.mult > 1 ? " × " + row.mult : ""} · tick ${row.tick || "–"}</span><button data-min title="Shrink to a bubble and see the whole chart"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button data-x title="Cancel">✕</button></div>
     <div class="sides2"><button class="sell ${T.side < 0 ? "on" : ""}" data-side="-1">SELL <span class="mono" data-f="bid"></span></button><button class="buy ${T.side > 0 ? "on" : ""}" data-side="1">BUY <span class="mono" data-f="ask"></span></button></div>
     <div class="sbody">
       <div class="mseg" data-g="type">${[["market", "Market"], ["limit", "Limit"], ["stop", "Stop"]].map(([v, n]) => `<button data-v="${v}" class="${typ === v ? "on" : ""}">${n}</button>`).join("")}</div>
@@ -226,10 +274,12 @@ function mTicketBuild(){
       <div class="mrow"><span data-f="unit"></span>${mStep("mtSize", "")}</div>
       <div class="mrow"><span>Product</span><div class="mseg" data-g="prod" style="margin:0">${prods.map(([v, n]) => `<button data-v="${v}">${esc(n.replace(/ \(.*\)/, ""))}</button>`).join("")}</div></div>
       <div class="mpv" id="mtPv"></div>
-      <p class="help" style="margin:4px 0 8px">Drag the SL and target lines on the chart too. Tap the grip to fold this away while you drag.</p>
+      <p class="help" style="margin:4px 0 8px">Drag the SL and target lines on the chart too: touching the chart (or ⌄, or a swipe down) shrinks this to a bubble at the bottom, with the net ₹ and PLACE. Tap the bubble to bring the sheet back.</p>
     </div>
     <button class="mplace" id="mtPlace" disabled>Place</button>`;
   box.querySelector("[data-x]").onclick = () => { disarm(); mClose(); };
+  box.querySelector("[data-min]").onclick = () => mMin(true);
+  mSwipeDown(mq("#mSheet .sgrip")); mSwipeDown(box.querySelector(".shead"));
   box.querySelectorAll("[data-side]").forEach(b => b.onclick = () => { const s = +b.dataset.side; if(P.T.side !== s) arm(s); });
   box.querySelectorAll('[data-g="type"] button').forEach(b => b.onclick = () => { const d = mq(`#tkType button[data-v="${b.dataset.v}"]`); d && d.click(); });
   box.querySelectorAll('[data-g="basis"] button').forEach(b => b.onclick = () => { const d = mq(`#tkBasis button[data-v="${b.dataset.v}"]`); d && d.click(); });
@@ -247,6 +297,14 @@ function mTicketBuild(){
       mDesk("#tkSize", v); mSymBar(); }
   });
   box.querySelector("#mtPlace").onclick = async () => { await place(); if(!P.armed) mClose(); };
+}
+// a swipe down on the sheet's grip or header shrinks the order to the bubble
+function mSwipeDown(el){
+  if(!el || el.dataset.sw) return; el.dataset.sw = "1";
+  let y0 = null;
+  el.addEventListener("pointerdown", e => { if(!e.target.closest("button,input")) y0 = e.clientY; });
+  el.addEventListener("pointermove", e => { if(y0 != null && e.clientY - y0 > 36){ y0 = null; mMin(true); } });
+  for(const ev of ["pointerup", "pointercancel", "pointerleave"]) el.addEventListener(ev, () => { y0 = null; });
 }
 function mTicketFill(){
   if(M.sheet !== "ticket") return;
@@ -275,6 +333,7 @@ function mPlanFill(){
     el.innerHTML = P.pvErr ? `<span class="note ${/^waiting/.test(P.pvErr) ? "" : "down"}">${esc(P.pvErr)}</span>` : `<span class="note">Working out size and costs…</span>`;
     btn.disabled = true; btn.textContent = "Place"; btn.className = "mplace " + (P.T.side > 0 ? "buy" : "sell") + (live ? " live" : "");
     if(f("atsl")) f("atsl").textContent = ""; if(f("attp")) f("attp").textContent = "";
+    mBubFill();
     return;
   }
   const est = p.risk_estimated ? "≈ " : "";
@@ -298,6 +357,7 @@ function mPlanFill(){
   btn.disabled = !!p.blocked || !p.lots || P.placing;
   btn.className = "mplace " + (p.side > 0 ? "buy" : "sell") + (live ? " live" : "");
   btn.textContent = (live ? "LIVE · " : "") + placeLabel(p);
+  mBubFill();
 }
 
 /* default size and product (the middle of the one-tap bar) */
@@ -307,10 +367,14 @@ function mSizeSheet(){
     <div class="mseg" data-g="mode">${[["pct", "Risk %"], ["amt", "Risk ₹"], ["lots", "Lots"]].map(([v, n]) => `<button data-v="${v}">${n}</button>`).join("")}</div>
     <div class="mrow"><span data-f="unit"></span>${mStep("msSize", "")}</div>
     <div class="mseg" data-g="prod"><button data-v="INTRADAY">Intraday</button><button data-v="CARRY">Carry / Delivery</button></div>
-    <p class="help">Used by every new trade (saved on the server). Risk % and Risk ₹ size the trade from the stop, net of all charges.</p>`);
+    <p class="help">Used by every new trade (saved on the server). Risk % and Risk ₹ size the trade from the stop, net of all charges.</p>
+    <div class="mh">SELL / BUY opens</div>
+    <div class="mseg" data-g="open"><button data-v="full">The order sheet</button><button data-v="bubble">A bubble (whole chart)</button></div>
+    <p class="help">A bubble: the trade is set up on the chart with your defaults, and the bubble in the bar shows the net ₹ at the stop and target, with PLACE. Tap it for the full sheet.</p>`);
   const fill = () => {
     sh.querySelectorAll('[data-g="mode"] button').forEach(b => b.classList.toggle("on", b.dataset.v === T.mode));
     sh.querySelectorAll('[data-g="prod"] button').forEach(b => b.classList.toggle("on", (b.dataset.v === "INTRADAY") === (T.product === "INTRADAY")));
+    sh.querySelectorAll('[data-g="open"] button').forEach(b => b.classList.toggle("on", b.dataset.v === prefGet("mobTicket", "full")));
     sh.querySelector('[data-f="unit"]').textContent = T.mode === "pct" ? "% of balance" : T.mode === "amt" ? "₹ at risk" : "Lots";
     setv(sh.querySelector("#msSize"), T.mode === "pct" ? T.risk_pct : T.mode === "amt" ? T.risk_amt : T.lots);
     mSymBar();
@@ -321,6 +385,7 @@ function mSizeSheet(){
   sh.querySelectorAll('[data-g="prod"] button').forEach(b => b.onclick = () => {
     const row = cur && sym[cur.s], stock = row && (row.f === "EQ" || row.f === "OTHER");
     T.product = b.dataset.v === "INTRADAY" ? "INTRADAY" : stock ? "CNC" : "MARGIN"; saveTicketDefaults(); if(P.armed){ renderTicket(); preview(); } fill(); });
+  sh.querySelectorAll('[data-g="open"] button').forEach(b => b.onclick = () => { prefSet("mobTicket", b.dataset.v); fill(); });
   const inp = sh.querySelector("#msSize"); inp.onchange = () => set(inp.value);
   mWireSteps(sh, (id, d) => set(T.mode === "pct" ? Math.max(0.05, +(T.risk_pct + d * (T.risk_pct < 1 || (T.risk_pct === 1 && d < 0) ? 0.1 : 0.25)).toFixed(2))
     : T.mode === "amt" ? Math.max(10, Math.round(T.risk_amt + d * (T.risk_amt < 500 ? 25 : 100))) : T.lots + d));
@@ -654,7 +719,7 @@ function mOrient(){
   if(!M.on) return;
   const o = screen.orientation && screen.orientation.type;     // the device's turn (the keyboard opening doesn't count)
   const land = (o ? o.startsWith("landscape") : Math.abs(window.orientation || 0) === 90) && Math.min(screen.width, screen.height) <= 520;
-  if(land && M.ms === "chart" && !M.sheet && !document.body.classList.contains("chartfs")){ setFull(true); M.autoFs = true; }
+  if(land && M.ms === "chart" && (!M.sheet || (M.sheet === "ticket" && M.min)) && !document.body.classList.contains("chartfs")){ setFull(true); M.autoFs = true; }
   else if(!land && M.autoFs && document.body.classList.contains("chartfs")){ setFull(false); }
 }
 addEventListener("resize", () => { mApply(); mWarnings(); });

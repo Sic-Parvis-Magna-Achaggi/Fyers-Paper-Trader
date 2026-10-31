@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 1 Nov 2026, version **0.20.2**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 1 Nov 2026, version **0.20.3**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -57,8 +57,16 @@ and roadmap updated too.
   the `<aside>` into the Quotes tab, and hides the desktop header / panel. The order sheet never keeps its own
   ticket state: it sets the desktop ticket's inputs and fires their change events, or clicks its buttons, so
   `paper.js` stays the only ticket logic. CSS for it lives only under `body.mob` / `#mob`.
+  v0.20.3: the ticket sheet can shrink to a bubble (`M.min`, `mMin()`, `mBubFill()`; body class `tkmin` hides `#mBar`
+  and shows `#mBub` in its slot, so the chart's size never changes). A pointerdown on `#chart` while the sheet is up
+  shrinks it; pref `mobTicket` ("full" / "bubble") is what SELL / BUY open.
 - `tests/`: the test kit (fake Fyers feed and order API, route check, engine tests incl. `live_test.py`, browser
   tests incl. `live_flow.js` and `mobile_flow.js`). See `tests/README.md`.
+
+Test-kit quirk (seen 1 Nov, v0.20.2 and v0.20.3 alike): `navigation_flow.js`'s "Go to a date on 1D" check failed
+when run at 01:49 IST. The mock stamps daily candles at 00:00 UTC (05:30 IST) while the test picks the day in IST, so
+it most likely fails only between 00:00 and 05:30 IST. Not confirmed with a fake clock; real Fyers stamps day candles
+at IST midnight.
 
 ## Users on the server
 
@@ -155,6 +163,6 @@ indicator option to add (not built).
 3. Monday: read the order-flow check with the owner; the footprint only if it's exact. Then Telegram alerts, the
    journal, saved layouts, multi-charts, the measurement tool and the drawing tools (roadmap items 3-7 and 9, in
    that order; item 8, CFD prices, is on hold).
-4. The owner tries the phone layout (v0.19.0) on his phone; fix what he reports.
+4. The owner tries the phone layout (v0.19.0) and the order bubble (v0.20.3) on his phone; fix what he reports.
 5. The owner checks v0.20.0 on real Fyers: Pivot Points and the Chandelier exit on GOLDPETAL 2m, scrolling back,
    and the Style / Visibility tabs on his own scripts.

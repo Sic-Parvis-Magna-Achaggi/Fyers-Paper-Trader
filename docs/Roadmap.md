@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 1 Nov 2026 (v0.20.2). This is the one task list for the project.
+Updated 1 Nov 2026 (v0.20.3). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -85,6 +85,7 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Done
 
+- [x] **v0.20.3** (1 Nov): phone: the order sheet shrinks to a bubble in the SELL / BUY bar's place (net ₹ at SL / TP, R, PLACE, ✕), so the whole chart stays in view while you drag the lines; touching the chart shrinks it; SELL / BUY can open straight to the bubble (asked 1 Nov).
 - [x] **v0.20.2** (1 Nov): Go to a date (Alt+G) and » back to now (asked 1 Nov); P&F readable at the default zoom; P&F box per timeframe (day charts drew lines).
 - [x] **v0.20.1** (1 Nov): any Pine script can calculate on a higher timeframe (e.g. a 15m MA on a 2m chart); Bars of history "Auto": a script extends over all loaded candles when you scroll back.
 - [x] **v0.20.0** (1 Nov): bugs reported 1 Nov fixed: indicator settings like TradingView (Inputs / Style / Visibility, the indicator's own timeframe with "wait for timeframe closes"); Pine `import` (TradingView/ta built in, your own saved libraries); older candles load when you scroll left; Fyers' `no_data` no longer fails a history request (Pivot Points' "Not enough data" error).

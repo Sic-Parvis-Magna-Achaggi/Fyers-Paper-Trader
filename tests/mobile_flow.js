@@ -1,5 +1,5 @@
 // The phone layout (web/mobile.js) on an emulated Pixel 7: tabs, a full-height chart, the one-tap SELL / BUY bar,
-// the order sheet (driving the same ticket as desktop), placing a trade, the position sheet (SL / TP steppers and
+// the order sheet (driving the same ticket as desktop), the order shrunk to a bubble, placing a trade, the position sheet (SL / TP steppers and
 // save, BE-T, close), a pending order (modify, cancel), Trade / History / More, the account sheet, full screen,
 // landscape, the LIVE badge and KILL, and the switch to the desktop layout and back.
 // Needs the mock server and an admin with 2FA (run security_flow.js first). Resets the admin's paper account.
@@ -29,7 +29,8 @@ let br;
     if(P.snap.mode === "live") throw new Error("the admin's account is Live - run live_flow.js to the end first");
     await papi("reset", {confirm: "RESET", capital: 1000000});
     await papi("trail", {be_on: false, sl_on: false});
-    Object.assign(P.T, {mode: "lots", lots: 1, product: "MARGIN"}); saveTicketDefaults();
+    Object.assign(P.T, {mode: "lots", lots: 1, product: "MARGIN", slDist: null}); saveTicketDefaults();
+    prefSet("sl_dist", {}); prefSet("mobTicket", "full");     // remembered stop distances: the steppers and the drag below widen them each run
     localStorage.removeItem("ftm.layout");
   });
 
@@ -64,13 +65,38 @@ let br;
   const pv = await pg.evaluate(() => ({txt: document.querySelector("#mtPv").textContent, dis: document.querySelector("#mtPlace").disabled, lbl: document.querySelector("#mtPlace").textContent}));
   ok(/At stop \(net\)/.test(pv.txt) && /BE \+ costs/.test(pv.txt) && !pv.dis, `preview shows the net ₹ at stop and target, BE + costs; PLACE ready ("${pv.lbl}")`);
   await pg.screenshot({ path: SHOT + "mob_ticket.png" });
-  await tap("#mSheet .sgrip", 300);
-  ok(await pg.evaluate(() => document.querySelector("#mSheet").classList.contains("mini")) && !(await vis("#mtSl")) && await vis("#mtPlace"), "tapping the grip folds the sheet (PLACE stays) so the lines can be dragged");
-  await tap("#mSheet .sgrip", 300);
-  await tap("#mtPlace", 2000);
+  // ---- the order shrunk to a bubble (owner, 1 Nov: "minimise it to a bubble so I can see the full chart")
+  await tap("#mTk [data-min]", 400);
+  const bub = await pg.evaluate(() => {
+    const c = document.querySelector("#chart").getBoundingClientRect(), b = document.querySelector("#mBub").getBoundingClientRect();
+    return {min: M.min, armed: P.armed, chartBottom: c.bottom, bubTop: b.top, bubH: b.height, l1: document.querySelector("#mBub .l1").textContent,
+      l2: document.querySelector("#mBub .l2").textContent, place: document.querySelector("#mBub .bp").disabled, label: document.querySelector("#mtPlace").textContent};
+  });
+  ok(bub.min && bub.armed && !(await vis("#mtSl")) && !(await vis("#mBar")) && await vis("#mBub"), "⌄ shrinks the order sheet to the bubble; the trade stays set up");
+  ok(bub.bubTop >= bub.chartBottom - 1, `the bubble sits in the SELL / BUY bar's place: nothing covers the chart (chart ends ${Math.round(bub.chartBottom)}px, bubble starts ${Math.round(bub.bubTop)}px)`);
+  ok(/BUY 1 lot · market · Carry/.test(bub.l1) && /SL −₹[\d,]+ · TP ₹[\d,]+ · [\d.]+R/.test(bub.l2) && !bub.place, `the bubble shows the trade and the net ₹ ("${bub.l1}" / "${bub.l2}"), PLACE ready`);
+  await pg.screenshot({ path: SHOT + "mob_bubble.png" });
+  // drag the SL line on the chart: the bubble's ₹ at the stop follows
+  const dr = await pg.evaluate(() => { const r = document.querySelector("#chart").getBoundingClientRect(); return {x: r.left + r.width * 0.45, y: r.top + series.priceToCoordinate(slNow()), sl: slNow(), risk: P.plan.risk}; });
+  await pg.mouse.move(dr.x, dr.y); await pg.mouse.down(); await pg.mouse.move(dr.x, dr.y + 20, {steps: 5}); await pg.mouse.up(); await pg.waitForTimeout(1500);
+  const da = await pg.evaluate(() => ({sl: slNow(), risk: P.plan.risk, l2: document.querySelector("#mBub .l2").textContent, sheetSl: +document.querySelector("#mtSl").value}));
+  ok(da.sl < dr.sl && da.risk > dr.risk && da.l2.includes("₹" + Math.round(da.risk).toLocaleString("en-IN")) && Math.abs(da.sheetSl - da.sl) <= 3,
+     `dragging the SL line down (${dr.sl} → ${da.sl}) updates the bubble (risk ₹${dr.risk} → ₹${da.risk}: "${da.l2}") and the sheet behind it (${da.sheetSl})`);
+  await tap("#mBub .bi", 400);
+  ok(await pg.evaluate(() => !M.min && P.armed) && await vis("#mtSl") && !(await vis("#mBub")), "tapping the bubble brings the full order sheet back");
+  ok((await pg.textContent("#mtPlace")) === bub.label, "nothing about the trade changed on the way");
+  await pg.tap("#chart", { position: { x: 120, y: 60 } }); await pg.waitForTimeout(400);
+  ok(await pg.evaluate(() => M.min && P.armed) && await vis("#mBub"), "touching the chart shrinks the sheet to the bubble too");
+  await tap("#mBub .bi", 400);
+  await pg.dispatchEvent("#mTk .shead", "pointerdown", {clientY: 300, pointerId: 1, isPrimary: true});
+  await pg.dispatchEvent("#mTk .shead", "pointermove", {clientY: 360, pointerId: 1, isPrimary: true});
+  await pg.waitForTimeout(300);
+  ok(await pg.evaluate(() => M.min), "a swipe down on the sheet's header shrinks it as well");
+  await tap("#mBub .bp", 2000);
   let sn = await snap();
-  ok(sn.positions.length === 1 && sn.positions[0].side === 1 && sn.positions[0].lots === 1 && await pg.evaluate(() => M.sheet === null && !P.armed),
-     "PLACE opens a 1-lot long; the sheet closes");
+  ok(sn.positions.length === 1 && sn.positions[0].side === 1 && sn.positions[0].lots === 1 && await pg.evaluate(() => M.sheet === null && !P.armed && !M.min),
+     "PLACE in the bubble opens a 1-lot long; the bubble goes");
+  ok(await vis("#mBar") && !(await vis("#mBub")) && !(await pg.evaluate(() => document.body.classList.contains("tkmin"))), "the SELL / BUY bar is back");
   ok(await vis("#mChips [data-id]") && /\d/.test(await pg.textContent("#mChips [data-id]")), `a chip for the position over the bar ("${(await pg.textContent("#mChips [data-id]")).trim()}")`);
   await pg.screenshot({ path: SHOT + "mob_position_chip.png" });
 
@@ -154,6 +180,27 @@ let br;
   await tap('#mSheet [data-g="mode"] button[data-v="pct"]', 300);
   ok(/%/.test(await pg.textContent("#mSize")), `the middle of the bar sets the default size ("${(await pg.textContent("#mSize")).trim()}")`);
   await tap('#mSheet [data-g="mode"] button[data-v="lots"]', 300);
+  // SELL / BUY can open straight to the bubble (saved on the server like the other defaults)
+  await tap('#mSheet [data-g="open"] button[data-v="bubble"]', 900);
+  ok(await pg.evaluate(() => prefGet("mobTicket") === "bubble") && await pg.evaluate(async () => { const j = await api("/api/prefs"); return j.prefs.mobTicket === "bubble"; }),
+     "the size sheet's \"SELL / BUY opens: A bubble\" is saved on the server");
+  await tap("#mSheetBg", 300);
+  await tap("#mSell", 1800);
+  ok(await pg.evaluate(() => M.sheet === "ticket" && M.min && P.armed && P.T.side === -1) && await vis("#mBub") && /SELL/.test(await pg.textContent("#mBub .l1")),
+     `with that set, SELL goes straight to the bubble ("${await pg.textContent("#mBub .l1")}" / "${await pg.textContent("#mBub .l2")}")`);
+  await pg.setViewportSize({ width: 915, height: 412 }); await pg.waitForTimeout(700);
+  const lb = await pg.evaluate(() => { const b = document.querySelector("#mBub .bw").getBoundingClientRect(), c = document.querySelector("#chart").getBoundingClientRect(); return {h: b.height, top: b.top, cb: c.bottom}; });
+  ok(lb.h >= 30 && lb.top >= lb.cb - 1, `the bubble fits the slimmer bar on a phone on its side (${Math.round(lb.h)}px)`);
+  await pg.screenshot({ path: SHOT + "mob_bubble_landscape.png" });
+  await pg.setViewportSize({ width: 360, height: 780 }); await pg.waitForTimeout(700);
+  const nb = await pg.evaluate(() => [...document.querySelectorAll("#mBub .bi > span")].map(e => ({full: e.scrollWidth <= e.clientWidth + 1, t: e.textContent})));
+  ok(nb.every(x => x.full), `on a 360 px phone both lines fit (${nb.map(x => '"' + x.t + '"').join(" / ")})`);
+  await pg.screenshot({ path: SHOT + "mob_bubble_360.png" });
+  await pg.setViewportSize({ width: 412, height: 915 }); await pg.waitForTimeout(500);
+  await tap("#mBub .bx", 500);
+  ok(await pg.evaluate(() => !P.armed && M.sheet === null) && await vis("#mBar"), "✕ in the bubble cancels the trade");
+  await tap("#mSize", 400);
+  await tap('#mSheet [data-g="open"] button[data-v="full"]', 300);
   await tap("#mSheetBg", 300);
 
   // ---- full screen, landscape
@@ -176,12 +223,14 @@ let br;
     await new Promise(r => setTimeout(r, 1500));
     const v = {badge: !document.querySelector("#mLive").classList.contains("hide"), kill: !document.querySelector("#mKill").classList.contains("hide"),
       warn: document.querySelector("#mWarn").textContent, place: document.querySelector("#mtPlace").className, label: document.querySelector("#mtPlace").textContent};
+    mMin(true); v.bub = document.querySelector("#mBub .bp").textContent; v.bubCls = document.querySelector("#mBub .bw").className;
     disarm(); mClose(); paperUpdate(real);
     v.after = document.querySelector("#mKill").classList.contains("hide");
     return v;
   });
   ok(lv.badge && lv.kill && /Test warning/.test(lv.warn), "a Live account: red LIVE badge, KILL in the top bar, live warnings under it");
   ok(/live/.test(lv.place) && /^LIVE/.test(lv.label) && lv.after, `PLACE says LIVE ("${lv.label}"); back to Paper, KILL goes`);
+  ok(lv.bub === "LIVE · PLACE" && /live/.test(lv.bubCls), `the bubble's PLACE says LIVE too ("${lv.bub}")`);
 
   // ---- desktop layout and back
   await tap('#mNav [data-ms="more"]', 400);

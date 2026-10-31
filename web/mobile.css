@@ -50,6 +50,26 @@ body.mob.is-live #mBar{box-shadow:inset 0 2px 0 var(--down)}
 #mChips button b{font-family:var(--mono)}
 body.mob:not([data-ms="chart"]) #mBar,body.mob:not([data-ms="chart"]) #mChips{display:none}
 
+/* the order shrunk to a bubble: it takes the SELL / BUY bar's place, so nothing covers the chart */
+#mBub{position:fixed;left:0;right:0;bottom:calc(var(--mn) + var(--sb));height:var(--mb);display:none;padding:5px 8px;background:var(--panel);border-top:1px solid var(--line);z-index:21}
+body.mob.tkmin #mBar{display:none!important}
+body.mob.tkmin[data-ms="chart"] #mBub{display:block}
+body.mob.chartfs.tkmin[data-ms="chart"] #mBub{bottom:var(--sb);z-index:41}
+#mBub .bw{height:100%;display:flex;align-items:center;gap:4px;border-radius:999px;background:var(--panel2);border:1.5px solid var(--line);padding:0 3px 0 2px;animation:mbIn .16s ease-out;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+#mBub .bw.buy{border-color:var(--up)} #mBub .bw.sell{border-color:var(--down)}
+#mBub .bw.live{box-shadow:0 0 0 2px var(--down)}
+#mBub button{border:0;background:transparent;color:var(--text);min-height:0;padding:0}
+#mBub .bx{flex:0 0 36px;height:36px;border-radius:50%;font-size:16px;color:var(--muted)}
+#mBub .bi{flex:1;min-width:0;height:100%;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;text-align:left;line-height:1.25;gap:1px}
+#mBub .bi > span{display:block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#mBub .l1{font-size:12.5px} #mBub .l2{font-size:12px;font-family:var(--mono)}
+#mBub .bp{flex:0 0 auto;min-width:78px;height:calc(100% - 6px);border-radius:999px;color:#fff;font-weight:700;font-size:13px;padding:0 12px}
+#mBub .bp.buy{background:var(--up)} #mBub .bp.sell{background:var(--down)}
+#mBub .bp:disabled{filter:grayscale(.75);color:rgba(255,255,255,.7)}
+@keyframes mbIn{from{transform:translateY(10px);opacity:0}}
+#mSheet.ticket .sgrip,#mSheet.ticket .shead{touch-action:none}
+.shead button[data-min]{display:flex;align-items:center;padding:2px 4px}
+
 /* bottom tabs */
 #mNav{position:fixed;left:0;right:0;bottom:0;height:calc(var(--mn) + var(--sb));padding-bottom:var(--sb);display:grid;grid-template-columns:repeat(5,1fr);background:var(--panel);border-top:1px solid var(--line);z-index:50}
 #mNav button{position:relative;border:0;border-radius:0;background:transparent;color:var(--muted);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:11px;padding:0}
@@ -105,7 +125,7 @@ body.mob input,body.mob select{font-size:16px}          /* no zoom-in on focus (
 #mSheet{position:fixed;left:0;right:0;bottom:0;max-height:86vh;overflow:auto;background:var(--panel);border-radius:16px 16px 0 0;z-index:80;
   transform:translateY(105%);transition:transform .18s ease-out;padding:6px 14px calc(14px + var(--sb));box-shadow:0 -10px 30px rgba(0,0,0,.35);-webkit-overflow-scrolling:touch}
 #mSheet.open{transform:translateY(0)}
-#mSheet.mini .sbody{display:none}
+#mSheet.min{transform:translateY(105%);visibility:hidden;transition:transform .18s ease-out,visibility 0s linear .18s}
 #mSheet.ticket{max-height:64vh}                     /* the chart (with the SL / TP lines) stays visible above */
 #mSheetBg.open{display:block}
 #mSheetBg.ticket{background:transparent;pointer-events:none}

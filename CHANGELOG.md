@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.20.3 — 1 Nov 2026 — Phone: the order shrinks to a bubble
+
+Added
+- **The order as a bubble (phone layout)** (owner: "minimise it to a bubble so I can see the full chart"). After
+  SELL / BUY, the order sheet shrinks to a bubble in the SELL / BUY bar's place, so nothing covers the chart. It
+  shows the side, lots, order type and product, the net ₹ at the stop and the target with R (net of all charges, whole
+  rupees like the chart's zone labels; the sheet keeps the paise), or why the order can't go. **PLACE** in the bubble
+  places it; **✕** cancels; tapping the bubble brings the full sheet back. Nothing about the trade changes either way.
+- It shrinks when you touch the chart (so you can drag the SL / TP lines with the whole chart in view), tap ⌄ in the
+  sheet's header, tap the grip, or swipe the header down. The bubble updates live as you drag.
+- **SELL / BUY opens:** the order sheet (as before) or straight to a bubble. Set in the size sheet (the middle of the
+  SELL / BUY bar), saved on the server.
+- Turning the phone sideways with the bubble up goes full screen as usual; the bubble stays at the bottom.
+
+Changed
+- The grip used to fold the sheet to its header and PLACE (still half the screen); it now shrinks it to the bubble.
+
+Tests
+- `tests/mobile_flow.js` (61 checks, was 44): the bubble, the chart left uncovered, dragging the SL line updates the
+  bubble's ₹, back to the sheet, chart touch / swipe, PLACE and ✕ in the bubble, "opens as a bubble" saved on the
+  server, landscape and a 360 px phone, LIVE on the bubble. The test now clears the remembered stop distances first
+  (each run widened them until the 2% risk cap blocked the test trade).
+
 ## v0.20.2 — 1 Nov 2026 — Go to a date; readable P&F
 
 Added
