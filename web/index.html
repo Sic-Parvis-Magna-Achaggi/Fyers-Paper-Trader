@@ -930,7 +930,7 @@ function cssVar(n){ return getComputedStyle(document.documentElement).getPropert
 const CHART_DEFAULTS = {up:"#22a06b", down:"#e2483d", bg:"", grid:true,
   bidC:"#a3abb8", bidS:0, bidOn:true, askC:"#e2483d", askS:0, askOn:true, lastC:"#e0b341", lastS:2, lastOn:true,
   entryC:"", entryS:2, slC:"#e2483d", slS:0, tpC:"#22a06b", tpS:0, beC:"#4f8cff", beS:1, orderC:"#4f8cff", orderS:2,
-  toolC:"#4f8cff", toolS:0, lossZ:"#e2483d", profitZ:"#22a06b", zoneA:20, volOn:true, timerOn:true,
+  toolC:"#4f8cff", toolS:0, lossZ:"#e2483d", profitZ:"#22a06b", zoneA:20, volOn:true, timerOn:true, hideNoTrade:true,
   btnCorner:"tl", btnX:8, btnY:8, lineC:"#4f8cff"};
 function chartCfg(){ return {...CHART_DEFAULTS, ...(prefGet("chart", {}) || {})}; }
 function cfgColor(k){ const c = chartCfg()[k]; return c || cssVar(k === "entryC" ? "--text" : "--bg"); }
@@ -1579,6 +1579,7 @@ function renderCfg(){
     <div class="cr"><span>Grid lines</span><span></span><span></span><input type="checkbox" data-k="grid" ${C.grid ? "checked" : ""}></div>
     <div class="cr"><span>Volume under candles</span><span></span><span></span><input type="checkbox" data-k="volOn" ${C.volOn ? "checked" : ""}></div>
     <div class="cr"><span>Candle timer</span><span></span><span></span><input type="checkbox" data-k="timerOn" ${C.timerOn ? "checked" : ""}></div>
+    <div class="cr"><span title="Candles with no volume at a price away from the last trade, e.g. the exchange's closing price after MCX closes">Hide no-trade candles</span><span></span><span></span><input type="checkbox" data-k="hideNoTrade" ${C.hideNoTrade ? "checked" : ""}></div>
     <div class="sec">BUY / SELL buttons</div>
     <div class="cr" style="grid-template-columns:1fr 150px"><span>Corner</span><select data-k="btnCorner">
       ${[["tl", "Top left"], ["tr", "Top right"], ["bl", "Bottom left"], ["br", "Bottom right"]].map(([v, n]) => `<option value="${v}" ${C.btnCorner === v ? "selected" : ""}>${n}</option>`).join("")}</select></div>
@@ -1591,6 +1592,7 @@ function renderCfg(){
     const k = el.dataset.k, cfg = {...(prefGet("chart", {}) || {})};
     cfg[k] = el.type === "checkbox" ? el.checked : el.dataset.num ? (+el.value || 0) : el.value;
     prefSet("chart", cfg); applyChartCfg();
+    if(k === "hideNoTrade"){ for(const x in pineCache) delete pineCache[x]; if(HROWS.length && curPlan) renderCandles(HROWS, curPlan); }
   }));
 }
 /* the chart type menu (web/ctype.js does the work) */
@@ -1734,8 +1736,22 @@ function histDays(plan){
   const perDay = Math.max(1, sessMinutes() / plan.t.min);
   return Math.min(400, Math.max(plan.days, Math.ceil(want / perDay * 7 / 5) + 3));    // 7/5: weekends
 }
+/* empty candles at a price no one traded at: after the close, Fyers' history can carry the exchange's closing price
+   on candles with no volume (GOLDPETAL, 30 Oct: last trade 13,960, then empty candles at 14,201 until 23:55). They
+   stretched the price scale, drew a 48-box P&F column and fed indicators a price that never traded. A candle with no
+   volume whose prices differ from the last trade's is left out (Chart settings › "Hide no-trade candles", on by
+   default). No-trade candles at the last price stay; contracts that never show volume (indices) are untouched. */
+function noTradeDrop(rows){
+  if(chartCfg().hideNoTrade === false || !rows.length || !rows.some(r => r[5] > 0)) return rows;
+  const out = []; let lc = null;
+  for(const r of rows){
+    if(!(r[5] > 0) && lc != null && (r[1] !== lc || r[2] !== lc || r[3] !== lc || r[4] !== lc)) continue;
+    out.push(r); lc = r[4];
+  }
+  return out;
+}
 function aggBars(rows, plan){
-  let bars = rows.map(c => ({time:c[0] + IST, open:c[1], high:c[2], low:c[3], close:c[4], vol:c[5] || 0}));
+  let bars = noTradeDrop(rows).map(c => ({time:c[0] + IST, open:c[1], high:c[2], low:c[3], close:c[4], vol:c[5] || 0}));
   if(plan.agg){
     const out = [];
     for(const b of bars){

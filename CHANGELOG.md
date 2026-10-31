@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.20.5 — 1 Nov 2026 — Empty after-close candles left off the chart
+
+Fixed
+- **Empty candles at the closing price after MCX closes** (owner's screenshot, GOLDPETAL 2m, 30 Oct). After 23:30
+  Fyers' history had candles at 14,201 with no volume until 23:55, while the last trade was 13,960 (most likely
+  the exchange's closing price, not a trade). They stretched the price scale (candles squashed to the bottom), made the
+  48-box P&F column at the end of the day, and fed indicators and Pine scripts a price no one traded at. A candle with
+  no volume whose prices differ from the last trade's is now left out: on the chart, P&F and every chart type,
+  indicators, and Pine (request.security too). Quiet candles at the last price and indices (no volume at all) stay.
+  Chart settings › **Hide no-trade candles** (on by default) shows Fyers' candles exactly as sent when unticked.
+  The saved candles on the server are not changed.
+
+Tests
+- `tests/navigation_flow.js` (25 checks): the mock's CRUDEOIL26DECFUT gets empty candles at 6,250 after 23:30 each
+  day; they're hidden, the scale isn't stretched, the setting shows / hides them, P&F and request.security() agree.
+
 ## v0.20.4 — 1 Nov 2026 — P&F readable when zoomed out
 
 Fixed

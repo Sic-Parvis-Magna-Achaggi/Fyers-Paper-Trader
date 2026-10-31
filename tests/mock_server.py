@@ -54,6 +54,11 @@ def fake_get(self, url, params):
                 base = 5600 + 60 * math.sin(t / 20000) + 15 * math.sin(t / 1300)
                 o = base + (hash((params["symbol"], t)) % 7 - 3); c = base + (hash((params["symbol"], t + 1)) % 7 - 3)
                 out.append([t, round(o), round(max(o, c) + 2), round(min(o, c) - 2), round(c), 100])
+            elif "26DECFUT" in params["symbol"] and 18 * 3600 < t % 86400 <= 18 * 3600 + 25 * 60:
+                # like GOLDPETAL on 30 Oct: after 23:30 Fyers' history carries the exchange's closing price on empty
+                # candles (no volume), far from the last trade
+                k = 6000 + 250
+                out.append([t, k, k, k, k, 0])
             t += sec
         return {"s": "ok", "candles": out}
     return _real_get(self, url, params)

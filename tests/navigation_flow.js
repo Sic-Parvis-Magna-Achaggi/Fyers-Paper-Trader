@@ -70,6 +70,35 @@ let br;
   ok(zC.mode === "xo" && zC.bh >= 5, `zoomed back in (a box ${zC.bh} px): the usual square X's and O's`);
   await pg.evaluate(() => { series.priceScale().applyOptions({autoScale: true}); pfZoom(); });
 
+  // ---------------------------------------------------------------- no-trade candles after the close (owner, 1 Nov: GOLDPETAL's 14,201 after 23:30)
+  // the mock's CRUDEOIL26DECFUT has empty candles at 6,250 from 23:30 to 23:55 each day (no volume), ~650 above the trades
+  await pg.evaluate(async () => { ctSave({type: "candles"}); setTf("2m"); await openBySymbol("MCX:CRUDEOIL26DECFUT"); });
+  await pg.waitForFunction(() => cur && cur.s === "MCX:CRUDEOIL26DECFUT" && RAW.length > 100 && HROWS.length, null, { timeout: 30000 });
+  await pg.waitForTimeout(800);
+  const nt = await pg.evaluate(() => {
+    const ghosts = HROWS.filter(r => !r[5] && r[4] === 6250).length;
+    const hiRaw = Math.max(...RAW.map(b => b.high));
+    const top = series.coordinateToPrice(0);
+    return {ghosts, hiRaw, top, kept: RAW.length, rows: HROWS.length};
+  });
+  ok(nt.ghosts > 10 && nt.hiRaw < 6000, `the empty after-close candles at 6,250 (${nt.ghosts} in Fyers' answer) are left off the chart (highest candle ${nt.hiRaw})`);
+  ok(nt.top < 6000, `so the price scale isn't stretched to 6,250 (top of the chart ${Math.round(nt.top)})`);
+  const toggle = async on => { await pg.evaluate(v => { $("#cfgPick").classList.remove("hide"); renderCfg(); const el = document.querySelector('#cfgBody [data-k="hideNoTrade"]'); el.checked = v; el.dispatchEvent(new Event("input")); $("#cfgPick").classList.add("hide"); }, on); await pg.waitForTimeout(800); };
+  await toggle(false);
+  const off = await pg.evaluate(() => ({hi: Math.max(...RAW.map(b => b.high)), pref: chartCfg().hideNoTrade}));
+  ok(off.hi === 6250 && off.pref === false, `Chart settings › Hide no-trade candles off: they show again (highest ${off.hi})`);
+  await pg.screenshot({ path: SHOT + "notrade_shown.png" });
+  await toggle(true);
+  ok(await pg.evaluate(() => Math.max(...RAW.map(b => b.high)) < 6000 && chartCfg().hideNoTrade === true), "and on again: gone (the default)");
+  await pg.screenshot({ path: SHOT + "notrade_hidden.png" });
+  await pg.evaluate(() => ctSave({type: "pf"}));
+  await pg.waitForFunction(() => ctType() === "pf" && DISP.length > 5 && CT_SIZE, null, { timeout: 30000 });
+  ok(await pg.evaluate(() => Math.max(...DISP.map(b => b.high)) < 6000), "no P&F column runs up to the closing price");
+  const ps = await pg.evaluate(async () => { const b = await pineNeed({tf: "15", ticker: ""}); return b.error || Math.max(...b.map(x => x.high)); });
+  ok(typeof ps === "number" && ps < 6000, `Pine request.security() gets the same candles (15m high ${ps})`);
+  await pg.evaluate(async () => { ctSave({type: "candles"}); await openBySymbol("MCX:CRUDEOIL26NOVFUT"); });
+  await pg.waitForFunction(() => cur && cur.s === "MCX:CRUDEOIL26NOVFUT" && RAW.length > 100, null, { timeout: 30000 });
+
   // ---------------------------------------------------------------- Go to
   await pg.evaluate(() => ctSave({type: "candles"}));
   await pg.waitForFunction(() => DISP.length > 100 && curPlan.res === "2", null, { timeout: 30000 });

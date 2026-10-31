@@ -132,7 +132,7 @@ async function pineNeed(n){
   else {
     const j = await api(`/api/history?symbol=${encodeURIComponent(s)}&res=${plan.res}&days=${plan.days}`);
     if(!j.ok) return {error: `${key} candles of ${s.split(":").pop()} didn't load: ${j.error || "error"}`};
-    bars = (j.candles || []).map(c => ({time: c[0] + 19800, open: c[1], high: c[2], low: c[3], close: c[4], vol: c[5] || 0}));
+    bars = noTradeDrop(j.candles || []).map(c => ({time: c[0] + 19800, open: c[1], high: c[2], low: c[3], close: c[4], vol: c[5] || 0}));
     if(plan.agg){ const out = [];
       for(const b of bars){ const k = bucket(b.time, plan), o = out[out.length - 1];
         if(!o || o.time !== k) out.push({...b, time: k}); else { o.high = Math.max(o.high, b.high); o.low = Math.min(o.low, b.low); o.close = b.close; o.vol += b.vol; } }
