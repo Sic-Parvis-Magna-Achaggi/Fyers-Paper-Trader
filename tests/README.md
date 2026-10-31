@@ -15,6 +15,7 @@ FYERS_HELPER_DATA=/tmp/fyers_test python3 tests/mock_server.py &   # the app on 
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/security_flow.js      # upgrade login, 2FA, step-up, users, accounts
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/live_flow.js          # Live on (client ID + 2FA), a trade, its Fyers stop, kill switch, back to Paper
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/charttypes_flow.js    # every chart type with Volume + 2 Pine scripts lined up, live ticks
+FYERS_HELPER_DATA=/tmp/fyers_test node tests/pine_compat_flow.js   # the Pine battery (tests/pine_compat.js) on every chart type; the P&F toolkit
 ```
 
 `fake_broker.py` is a fake Fyers order API (place / modify / cancel / order book / positions and order updates). It
@@ -25,3 +26,6 @@ for one position. `mock_server.py` uses it, so Live accounts work in the browser
 After `security_flow.js` the admin has 2FA. Other browser tests log in with `require("./login.js")(page)`, which
 types the password and a fresh code read from the test data (a code can't be used twice, so it may wait up to 30 s).
 Screenshots go to `<data folder>/shots/`. `fixtures/` holds a small symbol list (MCX, NSE, BSE, currency).
+
+**Rule:** every indicator works on every chart type, P&F included. When the app gains a Pine feature, add a script
+that uses it to `tests/pine_compat.js`; `pine_compat_flow.js` then checks it on every chart type.

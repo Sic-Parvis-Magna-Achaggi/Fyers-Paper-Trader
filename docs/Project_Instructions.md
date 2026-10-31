@@ -39,6 +39,8 @@ CHART / UI EXPECTATIONS (MT5-like)
 - Maximise inside the browser (F); real full screen is optional (Shift+F). The trade panel can be closed.
 - Custom timeframes, candle timer, Order Book tab, Volume pane (via ƒx).
 - Indicators come from the ƒx menu, with show/hide and collapse like TradingView. My own Pine Script indicators are written in the in-app Pine Editor (TradingView-like), saved on the server and added from ƒx.
+- Chart types: candles, hollow, bars, line, area, Heikin-Ashi, Renko, range bars, line break, Point & Figure. EVERY indicator works on EVERY chart type, P&F included: Volume, every Pine script and every Pine feature, now and in future. tests/pine_compat.js + tests/pine_compat_flow.js check it before every release; add a script there whenever a Pine feature is added.
+- Footprint / order flow only from real trades, never an estimate.
 - Pages: Chart, Trades, History, Book, Account, Log.
 
 LIMITS

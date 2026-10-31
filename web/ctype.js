@@ -22,7 +22,7 @@ const CT = {
   TYPES: [["candles", "Candles"], ["hollow", "Hollow candles"], ["bars", "Bars (OHLC)"], ["line", "Line"], ["area", "Area"],
           ["ha", "Heikin-Ashi"], ["renko", "Renko"], ["range", "Range bars"], ["lb", "Line break"], ["pf", "Point & Figure"]],
   DEFAULTS: {type: "candles", renkoMode: "atr", renkoAtr: 14, renkoSrc: "close", renkoWicks: false, rangeMode: "atr",
-             rangeAtr: 14, lbLines: 3, pfMode: "atr", pfAtr: 14, pfRev: 3, pfSrc: "close"},
+             rangeAtr: 14, lbLines: 3, pfMode: "atr", pfAtr: 14, pfRev: 3, pfSrc: "close", pfInd: "mid"},
 
   name(t){ return (CT.TYPES.find(x => x[0] === t) || CT.TYPES[0])[1]; },
   timeBased(t){ return !["renko", "range", "lb", "pf"].includes(t); },
@@ -155,6 +155,74 @@ const CT = {
       }
       if(cur && vol){ cur.vol += vol; vol = 0; }
     }
+    return out;
+  },
+
+  /* Point & Figure toolkit (classic rules: Dorsey, du Plessis). cols: P&F bars (pf = 1 X / -1 O); box; rev.
+     Works in box numbers (k = price / box). Returns:
+     lines:   45-degree trend lines. Bullish support: from the box below a column's low, up one box per column;
+              broken when an O column reaches the line. Bearish resistance: from the box above a column's high, down one
+              box per column; broken when an X column reaches it. After a break the opposite line starts from the
+              extreme of the move (the highest X / lowest O since the last line began). {dir, c0, k0, c1, broken}
+     signals: Double Top Buy (an X column one box above the previous X top) / Double Bottom Sell, and Triple Top Buy /
+              Triple Bottom Sell when the two previous tops (bottoms) were equal; at the trigger box; fresh = the
+              first signal after one the other way. {col, kind, dir, k, fresh}
+     anchors: columns of at least `anchorBoxes` boxes, with their high and low. {col, dir, n, hi, lo}
+     counts:  vertical counts from finished columns of at least `countMin` boxes: target = boxes x box x reversal from
+              the column's low (X) or high (O); active once a later column breaks the column's high (low); achieved
+              when price reaches the target. {col, dir, n, target, active, activeCol, achieved}  */
+  pfTools(cols, box, rev, o){
+    o = {anchorBoxes: 15, countMin: 5, ...(o || {})};
+    const K = v => Math.round(v / box);
+    const c = cols.map(b => ({dir: b.pf, hi: K(b.high), lo: K(b.low)}));
+    const out = {lines: [], signals: [], anchors: [], counts: []};
+    if(!c.length) return out;
+    // trend lines
+    let L = c[0].dir > 0 ? {dir: 1, c0: 0, k0: c[0].lo - 1} : {dir: -1, c0: 0, k0: c[0].hi + 1};
+    const at = (ln, i) => ln.k0 + ln.dir * (i - ln.c0);
+    for(let i = L.c0 + 1; i < c.length; i++){
+      const x = c[i];
+      const broke = L.dir > 0 ? x.dir < 0 && x.lo <= at(L, i) : x.dir > 0 && x.hi >= at(L, i);
+      if(!broke) continue;
+      out.lines.push({...L, c1: i, broken: true});
+      let best = L.c0;                              // the extreme of the move since this line began
+      for(let j = L.c0; j <= i; j++){
+        if(L.dir > 0 ? c[j].hi > c[best].hi : c[j].lo < c[best].lo) best = j;
+      }
+      L = L.dir > 0 ? {dir: -1, c0: best, k0: c[best].hi + 1} : {dir: 1, c0: best, k0: c[best].lo - 1};
+    }
+    out.lines.push({...L, c1: c.length - 1, broken: false});
+    // buy / sell signals
+    let last = 0;
+    for(let i = 2; i < c.length; i++){
+      const x = c[i], p = c[i - 2], q = i >= 4 ? c[i - 4] : null;
+      let s = null;
+      if(x.dir > 0 && x.hi > p.hi) s = {kind: q && q.hi === p.hi ? "TTB" : "DTB", dir: 1, k: p.hi + 1};
+      if(x.dir < 0 && x.lo < p.lo) s = {kind: q && q.lo === p.lo ? "TBS" : "DBS", dir: -1, k: p.lo - 1};
+      if(!s) continue;
+      out.signals.push({col: i, ...s, fresh: last !== s.dir});
+      last = s.dir;
+    }
+    // anchor columns
+    c.forEach((x, i) => { const n = x.hi - x.lo + 1; if(n >= o.anchorBoxes) out.anchors.push({col: i, dir: x.dir, n, hi: x.hi, lo: x.lo}); });
+    // vertical counts
+    for(let i = 0; i < c.length - 1; i++){
+      const x = c[i], n = x.hi - x.lo + 1;
+      if(n < o.countMin) continue;
+      const target = x.dir > 0 ? x.lo + n * rev : x.hi - n * rev;
+      let activeCol = null, achieved = false;
+      for(let j = i + 1; j < c.length; j++){
+        if(activeCol == null && (x.dir > 0 ? c[j].dir > 0 && c[j].hi > x.hi : c[j].dir < 0 && c[j].lo < x.lo)) activeCol = j;
+        if(activeCol != null && (x.dir > 0 ? c[j].hi >= target : c[j].lo <= target)){ achieved = true; break; }
+      }
+      out.counts.push({col: i, dir: x.dir, n, target, active: activeCol != null, activeCol, achieved});
+    }
+    // back to prices
+    const P = k => +(k * box).toFixed(6);
+    out.lines = out.lines.map(l => ({...l, p0: P(l.k0)}));
+    out.signals = out.signals.map(s => ({...s, price: P(s.k)}));
+    out.anchors = out.anchors.map(a => ({...a, hiP: P(a.hi), loP: P(a.lo)}));
+    out.counts = out.counts.map(v => ({...v, targetP: P(v.target)}));
     return out;
   },
 

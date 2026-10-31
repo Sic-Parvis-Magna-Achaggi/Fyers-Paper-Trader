@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.17.0 — 31 Oct 2026 — Every indicator on P&F, and the P&F toolkit
+
+Added
+- **Every indicator works on every chart type, Point & Figure included** (owner's rule, now permanent): Pine scripts
+  get ordinary bars on every type. Bars that don't follow the clock (Renko, range, line break, P&F) close when the
+  next one opens, so `request.security`, time and session functions line up with them.
+- **P&F: what indicators read** (chart type menu): `close` = the column's middle (default, du Plessis' convention)
+  or its last box; open / high / low are the column's own.
+- **P&F toolkit** (ƒx → Built in): 45° bullish support and bearish resistance lines, each break marked and the next
+  line drawn from the extreme of the move; Double / Triple Top Buy and Bottom Sell at the trigger box, fresh or
+  continuation; anchor columns (15+ boxes) with their levels; open vertical counts (boxes × box × reversal, shown
+  once active, gone when reached). Each part can be turned off; the read-out shows the trend and the last signal.
+- **Tests:** `tests/pine_compat.js` (9 scripts using most of Pine: plots, fills, hlines, shapes, bgcolor / barcolor,
+  the ta.* library, drawings by bar index and by time, tables, arrays, maps, functions, var / varip,
+  request.security, time / session) and `tests/pine_compat_flow.js` (each on all 10 chart types; the P&F close
+  option; a drawing script and the toolkit on a P&F chart). The toolkit's rules in `tests/ctype_test.js`.
+- `docs/Project_Instructions.md`: the rule that every indicator works on every chart type, and that the footprint
+  is built only from real trades.
+
+Fixed
+- An account just switched to Live (or created / restored) starts with the prices of the last few seconds, so an
+  order placed straight away isn't refused with "no price yet".
+
+Roadmap
+- Added (item 8): a measurement tool, a mix of MT5's ruler and TradingView's measure box, with net ₹ and R.
+
 ## v0.16.0 — 31 Oct 2026 — Point & Figure, and the order-flow check
 
 Added

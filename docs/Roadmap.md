@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 31 Oct 2026 (v0.16.0). This is the one task list for the project.
+Updated 31 Oct 2026 (v0.17.0). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -22,6 +22,12 @@ Updated 31 Oct 2026 (v0.16.0). This is the one task list for the project.
 2. [ ] **Candle types and order flow** (moved up 31 Oct 2026). Candle types done in **v0.15.0**, Point & Figure in **v0.16.0**; the footprint waits for Monday's measurement.
    - [x] Heikin-Ashi, Renko, range bars, line break, plus hollow candles, bars, line and area. Indicators (Volume, built-ins, your Pine scripts) work on every type, on the bars the chart shows, as on TradingView (asked 31 Oct 2026). *(v0.15.0)*
    - [x] **Point & Figure** chart type (asked 31 Oct 2026): X / O columns, box size (ATR or fixed) and reversal (3 boxes), from closes or highs and lows, with indicators like the other types. *(v0.16.0)*
+   - [ ] **Point & Figure toolkit, Definedge-style** (asked 31 Oct 2026). Drawn on P&F charts from the ƒx menu, with signals marked on the chart.
+     - **Rule (owner, 31 Oct 2026): every indicator works on P&F charts, not just a few: Volume, every Pine script, and any indicator or Pine feature added in future.** P&F columns are ordinary bars to indicators; a Pine compatibility test (many Pine features, on every chart type) runs before every release, and nothing ships that fails it on P&F.
+     - [x] Every indicator on P&F: Pine gets ordinary bars on every chart type (a column closes when the next opens; `close` = the column middle by default, or the last box); the Pine compatibility test (9 scripts, every chart type) runs before every release. MA, BB, RSI and anything else are Pine scripts and work there. *(v0.17.0)*
+     - [x] First set: the P&F toolkit (ƒx): 45° trendlines with breaks and the next line after each break; DTB / DBS / TTB / TBS at their trigger box (fresh or continuation); anchor columns (15+ boxes) and their levels; open vertical counts. *(v0.17.0)*
+     - [ ] Next: horizontal counts, mini tops / bottoms, more patterns (catapult, pole, triangles, traps, anchor follow-through, turtle breakout).
+     - [ ] Definedge's own indicators (PMOX, XO Zone %, Noiseless RSI, Smart Don, Oops patterns): their exact rules are in Definedge's logged-in library; built only from their published definitions (the owner can paste them), never guessed.
    - [ ] **Footprint: real trades only, never an estimate** (agreed 31 Oct 2026). Fyers' API documents no trade-by-trade feed (the tick-by-tick socket is 50-level depth only, NSE / NFO, 1 symbol on Standard); its normal feed sends snapshots with the last trade's price and size and the day's volume.
      - [x] The recorder: the server records every feed snapshot for chosen contracts (default CRUDEOIL and NIFTY futures) and reports how much of the volume arrives as single, exact trades (Log page, admin). *(v0.16.0)*
      - [ ] Measure on Monday 2 Nov (needs the owner's Fyers login that morning), then read the report together.
@@ -38,6 +44,10 @@ Updated 31 Oct 2026 (v0.16.0). This is the one task list for the project.
    - Several charts side by side and stacked (vertical and horizontal splits) inside one layout, each with its own contract, timeframe and indicators. Saved with the layout.
 7. [ ] **A proper mobile version** (asked 31 Oct 2026: "the mobile version is pathetic; I can't open the charts in full screen")
    - Use the MT5 mobile app as the reference: a full-screen chart, simple bottom navigation (Quotes, Chart, Trade, History), one-tap trading and the position controls reachable with a thumb.
+
+8. [ ] **Measurement tool, a mix of MT5 and TradingView** (asked 31 Oct 2026)
+   - MT5's crosshair ruler (click-drag from a point: price change, % and bars / time, shown at the cursor) and TradingView's measure box (shaded box, green up / red down, change in points, %, ticks, bars, time and volume).
+   - Plus what fits this app: the net ₹ for your lot size after all charges, and R against the current SL. Works on every chart type (P&F in boxes).
 
 ## Rules that shape live trading and other users (checked 30 Oct 2026)
 
@@ -65,6 +75,7 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Done
 
+- [x] **v0.17.0** (31 Oct): every indicator on every chart type, P&F included (Pine compatibility test); the P&F toolkit (trend lines and breaks, signals, anchors, vertical counts).
 - [x] **v0.16.0** (31 Oct): Point & Figure chart type; the order-flow check (records the feed to measure whether it carries every trade).
 - [x] **v0.15.0** (31 Oct): chart types (Heikin-Ashi, Renko, range bars, line break, hollow, bars, line, area) with indicators on every type (item 2's first part).
 - [x] **v0.14.0** (31 Oct): live mode built (see item 1 above: its first real trade and the charges check are still open).

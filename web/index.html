@@ -996,6 +996,75 @@ class PfPrim {
     });
   }
 }
+/* the P&F toolkit (ctype.js: CT.pfTools) */
+function pfToolsCalc(r){
+  r.res = ctType() === "pf" && CT_SIZE && DISP.length ? CT.pfTools(DISP, CT_SIZE, ctCfg().pfRev || 3, r.cfg) : null;
+  if(r.prim) r.prim.update();
+}
+class PfToolsPrim {
+  constructor(r){ this.r = r; this.req = null; const self = this; this.views = [{zOrder: () => "top", renderer: () => ({draw: t => self.draw(t)})}]; }
+  attached(p){ this.req = p.requestUpdate; }
+  detached(){ this.req = null; }
+  updateAllViews(){}
+  paneViews(){ return this.views; }
+  update(){ if(this.req) this.req(); }
+  draw(target){
+    target.useMediaCoordinateSpace(({context: ctx, mediaSize: size}) => {
+      const r = this.r, T = r.res, c = r.cfg; if(!T || c.hidden || !DISP.length) return;
+      const ts = chart.timeScale(), sp = ts.options().barSpacing || 6, C = chartCfg(), tick = cur && cur.tick, n = DISP.length;
+      const X = i => { if(i < n) return ts.timeToCoordinate(DISP[i].time); const xl = ts.timeToCoordinate(DISP[n - 1].time); return xl == null ? null : xl + (i - n + 1) * sp; };
+      const Y = v => series.priceToCoordinate(v);
+      const font = s => `${s}px "IBM Plex Mono", monospace`;
+      const tag = (x, y, text, col, fill, above) => {
+        ctx.font = font(10); const w = ctx.measureText(text).width + 6, h = 13, yy = above ? y - h - 2 : y + 2;
+        ctx.fillStyle = fill ? col : cssVar("--panel"); ctx.strokeStyle = col; ctx.lineWidth = 1;
+        ctx.fillRect(x - w / 2, yy, w, h); ctx.strokeRect(x - w / 2 + .5, yy + .5, w - 1, h - 1);
+        ctx.fillStyle = fill ? "#fff" : col; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(text, x, yy + h / 2 + .5);
+      };
+      // anchor columns: a faint band behind the column, and its high / low as dashed levels to the right
+      if(c.anchors) for(const a of T.anchors.slice(-Math.max(1, c.anchorShow || 3))){
+        const x = X(a.col), yh = Y(a.hiP), yl = Y(a.loP); if(x == null || yh == null || yl == null) continue;
+        const col = a.dir > 0 ? C.up : C.down;
+        ctx.fillStyle = rgbaHex(col, 0.08); ctx.fillRect(x - sp * 0.6, Math.min(yh, yl) - 4, sp * 1.2, Math.abs(yl - yh) + 8);
+        ctx.setLineDash([4, 4]); ctx.strokeStyle = rgbaHex(col, 0.7); ctx.lineWidth = 1;
+        for(const y of [yh, yl]){ ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(size.width, y); ctx.stroke(); }
+        ctx.setLineDash([]);
+        tag(x, yh, `Anchor ${a.n}`, col, false, true);
+      }
+      // 45-degree trend lines: solid while running, faded once broken, with the break marked
+      if(c.trend) for(const L of T.lines){
+        const end = L.broken ? L.c1 : n + 2, x0 = X(L.c0), x1 = X(end);
+        if(x0 == null || x1 == null) continue;
+        const y0 = Y(L.p0), y1 = Y(L.p0 + L.dir * (end - L.c0) * CT_SIZE); if(y0 == null || y1 == null) continue;
+        const col = L.dir > 0 ? C.up : C.down;
+        ctx.strokeStyle = L.broken ? rgbaHex(col, 0.45) : col; ctx.lineWidth = L.broken ? 1.2 : 2;
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+        if(L.broken){
+          ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x1, y1, 3.5, 0, 2 * Math.PI); ctx.fill();
+          tag(x1, y1, L.dir > 0 ? "▼ break" : "▲ break", L.dir > 0 ? C.down : C.up, true, L.dir < 0);
+        }
+      }
+      // open vertical counts: active, not reached yet - the latest few per side
+      if(c.counts){
+        const open = T.counts.filter(v => v.active && !v.achieved);
+        for(const d of [1, -1]) for(const v of open.filter(v => v.dir === d).slice(-Math.max(1, c.countShow || 2))){
+          const x = X(v.col), y = Y(v.targetP); if(x == null || y == null) continue;
+          const col = d > 0 ? C.up : C.down;
+          ctx.setLineDash([2, 3]); ctx.strokeStyle = col; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(size.width - 64, y); ctx.stroke(); ctx.setLineDash([]);
+          ctx.font = font(10.5); ctx.fillStyle = col; ctx.textAlign = "right"; ctx.textBaseline = d > 0 ? "bottom" : "top";
+          ctx.fillText(`VC ${d > 0 ? "↑" : "↓"} ${fmt(v.targetP, tick)}`, size.width - 66, y + (d > 0 ? -2 : 2));
+        }
+      }
+      // buy / sell signals at their trigger box: filled = fresh, outlined = continuation
+      if(c.signals) for(const s of T.signals){
+        const x = X(s.col), y = Y(s.price); if(x == null || y == null || x < -20 || x > size.width) continue;
+        if(sp < 9 && !s.fresh) continue;                // zoomed far out: only fresh signals
+        tag(x, y, s.kind, s.dir > 0 ? C.up : C.down, s.fresh, s.dir < 0);
+      }
+    });
+  }
+}
 function seriesColors(C){
   const t = ctType();
   if(t === "pf") return PF_CLEAR;
@@ -1063,6 +1132,11 @@ const IND_TYPES = {
   volume: {name: "Volume", desc: "Volume bars in their own pane, with an optional moving average",
     defaults: {ma: true, maLen: 20, maColor: "#e0b341"},
     settings: [["ma", "Moving average", "bool"], ["maLen", "MA length", "int"], ["maColor", "MA colour", "color"]]},
+  pftools: {name: "P&F toolkit", desc: "Point & Figure charts: 45° trend lines with their breaks, Double / Triple Top Buy and Bottom Sell signals, anchor columns and vertical counts",
+    defaults: {trend: true, signals: true, anchors: true, anchorBoxes: 15, anchorShow: 3, counts: true, countMin: 5, countShow: 2},
+    settings: [["trend", "45° trend lines and breaks", "bool"], ["signals", "Buy / sell signals (DTB, TTB, DBS, TBS)", "bool"],
+               ["anchors", "Anchor columns", "bool"], ["anchorBoxes", "Anchor: at least (boxes)", "int"], ["anchorShow", "Anchors shown (latest)", "int"],
+               ["counts", "Vertical counts (open targets)", "bool"], ["countMin", "Count columns: at least (boxes)", "int"], ["countShow", "Counts shown per side", "int"]]},
 };
 let INDS = [];                                   // what's on the chart now: {cfg, pane, series[], data()}
 function indList(){ return (prefGet("indicators", []) || []).filter(c => IND_TYPES[c.type] || c.type === "pine"); }
@@ -1084,6 +1158,10 @@ function indBuild(){
       r.series.push(r.hist);
       if(c.ma){ r.ma = chart.addSeries(LightweightCharts.LineSeries, {color:c.maColor, lineWidth:1, lastValueVisible:false, priceLineVisible:false,
         crosshairMarkerVisible:false, priceFormat:{type:"volume"}}, pane); r.series.push(r.ma); }
+    }
+    if(cfg.type === "pftools"){                 // drawn on the candles' pane, over the P&F columns
+      r.pane = 0; r.prim = new PfToolsPrim(r); const s0 = series; s0.attachPrimitive(r.prim);
+      r.cleanup = () => { try{ s0.detachPrimitive(r.prim); }catch(e){} };
     }
     if(c.hidden && cfg.type === "volume") for(const sr of r.series) sr.applyOptions({visible: false});
     INDS.push(r);
@@ -1131,6 +1209,7 @@ function indVisible(r){
   const on = !r.cfg.hidden;
   if(r.cfg.type === "volume"){ for(const sr of r.series) sr.applyOptions({visible: on}); }
   if(r.cfg.type === "pine") pineVisible(r);
+  if(r.cfg.type === "pftools" && r.prim) r.prim.update();
 }
 const EYE = `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>`;
 const EYE_OFF = `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 21L21 3" stroke="currentColor" stroke-width="2"/></svg>`;
@@ -1177,6 +1256,16 @@ function legendFill(param){
     if(el.style.display === "none") return;
     let name = "", vals = "", isPine = r.cfg.type === "pine";
     if(isPine){ [name, vals] = pineLegendParts(r, t); }
+    else if(r.cfg.type === "pftools"){
+      name = `<b>P&F toolkit</b>`;
+      const T = r.res;
+      if(!T) vals = ` <span class="muted">Point & Figure charts only</span>`;
+      else {
+        const L = T.lines[T.lines.length - 1], S = T.signals[T.signals.length - 1];
+        vals = (L ? ` <span class="${L.dir > 0 ? "up" : "down"}">${L.dir > 0 ? "▲ above the bullish line" : "▼ below the bearish line"}</span>` : "")
+          + (S ? ` <span class="lk">last</span><span class="${S.dir > 0 ? "up" : "down"}">${S.kind} ${fmt(S.price, tick)}</span>` : "");
+      }
+    }
     else if(r.cfg.type === "volume"){
       const v = (param && param.seriesData && param.seriesData.get(r.hist)) || r.hist.data().find(d => d.time === t);
       const m = r.ma ? ((param && param.seriesData && param.seriesData.get(r.ma)) || r.ma.data().find(d => d.time === t)) : null;
@@ -1220,6 +1309,7 @@ function indData(skipPine){
   const bars = DISP;
   for(const r of INDS){
     if(r.cfg.type === "pine"){ if(!skipPine) pineRun(r); continue; }
+    if(r.cfg.type === "pftools"){ pfToolsCalc(r); continue; }
     if(r.cfg.type === "volume"){
       const v = bars.map(b => ({time:b.time, value:volData[b.time] || 0, color:volColor(b)}));
       r.hist.setData(v);
@@ -1231,6 +1321,7 @@ function indData(skipPine){
 }
 function indTick(bar){
   for(const r of INDS){
+    if(r.cfg.type === "pftools"){ pfToolsCalc(r); continue; }
     if(r.cfg.type === "pine"){ pineTick(r, bar); continue; }
     if(r.cfg.type === "volume"){
       r.hist.update({time:bar.time, value:volData[bar.time] || 0, color:volColor(bar)});
@@ -1409,10 +1500,11 @@ function renderCt(){
     ${c.pfMode === "fixed" ? `<div class="cr"><span>Points (${esc(k)})</span><input id="ctPB" class="mono" inputmode="decimal" value="${(c.pfBox || {})[k] ?? (CT_SIZE || "")}"></div>`
       : `<div class="cr"><span>ATR length</span><input id="ctPA" class="mono" inputmode="numeric" value="${c.pfAtr}"></div>`}
     <div class="cr"><span>Reversal (boxes)</span><input id="ctPR" class="mono" inputmode="numeric" value="${c.pfRev}"></div>
-    <div class="cr"><span>Built from</span><select id="ctPS"><option value="close" ${c.pfSrc !== "hl" ? "selected" : ""}>Closes</option><option value="hl" ${c.pfSrc === "hl" ? "selected" : ""}>Highs and lows</option></select></div>`;
+    <div class="cr"><span>Built from</span><select id="ctPS"><option value="close" ${c.pfSrc !== "hl" ? "selected" : ""}>Closes</option><option value="hl" ${c.pfSrc === "hl" ? "selected" : ""}>Highs and lows</option></select></div>
+    <div class="cr"><span>Indicators read</span><select id="ctPI"><option value="mid" ${c.pfInd !== "last" ? "selected" : ""}>Column middle</option><option value="last" ${c.pfInd === "last" ? "selected" : ""}>Last box</option></select></div>`;
   if(t === "lb") h += `<div class="sec">Line break</div><div class="cr"><span>Lines to break</span><input id="ctLN" class="mono" inputmode="numeric" value="${c.lbLines}"></div>`;
   if(t === "renko" || t === "range" || t === "pf") h += `<p class="help" style="margin:6px 0 0">Now ${fmt(CT_SIZE, tick)} points ${t === "pf" ? "a box" : ""} on this chart${({renko: c.renkoMode, range: c.rangeMode, pf: c.pfMode})[t] === "fixed" ? "" : " (ATR of the candles loaded, fixed until you reload)"}. Built from the timeframe's candles: pick 1m for the finest ${{renko: "bricks", range: "bars", pf: "columns"}[t]}. The candle timer is off: these bars don't follow the clock.</p>`;
-  h += `<p class="help" style="margin:8px 0 0">Volume, indicators and your Pine scripts run on the bars the chart shows${t === "ha" ? " (Heikin-Ashi values)" : t === "renko" ? " (one value per brick)" : t === "pf" ? " (one value per column: its last box)" : ""}, as on TradingView. Bid, ask, last and your trade lines are always real prices.</p>`;
+  h += `<p class="help" style="margin:8px 0 0">Volume, indicators and your Pine scripts run on the bars the chart shows${t === "ha" ? " (Heikin-Ashi values)" : t === "renko" ? " (one value per brick)" : t === "pf" ? ` (one value per column; <code>close</code> = the column's ${c.pfInd === "last" ? "last box" : "middle"})` : ""}, as on TradingView. Bid, ask, last and your trade lines are always real prices.</p>`;
   $("#ctBody").innerHTML = h;
   $("#ctBody").querySelectorAll("[data-ct]").forEach(b => b.onclick = () => ctSave({type: b.dataset.ct}));
   const on = (id, fn) => { const el = $(id); if(el) el.onchange = () => fn(el); };
@@ -1430,6 +1522,7 @@ function renderCt(){
   on("#ctPB", el => { const n = pos(el.value); if(n) ctSave({pfBox: {...(c.pfBox || {}), [k]: n}}); });
   on("#ctPR", el => { const n = pos(el.value); if(n) ctSave({pfRev: Math.max(1, Math.min(10, Math.round(n)))}); });
   on("#ctPS", el => ctSave({pfSrc: el.value}));
+  on("#ctPI", el => ctSave({pfInd: el.value}));
   on("#ctLN", el => { const n = pos(el.value); if(n) ctSave({lbLines: Math.max(1, Math.min(10, Math.round(n)))}); });
 }
 $("#bCt").onclick = e => { e.stopPropagation(); renderCt(); $("#ctPick").classList.toggle("hide"); $("#cfgPick").classList.add("hide"); $("#tfPick").classList.add("hide"); $("#indPick").classList.add("hide"); };

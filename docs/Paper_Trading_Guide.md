@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.16.0)
+# Paper and live trading: how it works (v0.17.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -142,9 +142,21 @@ The button after the timeframes (it shows the current type, e.g. **Candles**, **
 | Point & Figure | Columns of X (rising) and O (falling), one mark per box. A new column needs a reversal of 3 boxes (settable) from the column's extreme and starts one box back from it. Box: ATR or fixed points (per underlying); built from the closes, or from highs and lows. The button shows box × reversal, e.g. **P&F 11 × 3**. |
 
 - **Renko, range bars, line break and Point & Figure** are built from the timeframe's candles: pick **1m** for the finest bricks. They don't follow the clock, so the candle timer is off and the time axis shows when each brick formed.
-- **Indicators work on every type.** Volume, the built-in indicators and your Pine scripts run on the bars the chart shows, as on TradingView: on Heikin-Ashi an RSI uses the Heikin-Ashi closes; on Renko there's one value per brick; on Point & Figure one per column (its last box). They line up bar for bar, on the candles and in their own panes, and follow live prices.
+- **Every indicator works on every type, Point & Figure included.** Volume, the built-in indicators and every Pine script (plots, fills, shapes, drawings, tables, request.security, arrays...) run on the bars the chart shows, as on TradingView: on Heikin-Ashi an RSI uses the Heikin-Ashi closes; on Renko there's one value per brick; on Point & Figure one per column. They line up bar for bar, on the candles and in their own panes, and follow live prices. A test of many Pine features on every chart type runs before every release, so this keeps holding for scripts you write later.
+- **On Point & Figure, Pine's `close` is the column's middle** by default (the usual convention for indicators on P&F, from du Plessis); choose **Last box** under *Indicators read* in the chart type menu. `open`, `high` and `low` are the column's own; a column closes when the next one starts.
 - **Prices stay real.** Bid, ask, last, your entry / SL / TP lines and every ₹ figure use real prices, whatever the chart type. (A Heikin-Ashi close isn't a price you can trade at.)
 - The long / short tool and the position bars work on every type.
+
+## P&F toolkit (ƒx → Built in → P&F toolkit)
+
+Drawn on Point & Figure charts (on other chart types its read-out says so and it draws nothing). Each part can be turned off in its settings (⚙).
+
+- **45° trend lines.** A bullish support line starts one box below a column's low and rises one box per column; it's broken when an O column reaches it. A bearish resistance line starts one box above a column's high and falls one box per column; it's broken when an X column reaches it. After each break the opposite line starts from the extreme of the move (the highest X or lowest O since the broken line began). The running line is solid; broken ones are faded, with **▲ break** / **▼ break** where they broke.
+- **Signals** at the box that triggers them: **DTB** (Double Top Buy: an X column one box above the previous X column's top), **DBS** (Double Bottom Sell), **TTB / TBS** (triple top / bottom: the two previous tops, or bottoms, were equal). Filled = fresh (the first signal after one the other way), outlined = continuation. Zoomed far out, only fresh signals show.
+- **Anchor columns:** columns of 15+ boxes (settable), shaded, with their high and low as dashed levels to the right (the latest 3, settable).
+- **Vertical counts:** from finished columns of 5+ boxes (settable): target = boxes × box size × reversal, up from an X column's low or down from an O column's high. A count shows once a later column breaks the count column's high (low), and disappears when the target is reached: **VC ↑ 5,654** (the latest 2 per side, settable).
+- The read-out shows which line price is on and the last signal.
+- Definedge's own tools (PMOX, XO Zone %, Noiseless RSI, Oops and their other patterns) aren't included: their rules are in Definedge's logged-in library. Paste one in and it can be built exactly.
 
 ## Order-flow check (admin, Log page)
 

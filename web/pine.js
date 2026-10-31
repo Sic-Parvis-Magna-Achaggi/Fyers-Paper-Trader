@@ -94,11 +94,23 @@ async function pineNeed(n){
     L.close = lastBar.close; L.high = Math.max(L.high, lastBar.high); L.low = Math.min(L.low, lastBar.low); }
   return bars.map(b => ({open: b.open, high: b.high, low: b.low, close: b.close, volume: b.vol, openTime: (b.time - 19800) * 1000, closeTime: (b.time - 19800 + plan.sec) * 1000 - 1}));
 }
+/* the chart's bar i (DISP) as Pine sees it. Every chart type gives Pine ordinary bars, so every script and every
+   Pine feature works on all of them (owner's rule: P&F included):
+   - bars that don't follow the clock (Renko, range, line break, P&F) close when the next one opens, so
+     request.security(), time and session functions line up with them;
+   - P&F: `close` is the column's middle by default (du Plessis' convention for indicators on P&F), or its last box
+     (chart type menu); open / high / low are the column's own. */
+function pineBar(d, i){
+  const b = d[i], ms = (b.time - 19800) * 1000, t = ctType();
+  let closeTime = ms + tfPlan(tf).sec * 1000 - 1;
+  if(!CT.timeBased(t)) closeTime = i + 1 < d.length ? (d[i + 1].time - 19800) * 1000 - 1 : Math.max(closeTime, Date.now());
+  const close = t === "pf" && ctCfg().pfInd !== "last" ? (b.high + b.low) / 2 : b.close;
+  return {open: b.open, high: b.high, low: b.low, close, volume: volData[b.time] || 0, openTime: ms, closeTime};
+}
 function pineCandles(maxBars){
-  const d = series ? dispBars() : [], n = Math.min(d.length, maxBars || PINE_BARS), off = d.length - n, sec = tfPlan(tf).sec;
+  const d = series ? dispBars() : [], n = Math.min(d.length, maxBars || PINE_BARS), off = d.length - n;
   const candles = [], times = [];
-  for(let i = off; i < d.length; i++){ const b = d[i], ms = (b.time - 19800) * 1000;
-    candles.push({open: b.open, high: b.high, low: b.low, close: b.close, volume: volData[b.time] || 0, openTime: ms, closeTime: ms + sec * 1000 - 1}); times.push(b.time); }
+  for(let i = off; i < d.length; i++){ candles.push(pineBar(d, i)); times.push(d[i].time); }
   return {candles, times, off};
 }
 
@@ -201,9 +213,8 @@ async function pineTick(r){
   if(P.running || P.ticking){ P.tickDirty = true; return; }
   const gap = Math.max(250, 2 * (P.tms || 0)), wait = gap - (Date.now() - (P.lastTick || 0));
   if(wait > 0){ if(!P.tickTimer) P.tickTimer = setTimeout(() => { P.tickTimer = null; pineTick(r); }, wait); return; }
-  const last = P.times[P.n - 1], d = dispBars(), sec = tfPlan(tf).sec, bars = [];
-  for(let i = d.length - 1; i >= 0 && d[i].time >= last; i--){ const b = d[i], ms = (b.time - 19800) * 1000;
-    bars.unshift({open: b.open, high: b.high, low: b.low, close: b.close, volume: volData[b.time] || 0, openTime: ms, closeTime: ms + sec * 1000 - 1}); }
+  const last = P.times[P.n - 1], d = dispBars(), bars = [];
+  for(let i = d.length - 1; i >= 0 && d[i].time >= last; i--) bars.unshift(pineBar(d, i));
   if(!bars.length){ pineRun(r); return; }
   P.ticking = true; P.tickDirty = false; P.lastTick = Date.now();
   const res = await pineExec({op: "tick", sid: P.sid, bars}, 30000);

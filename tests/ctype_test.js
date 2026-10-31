@@ -48,6 +48,29 @@ ok(pf[0].vol === 3 && pf[1].vol === 2 && pf[2].vol === 2, "P&F: volume of every 
 const pfHL = CT.transform([bar(60, 100, 100, 100, 100), bar(120, 100, 104, 96, 101)], "pf", {box: 1, pfRev: 3, pfSrc: "hl"});
 ok(pfHL.length === 2 && pfHL[0].high === 104 && pfHL[1].low === 96, "P&F from highs and lows: a rising column takes the high (104), then the low reverses it (96)", pfHL);
 
+// P&F toolkit on hand-made columns (box 1, reversal 3). Boxes: lo..hi.
+//  0: X 100-110   1: O 107-104   2: X 105-112 (DTB: above 110 at 111)   3: O 109-106   4: X 107-112 (equal top: no signal)
+//  5: O 109-103 (DBS: below 104 at 103... previous O low 106 -> trigger 105)   6: X 104-108   7: O 105-99 (bull line broken?)
+const C = (pf, lo, hi) => ({pf, low: lo, high: hi});
+const cols = [C(1, 100, 110), C(-1, 104, 107), C(1, 105, 112), C(-1, 106, 109), C(1, 107, 112), C(-1, 103, 109), C(1, 104, 108), C(-1, 99, 105), C(1, 100, 113)];
+const T = CT.pfTools(cols, 1, 3, {anchorBoxes: 10, countMin: 5});
+// bullish line from 99 at column 0, +1 per column: col 5 -> 104, so the O column 5 (low 103) breaks it
+ok(T.lines[0].dir === 1 && T.lines[0].p0 === 99 && T.lines[0].c1 === 5 && T.lines[0].broken, "P&F line: bullish from 99 (below the first low), broken by the O column 5 at 103 (line at 104)", T.lines[0]);
+// then bearish from above the highest X since (col 2, high 112 -> 113), -1 per column: col 8 -> 107; X col 6 (108) vs line at col 6 = 109: no; col 8 (113 >= 107): broken
+ok(T.lines[1].dir === -1 && T.lines[1].c0 === 2 && T.lines[1].p0 === 113 && T.lines[1].c1 === 8 && T.lines[1].broken, "P&F line: then bearish from 113 (above the highest X, column 2), broken by column 8", T.lines[1]);
+ok(T.lines[2].dir === 1 && T.lines[2].c0 === 7 && T.lines[2].p0 === 98 && !T.lines[2].broken, "P&F line: and a new bullish line from 98 (below the lowest O, column 7), still running", T.lines[2]);
+const sig = T.signals.map(s => `${s.col}:${s.kind}@${s.price}${s.fresh ? "*" : ""}`).join(" ");
+ok(sig === "2:DTB@111* 5:DBS@105* 7:DBS@102 8:DTB@109*", "P&F signals: DTB at 111, DBS at 105, DBS at 102 (continuation), DTB at 109 (above column 6's 108); * = fresh", sig);
+const tt = CT.pfTools([C(1, 100, 110), C(-1, 104, 107), C(1, 105, 110), C(-1, 105, 107), C(1, 106, 111)], 1, 3).signals.map(s => `${s.col}:${s.kind}@${s.price}`).join(" ");
+ok(tt === "4:TTB@111", "P&F: two equal tops (110, 110) then a column above them: Triple Top Buy at 111 (the equal second top is no signal)", tt);
+ok(T.anchors.length === 2 && T.anchors[0].col === 0 && T.anchors[0].n === 11 && T.anchors[1].col === 8 && T.anchors[1].n === 14,
+   "P&F anchors (10+ boxes here): column 0 (11 boxes), column 8 (14 boxes, still forming)", T.anchors);
+const vc0 = T.counts.find(v => v.col === 0);
+ok(vc0 && vc0.targetP === 133 && vc0.active && vc0.activeCol === 2 && !vc0.achieved,
+   "P&F vertical count: column 0 (11 boxes x 1 x 3 = 33 from 100) targets 133, active since column 2 broke 110, not reached", vc0);
+const vc5 = T.counts.find(v => v.col === 5);
+ok(vc5 && vc5.dir === -1 && vc5.targetP === 88 && vc5.active && vc5.activeCol === 7, "P&F vertical count down: column 5 (7 boxes) targets 109 - 21 = 88, active since column 7 broke 103", vc5);
+
 // sizes: ATR, rounded to the tick
 const s = CT.size([bar(1, 10, 12, 9, 11), bar(2, 11, 13, 10, 12), bar(3, 12, 14, 11, 13)], "atr", 0, 2, 0.05);
 ok(s === 3, "ATR(2) of ranges 3, 3 = 3", s);

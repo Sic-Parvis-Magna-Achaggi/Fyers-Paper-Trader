@@ -57,6 +57,13 @@ class UserRT:
             e = Paper(folder, self.link, a.get("name", ""))
         e.on_change = lambda ev, aid=a["id"]: on_engine_change and on_engine_change(self, aid, ev)
         e.on_symbols = lambda: self.feed._resync()
+        now = time.time()                          # a new engine (an account just made, switched or restored) starts
+        for s, t in list(self.feed.last.items()):  # with the prices of the last few seconds, not empty
+            if now - self.feed.last_at.get(s, 0) < 10:
+                try:
+                    e.on_tick(t)
+                except Exception:
+                    pass
         self.engines[a["id"]] = e
         if isinstance(e, LiveEngine):
             self._ensure_stream()

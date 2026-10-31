@@ -34,6 +34,7 @@ class Feed:
         self.subscribed: list = []
         self.dsubscribed: list = []     # symbols subscribed for market depth
         self.last: dict = {}            # symbol -> latest tick
+        self.last_at: dict = {}         # symbol -> when it arrived
         self.last_depth: dict = {}      # symbol -> latest order book
         self.last_depth_at = 0.0
         self.last_tick_at = 0.0
@@ -137,7 +138,7 @@ class Feed:
     def publish(self, tick: dict):
         """Called from any thread."""
         self.last[tick["s"]] = tick
-        self.last_tick_at = time.time()
+        self.last_at[tick["s"]] = self.last_tick_at = time.time()
         if self.loop:
             self.loop.call_soon_threadsafe(self._fanout, tick)
 

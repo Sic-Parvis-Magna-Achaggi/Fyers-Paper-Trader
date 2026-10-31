@@ -50,7 +50,9 @@ let br;
       // the SMA on the last closed bar against the average of the chart's 10 closes up to it (what the chart shows,
       // not the raw candles; the live bar can move between Pine's run and this check)
       const lastT = sp.length ? sp[sp.length - 1].time : null, iLast = DISP.findIndex(b => b.time === lastT);
-      const k = Math.max(9, iLast - 1), want = DISP.slice(k - 9, k + 1).reduce((a, b) => a + b.close, 0) / 10;
+      // (P&F: Pine's close is the column middle by default)
+      const cl = b => ctType() === "pf" && ctCfg().pfInd !== "last" ? (b.high + b.low) / 2 : b.close;
+      const k = Math.max(9, iLast - 1), want = DISP.slice(k - 9, k + 1).reduce((a, b) => a + cl(b), 0) / 10;
       const atK = sp.find(d => d.time === DISP[k].time);
       const n = DISP.length, raw = RAW.length;
       const series0 = series.data().length;

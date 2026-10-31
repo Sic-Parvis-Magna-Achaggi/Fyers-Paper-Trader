@@ -6,6 +6,11 @@ It runs on our own server and serves its own page, so there is nothing to instal
 
 **Address:** https://68-183-245-178.sslip.io
 
+## Version 0.17.0: every indicator on P&F, and the P&F toolkit
+
+- **Every indicator and Pine script works on every chart type,** Point & Figure included, checked before every release.
+- **P&F toolkit** (ƒx): 45° trend lines with breaks, DTB / DBS / triple top and bottom signals, anchor columns and vertical counts.
+
 ## Version 0.16.0: Point & Figure, order-flow check
 
 - **Point & Figure** chart type, with indicators like the others.
