@@ -2,7 +2,27 @@
    scripts with PineTS in a Web Worker. Drawn with Lightweight Charts series, price lines and primitives.
    Hooks used by the page (index.html): pineBuild, pineRun, pineTick, pineLegendParts, pineVisible, pineLayout, pineCleanup. */
 
-const PINE_BARS = 1500;                      // bars each script sees (the latest ones on the chart)
+const PINE_BARS = 1500;                      // bars each script sees at first (the latest ones on the chart)
+/* "Bars of history" = Auto (the default): a script starts on the latest 1,500 bars and, when you scroll back past
+   where its lines start, calculates again over everything the chart has loaded - the same way the chart loads older
+   candles as you scroll. A number instead fixes how many bars it uses. */
+function pineBarsFor(r){
+  const b = r.cfg.bars;
+  if(b && b !== "auto") return +b;
+  return Math.max(PINE_BARS, (r.pine && r.pine.reach) || 0);
+}
+/* the chart scrolled: an Auto script whose lines start inside the view (and the chart has older bars) extends to all
+   loaded bars, once you stop scrolling */
+function pineViewCheck(vr){
+  if(!vr || !chart) return;
+  const n = dispBars().length;
+  for(const r of INDS){
+    const P = r.pine; if(!P || r.dead || r.cfg.hidden || (r.cfg.bars && r.cfg.bars !== "auto") || !P.res) continue;
+    if(P.n >= n || vr.from > P.off + 20) continue;           // it covers everything loaded, or its start isn't in view
+    clearTimeout(P.reachT);
+    P.reachT = setTimeout(() => { if(r.dead || r.pine !== P) return; P.reach = dispBars().length; pineRun(r); }, 500);
+  }
+}
 const PINE = {scripts: [], loaded: false, loading: null};
 const pq = s => document.querySelector(s);
 const pesc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -196,7 +216,7 @@ function pineBuild(r){
     r.anchor0.attachPrimitive(r.prim0);
   }
   r.tbl = document.createElement("div"); r.tbl.className = "pine-tbls"; pq("#chart").append(r.tbl);
-  r.cleanup = () => { r.tbl && r.tbl.remove(); r.dead = true; if(r.pine && r.pine.sid) pineDrop(r.pine.sid); clearTimeout(r.pine && r.pine.tickTimer); clearTimeout(r.pine && r.pine.retryT); };
+  r.cleanup = () => { r.tbl && r.tbl.remove(); r.dead = true; if(r.pine && r.pine.sid) pineDrop(r.pine.sid); clearTimeout(r.pine && r.pine.tickTimer); clearTimeout(r.pine && r.pine.retryT); clearTimeout(r.pine && r.pine.reachT); };
 }
 function pineCleanup(r){ if(r.cleanup) r.cleanup(); }
 /* hlines and drawings count in the pane's price range (otherwise an hline-only pane has no scale) */
@@ -222,7 +242,7 @@ async function pineRun(r){
   if(!sc){ P.err = "script not found - deleted from your library?"; legendFill(null); return; }
   if(!P.res) P.title = pineTitleOf(sc.source) || sc.name;     // built before the library had loaded
   if(P.running){ P.dirty = true; return; }
-  const {candles} = pineCandles(+r.cfg.bars || PINE_BARS);
+  const {candles} = pineCandles(pineBarsFor(r));
   if(!candles.length) return;
   P.running = true; P.dirty = false; P.lastRun = Date.now(); P.calc = true;
   if(P.sid) pineDrop(P.sid);
@@ -286,7 +306,10 @@ async function pineTick(r){
   const sc = pineScript(r.cfg.scriptId); if(!sc) return;
   pineTimes(P, res); pineApply(r, res, sc);
   if(!legendHover) legendFill(null);
-  if(res.newBar) setTimeout(() => pineRun(r), 30);          // rebuild drawings exactly once per new bar
+  // a new bar: one full run in the background, so drawings and `var` state are exact (the live update alone lets
+  // stateful values drift on bars that arrived as live prices - checked against full runs). A script slower than
+  // 1.5 s (a very long history) runs in full at most every 5 x its run time; each full run puts everything right.
+  if(res.newBar && ((P.ms || 0) < 1500 || Date.now() - (P.lastRun || 0) > 5 * P.ms)) setTimeout(() => pineRun(r), 30);
   else if(P.tickDirty) setTimeout(() => pineTick(r), 0);
 }
 

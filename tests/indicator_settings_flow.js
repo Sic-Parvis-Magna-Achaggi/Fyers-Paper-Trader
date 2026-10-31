@@ -62,6 +62,7 @@ let br;
     firstShown: DISP[Math.max(0, Math.ceil(chart.timeScale().getVisibleLogicalRange().from))].time}));
   ok(h1.n > h0.n && h1.first < h0.first, `scrolling to the left edge loads older candles (${h0.n} -> ${h1.n} bars, back to ${new Date(h1.first * 1000).toISOString().slice(0, 10)}) · "${h1.pill}"`);
   ok(h1.vr.from > 50, `the view stays on the same candles after loading (left edge now at bar ${Math.round(h1.vr.from)})`);
+  await pg.waitForFunction(() => !Object.values(HX).some(h => h.busy), null, { timeout: 30000 }); await pg.waitForTimeout(1600);   // (a load still finishing from the scroll above)
   const noScroll = await pg.evaluate(async () => { histUserAt = 0; const n = RAW.length; chart.timeScale().setVisibleLogicalRange({from: -3, to: 200}); await new Promise(r => setTimeout(r, 1200)); return RAW.length === n; });
   ok(noScroll, "the chart moving by itself (not your scrolling) doesn't load more");
   const keep = await pg.evaluate(async () => { const f = RAW[0].time; await loadHistory(); await new Promise(r => setTimeout(r, 800)); return {same: RAW[0].time <= f, f, now: RAW[0].time}; });
@@ -101,8 +102,11 @@ let br;
   const useId = await save("T uses my lib", '//@version=6\nindicator("T uses lib", overlay=true)\nimport anyone/myhelpers/1 as H\nplot(H.double(close) / 2, "same as close")');
   await pg.evaluate(id => { indSave([{type: "pine", id: "ul", scriptId: id, inputs: {}, overlay: true}]); indBuild(); }, useId);
   await pg.waitForFunction(() => { const r = INDS[0]; return r && r.pine && (r.pine.res || r.pine.err); }, null, { timeout: 30000 });
-  const ul = await pg.evaluate(() => { const P = INDS[0].pine; return {err: P.err, v: P.vals && P.vals["same as close"] && P.vals["same as close"][P.n - 1], c: DISP[DISP.length - 1].close}; });
-  ok(!ul.err && Math.abs(ul.v - ul.c) < 1e-9, `your own saved library("myhelpers") answers "import anyone/myhelpers/1" (${ul.v} = close ${ul.c})${ul.err ? " - " + ul.err : ""}`);
+  await pg.waitForTimeout(6000);                           // (a few live prices, maybe a new bar: checked on closed bars)
+  const ul = await pg.evaluate(() => { const P = INDS[0].pine, v = P.vals && P.vals["same as close"], by = new Map(DISP.map(b => [b.time, b.close]));
+    let bad = 0, n = 0; for(let i = Math.max(0, P.n - 400); i < P.n - 1; i++){ n++; if(Math.abs(v[i] - by.get(P.times[i])) > 1e-9) bad++; }
+    return {err: P.err, n, bad}; });
+  ok(!ul.err && ul.n > 300 && ul.bad === 0, `your own saved library("myhelpers") answers "import anyone/myhelpers/1" (H.double(close)/2 = close on the last ${ul.n} closed bars, ${ul.bad} differ)${ul.err ? " - " + ul.err : ""}`);
   const libPick = await pg.evaluate(() => { renderIndPick(); const h = document.querySelector("#indBody").innerHTML; return /my helpers[\s\S]*?library/.test(h) && !document.querySelector(`[data-padd="${PINE.scripts.find(s => s.name === "my helpers").id}"]`); });
   ok(libPick, "ƒx lists a library as 'library', with no + Add (it isn't drawn on the chart)");
   await pg.evaluate(() => document.querySelector("#indPick").classList.add("hide"));
@@ -132,6 +136,52 @@ let br;
   await pg.click("#indSet [data-cancel]");
   await pg.waitForFunction(() => { const r = INDS[0]; return r && r.pine && r.pine.res && !r.pine.err && !(r.pine.mtf || {}).used; }, null, { timeout: 60000 })
     .then(() => ok(true, "Cancel puts the settings back (chart timeframe, no error)")).catch(() => ok(false, "Cancel puts the settings back"));
+
+  // ---------------------------------------------------------------- 1. settings: any script on another timeframe
+  // (owner, 1 Nov: "the MA of a 15M chart on a 2M chart") - a plain SMA, no timeframe = in its indicator()
+  const smaId = await save("T plain SMA", '//@version=6\nindicator("T SMA", overlay=true)\nlen = input.int(9, "Length")\nplot(ta.sma(close, len), "MA")');
+  await pg.evaluate(id => { indSave([{type: "pine", id: "sma", scriptId: id, inputs: {}, overlay: true}]); indBuild(); }, smaId);
+  await pg.waitForFunction(() => { const r = INDS[0]; return r && r.pine && r.pine.res; }, null, { timeout: 60000 });
+  await pg.evaluate(() => indSettings(INDS[0]));
+  const opts = await pg.evaluate(() => [...document.querySelectorAll("#indSet [data-tf] option")].map(o => ({v: o.value, t: o.textContent, d: o.disabled})));
+  ok(opts.length > 10 && opts.some(o => o.v === "15") && opts.find(o => o.v === "1").d, `every script has Timeframe under Calculation (${opts.length} choices; 1m disabled on a 2m chart: lower than the chart's)`);
+  await pg.selectOption("#indSet [data-tf]", "15");
+  await pg.waitForFunction(() => { const P = INDS[0].pine; return P && P.mtf && P.mtf.used === "15" && P.res && !P.running; }, null, { timeout: 60000 });
+  const m15 = await pg.evaluate(async () => {
+    const P = INDS[0].pine, v = P.vals.MA, plan = tfPlan("15m");
+    const j = await api(`/api/history?symbol=${encodeURIComponent(cur.s)}&res=15&days=${plan.days}`);
+    const c = j.candles, sma = {};                                   // the 15-minute SMA 9, worked out here
+    for(let i = 8; i < c.length; i++){ let t = 0; for(let k = i - 8; k <= i; k++) t += c[k][4]; sma[c[i][0] + 19800] = t / 9; }
+    let n = 0, bad = 0, bars15 = new Set();
+    for(let i = 0; i < P.n - 1; i++){ if(v[i] == null) continue; n++;
+      const t15 = Math.floor((P.times[i] - 19800 - 9 * 3600 - 15 * 60 + 120) / 900) * 900 + 9 * 3600 + 19800;   // the 15m bar this 2m bar closes
+      const k = Object.keys(sma).map(Number).filter(x => x <= P.times[i]).pop();
+      bars15.add(k); if(Math.abs(sma[k] - v[i]) > 1e-6) bad++; }
+    return {n, bad, distinct: bars15.size, legend: document.querySelector("#lgd1").textContent};
+  });
+  ok(m15.n > 20 && m15.bad === 0, `a 15-minute SMA 9 on the 2-minute chart: ${m15.n} values, each equal to the SMA worked out from the 15m candles (${m15.bad} differ)`);
+  ok(/T SMA\s*15m/.test(m15.legend), `its read-out says 15m ("${m15.legend.slice(0, 30)}")`);
+  await pg.click("#indSet .pif .primary");
+
+  // ---------------------------------------------------------------- Bars of history: Auto follows your scrolling
+  // (owner, 1 Nov: "load the same way we are loading the candles") - the SMA from above, back on the chart's timeframe
+  await pg.evaluate(id => { indSave([{type: "pine", id: "sma", scriptId: id, inputs: {}, overlay: true}]); indBuild(); }, smaId);
+  await pg.waitForFunction(() => { const P = INDS[0].pine; return P && P.res && !P.running && P.n === 1500; }, null, { timeout: 60000 });
+  const a0 = await pg.evaluate(() => ({n: INDS[0].pine.n, loaded: DISP.length}));
+  await scrollLeft();                                     // to the left edge: older candles load, the view stays at the old edge...
+  await pg.waitForFunction(n => DISP.length > n, a0.loaded, { timeout: 30000 });
+  await pg.waitForFunction(() => !Object.values(HX).some(h => h.busy), null, { timeout: 30000 });
+  await pg.evaluate(() => { const ts = chart.timeScale(), r = ts.getVisibleLogicalRange(); ts.setVisibleLogicalRange({from: 30, to: 30 + r.to - r.from}); });   // ...and you look at the oldest bars
+  await pg.waitForFunction(() => { const P = INDS[0].pine; return P && !P.running && P.n === DISP.length; }, null, { timeout: 60000 })
+    .then(() => ok(true, "Auto: scroll back past where the script's line starts and it calculates over everything loaded")).catch(() => ok(false, "Auto: the script extends when you scroll back"));
+  const a1 = await pg.evaluate(() => { const P = INDS[0].pine; return {n: P.n, loaded: DISP.length, v: P.vals.MA.filter(x => x != null).length}; });
+  ok(a1.n > a0.n && a1.v > a1.n - 20, `the SMA now covers ${a1.n} bars (was ${a0.n}): its line reaches the oldest candles (${a1.v} values)`);
+  await pg.evaluate(() => indSettings(INDS[0]));
+  await pg.selectOption("#indSet [data-bars]", "1000");
+  await pg.waitForFunction(() => { const P = INDS[0].pine; return P && !P.running && P.n === 1000; }, null, { timeout: 60000 })
+    .then(() => ok(true, "a number instead of Auto fixes it at that many bars (1,000)")).catch(() => ok(false, "Bars of history 1,000 applies"));
+  await pg.selectOption("#indSet [data-bars]", "auto");
+  await pg.click("#indSet .pif .primary");
 
   // ---------------------------------------------------------------- 1. settings: Style
   const stId = await save("T Styled", STYLED);

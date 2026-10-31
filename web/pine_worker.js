@@ -140,8 +140,9 @@ async function run(m) {
     let declared = false, dTf = '', dGaps = true;
     try { ind.getPropsMeta(); declared = 'timeframe' in (ind._sourcePropArgs || {}); dTf = String(ind.prop.timeframe || ''); dGaps = ind.prop.timeframe_gaps !== false; } catch (_) {}
     const P = m.props || {};
-    const useTf = declared && P.timeframe != null ? String(P.timeframe) : dTf;
-    const gaps = declared && P.timeframe_gaps != null ? !!P.timeframe_gaps : dGaps;
+    // (any script can be given a timeframe in Settings, declared or not: e.g. a 15-minute SMA on a 2-minute chart)
+    const useTf = P.timeframe != null ? String(P.timeframe) : dTf;
+    const gaps = P.timeframe_gaps != null ? !!P.timeframe_gaps : dGaps;
     mtf = { declared, tf: dTf, gaps: dGaps, used: '' };
     const data = candles.slice();                // the session's own copy: ticks change its last bar / add bars
     let runTf = tf, htf = null;

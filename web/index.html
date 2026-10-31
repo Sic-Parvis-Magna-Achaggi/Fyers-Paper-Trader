@@ -950,7 +950,7 @@ function buildChart(){
   indBuild();
   chart.subscribeCrosshairMove(param => { legendHover = !!(param && param.time != null && param.point); legendFill(legendHover ? param : null); });
   // scrolled to the left edge by you: load older candles
-  chart.timeScale().subscribeVisibleLogicalRangeChange(r => { if(r && r.from < 15 && Date.now() - histUserAt < 1500) histMore(); });
+  chart.timeScale().subscribeVisibleLogicalRangeChange(r => { if(r && r.from < 15 && Date.now() - histUserAt < 1500) histMore(); pineViewCheck(r); });
   setTimeout(positionTools, 60);
   // remember each indicator pane's height when you drag a divider
   el.addEventListener("mouseup", () => setTimeout(indSaveHeights, 50));
@@ -1682,7 +1682,7 @@ function sessMinutes(){
   return cur && /^MCX:/.test(cur.s) ? 900 : 375;
 }
 function histDays(plan){
-  const want = Math.max(0, ...indList().filter(c => c.type === "pine" && !c.hidden).map(c => +c.bars || (typeof PINE_BARS !== "undefined" ? PINE_BARS : 1500)));
+  const want = Math.max(0, ...indList().filter(c => c.type === "pine" && !c.hidden).map(c => (c.bars && c.bars !== "auto" ? +c.bars : 0) || (typeof PINE_BARS !== "undefined" ? PINE_BARS : 1500)));
   if(!want || !plan.t.min) return plan.days;
   const perDay = Math.max(1, sessMinutes() / plan.t.min);
   return Math.min(400, Math.max(plan.days, Math.ceil(want / perDay * 7 / 5) + 3));    // 7/5: weekends
@@ -1702,6 +1702,7 @@ function aggBars(rows, plan){
 }
 function renderCandles(rows, plan){
   HROWS = rows;
+  for(const r of INDS) if(r.pine) r.pine.reach = 0;       // another chart: Auto scripts start again on the latest bars
   RAW = aggBars(rows, plan);
   volCum = null;
   showRaw();

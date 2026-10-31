@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 1 Nov 2026, version **0.20.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 1 Nov 2026, version **0.20.1**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -109,6 +109,11 @@ busy contract (gzip): turn recording off on the Log page once the question is se
 - **Indicator timeframe:** the worker reads `indicator(timeframe =)` (PineTS keeps it in `ind._sourcePropArgs` /
   `ind.prop`, but doesn't act on it), runs the script on that timeframe's candles (asked of the page like
   request.security) and maps values onto the chart bars in `mapToChart()`. Such sessions re-run in full on ticks.
+- **v0.20.1:** the Timeframe field is offered for every Pine script (the worker applies `props.timeframe` whether or
+  not the script declares it). Bars of history "Auto" (`pineBarsFor()`): 1,500 bars, then `P.reach` = all loaded when
+  the view's left edge passes the script's first bar (`pineViewCheck()` on every visible-range change, 500 ms
+  debounce). Keep the full re-run on each new bar: PineTS updateTail alone drifts on `var` / stateful values across
+  bars that arrived tick by tick (checked: up to 12 points on a running total, 0 within a bar).
 - **Imports:** the page resolves them (`pineLibs()` in pine.js: a saved script named like the import path, then a
   saved `library("Name")`, then `PINE_BUILTIN_LIBS`) and sends `{path: source}` with each run; the worker gives
   PineTS a resolver over that. `TradingView_ta.pine` is our own implementation (standard formulas; ta.supertrend's

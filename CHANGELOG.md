@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.20.1 — 1 Nov 2026 — Any script on another timeframe; scripts follow your scrolling
+
+Added
+- **Timeframe for every Pine script** (owner: "the MA of a 15M chart on a 2M chart"). Settings › Inputs › Calculation
+  has Timeframe and Wait for timeframe closes for all scripts, not only those whose indicator() has timeframe =. The
+  list has the usual timeframes plus your own (pinned / custom, e.g. 87m); ones lower than the chart's are greyed out.
+- **Bars of history: Auto** (the new default). A script starts on the latest 1,500 bars; scroll back past where its
+  line starts and, once you stop, it calculates again over everything the chart has loaded - the same way the chart
+  loads older candles. A number still fixes it at that many bars.
+
+Changed
+- A new bar still re-runs each script in full in the background (it keeps `var` state and drawings exact; the live
+  update alone was shown to drift on stateful scripts); a script slower than 1.5 s per run is re-run at most every
+  5 x its run time.
+
+Tests
+- `tests/indicator_settings_flow.js` now 37 checks: a plain SMA set to 15 minutes on a 2-minute chart equals the SMA
+  worked out from the 15-minute candles (203 values, 0 differ); Auto extends a script from 1,500 to all loaded bars
+  when you scroll back; a fixed number still applies.
+
 ## v0.20.0 — 1 Nov 2026 — Indicator settings, Pine libraries, older candles
 
 Fixed (reported 1 Nov)

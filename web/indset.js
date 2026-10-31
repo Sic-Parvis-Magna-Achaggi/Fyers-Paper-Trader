@@ -101,19 +101,13 @@ function isInputsTab(r){
     return h;
   }
   const P = r.pine || {}, meta = P.meta || [], vals = r.cfg.inputs || {}, it = isItem() || {};
-  if(P.mtf && P.mtf.declared){
-    const v = it.tf != null ? String(it.tf) : String(P.mtf.tf || ""), gaps = it.gaps != null ? !!it.gaps : P.mtf.gaps !== false;
-    const list = IS_TFS.some(x => x[0] === v) ? IS_TFS : [...IS_TFS, [v, v]];
-    h += `<label class="pir" title="The timeframe the script calculates on (higher than the chart's). Chart = the chart's own."><span>Timeframe</span><select data-tf>${list.map(([a, b]) => `<option value="${a}" ${a === v ? "selected" : ""}>${b}</option>`).join("")}</select></label>
-      <label class="pir" title="On: a value shows when its timeframe's bar has closed (no repainting). Off: the last value fills every bar."><span>Wait for timeframe closes</span><input type="checkbox" data-gaps ${gaps ? "checked" : ""}></label>`;
-  }
-  const bars = +r.cfg.bars || PINE_BARS, BARS = [500, 1000, 1500, 3000, 5000, 10000, 20000, 50000];
-  h += `<label class="pir" title="How many of the latest candles the script runs on. More = longer history, a slower first run; live updates stay fast."><span>Bars of history <span class="muted">(app setting)</span></span>
-    <select data-bars>${(BARS.includes(bars) ? BARS : [...BARS, bars].sort((a, b) => a - b)).map(n => `<option value="${n}" ${n === bars ? "selected" : ""}>${n.toLocaleString("en-IN")}</option>`).join("")}</select></label>
+  const auto = !r.cfg.bars || r.cfg.bars === "auto", bars = auto ? 0 : +r.cfg.bars, BARS = [500, 1000, 1500, 3000, 5000, 10000, 20000, 50000];
+  h += `<label class="pir" title="Auto: the latest 1,500 bars at first; scroll back past where the lines start and it calculates over everything the chart has loaded. A number: always that many of the latest bars."><span>Bars of history <span class="muted">(app setting)</span></span>
+    <select data-bars><option value="auto" ${auto ? "selected" : ""}>Auto (follows your scrolling)</option>${(auto || BARS.includes(bars) ? BARS : [...BARS, bars].sort((a, b) => a - b)).map(n => `<option value="${n}" ${n === bars ? "selected" : ""}>${n.toLocaleString("en-IN")}</option>`).join("")}</select></label>
     <label class="pir" title="Every price: the live bar is re-run on each price (TradingView's way). On candle close: once per new candle - for heavy scripts on long histories."><span>Update <span class="muted">(app setting)</span></span>
     <select data-upd><option value="tick">With every price</option><option value="close" ${r.cfg.update === "close" ? "selected" : ""}>On candle close</option></select></label>
-    <div class="muted" style="font-size:11.5px;margin-top:4px">${P.n ? `Runs on ${P.n.toLocaleString("en-IN")} bars now${P.n < bars ? " (all the chart has loaded)" : ""} · full run ${P.ms ?? "–"} ms · live update ${P.tms ?? "–"} ms` : ""}</div>`;
-  if(!meta.length) return h + `<div class="muted" style="padding:8px 0">This script has no inputs${P.err ? " (or it didn't compile)" : ""}.</div>`;
+    <div class="muted" style="font-size:11.5px;margin-top:4px">${P.n ? `Runs on ${P.n.toLocaleString("en-IN")} bars now${P.n >= dispBars().length ? " (all the chart has loaded)" : ""} · full run ${P.ms ?? "–"} ms · live update ${P.tms ?? "–"} ms` : ""}</div>`;
+  if(!meta.length) return h + `<div class="muted" style="padding:8px 0">This script has no inputs${P.err ? " (or it didn't compile)" : ""}.</div>` + isCalc(r);
   const keyOf = m => m.title || m.name || m.varId || m.id;
   const opt = o => typeof o === "object" && o ? [o.value ?? o.title, o.title ?? o.value] : [o, o];
   const ctl = (m, n) => {
@@ -136,7 +130,27 @@ function isInputsTab(r){
     if(row.length === 1) h += `<label class="pir" for="pin${n}"${tip ? ` title="${pesc(tip)}"` : ""}><span>${pesc(first.title || first.name || keyOf(first))}</span>${ctl(first, row[0])}</label>`;
     else h += `<div class="pir pinl"${tip ? ` title="${pesc(tip)}"` : ""}><span>${pesc((first.title || "").trim() || "")}</span><span class="pinc">${row.map((i, j) => (j && (meta[i].title || "").trim() ? `<small>${pesc(meta[i].title.trim())}</small>` : "") + ctl(meta[i], i)).join("")}</span></div>`;
   }
-  return h;
+  return h + isCalc(r);
+}
+/* Calculation: the timeframe the script calculates on, for every Pine script (TradingView offers it on scripts whose
+   indicator() has timeframe =; here any script can have it, e.g. a 15-minute SMA on a 2-minute chart). The list has
+   the usual timeframes plus your own (pinned / custom, like 87m); ones lower than the chart's can't be used. */
+function isTfList(cur0){
+  const chartSec = (parseTf(tf) || {}).min ? parseTf(tf).min * 60 : null, seen = new Set(), out = [["", "Chart"]];
+  const secOf = p => { const m = /^(\d*)([DWM]?)$/.exec(p); if(!m) return 0; const n = +(m[1] || 1); return n * (m[2] === "D" ? 86400 : m[2] === "W" ? 604800 : m[2] === "M" ? 2592000 : 60); };
+  const keys = [...new Set([...TF_ALL, ...(typeof tfFav !== "undefined" ? tfFav : []), tf])];
+  const rows = keys.map(k => { const p = pineTf(k); return [p, k, secOf(p)]; }).filter(([p]) => p && !seen.has(p) && seen.add(p)).sort((a, b) => a[2] - b[2]);
+  for(const [p, k, sec] of rows){ const low = chartSec && sec < chartSec; out.push([p, k + (low ? " (lower than the chart)" : p === pineTf(tf) ? " (the chart's)" : ""), low]); }
+  if(cur0 && !out.some(x => x[0] === cur0)) out.push([cur0, cur0, false]);
+  return out;
+}
+function isCalc(r){
+  if(r.cfg.type !== "pine") return "";
+  const P = r.pine || {}, it = isItem() || {}, M = P.mtf || {};
+  const v = it.tf != null ? String(it.tf) : String(M.tf || ""), gaps = it.gaps != null ? !!it.gaps : M.gaps !== false;
+  return `<div class="pig">Calculation</div>
+    <label class="pir" title="The timeframe the script calculates on (higher than the chart's), e.g. a 15-minute moving average on a 2-minute chart. Chart = the chart's own."><span>Timeframe</span><select data-tf>${isTfList(v).map(([a, b, low]) => `<option value="${a}" ${a === v ? "selected" : ""} ${low ? "disabled" : ""}>${pesc(b)}</option>`).join("")}</select></label>
+    <label class="pir" title="On: a value shows on the bar where its timeframe's bar closes (no repainting). Off: each value also fills the bars until the next close."><span>Wait for timeframe closes</span><input type="checkbox" data-gaps ${gaps ? "checked" : ""}></label>`;
 }
 
 /* ------------------------------------------------------------------ Style */
@@ -219,7 +233,7 @@ function isWire(box, r){
   });
   const tfSel = box.querySelector("[data-tf]"); if(tfSel) tfSel.onchange = () => isSave(it => { it.tf = tfSel.value; }, (r2, it) => isRefresh(r2, it, "inputs"));
   const gp = box.querySelector("[data-gaps]"); if(gp) gp.onchange = () => isSave(it => { it.gaps = gp.checked; }, (r2, it) => isRefresh(r2, it, "inputs"));
-  const bs = box.querySelector("[data-bars]"); if(bs) bs.onchange = () => isSave(it => { it.bars = +bs.value; }, () => loadHistory());
+  const bs = box.querySelector("[data-bars]"); if(bs) bs.onchange = () => isSave(it => { if(bs.value === "auto") delete it.bars; else it.bars = +bs.value; }, r2 => { if(r2 && r2.pine) r2.pine.reach = 0; loadHistory(); });
   const up = box.querySelector("[data-upd]"); if(up) up.onchange = () => isSave(it => { if(up.value === "close") it.update = "close"; else delete it.update; });
   // built-in inputs
   box.querySelectorAll("[data-b]").forEach(inp => inp.addEventListener("change", () =>
