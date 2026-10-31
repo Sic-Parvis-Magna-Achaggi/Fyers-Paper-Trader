@@ -6,6 +6,11 @@ It runs on our own server and serves its own page, so there is nothing to instal
 
 **Address:** https://68-183-245-178.sslip.io
 
+## Version 0.19.0: the phone layout
+
+- **A proper phone version, like MT5's app:** tabs at the bottom (Quotes · Chart · Trade · History · More), a full-height chart with one-tap SELL / BUY, an order sheet with big − / + buttons, and a sheet for each position: move SL / target, BE, trailing, close.
+- **Full screen** with ⛶ or by turning the phone sideways. Phones get it automatically; More → Desktop layout switches.
+
 ## Version 0.18.0: P&F toolkit, second set
 
 - **Horizontal counts and patterns** on P&F: traps, catapults, poles, triangles, turtle breakouts, anchor follow-through.
@@ -87,7 +92,7 @@ Next: the journal in the app, with Telegram screenshots.
 | --- | --- |
 | `tests/` | The test kit (fake Fyers feed, route check, engine and browser tests); not used on the server. See `tests/README.md` |
 | `helper/` | The Python server (FastAPI). `app.py` has the routes; `fyers_link.py` handles Fyers login and data; `feed.py` handles live prices; `symbols.py` handles the contract list; `users.py` handles users, 2FA, sessions, encryption and the security log; `rt.py` runs each user's Fyers link, price feed and paper accounts; `paper.py` is the paper engine; `charges.py` holds every charge |
-| `web/` | The page (`index.html`), the trade panel (`paper.js`), Pine Script (`pine.js`, `pine_worker.js`) and bundled libraries in `vendor/`: Lightweight Charts (Apache-2.0), PineTS (AGPL-3.0), CodeMirror 5 (MIT) |
+| `web/` | The page (`index.html`), the trade panel (`paper.js`), the phone layout (`mobile.js`, `mobile.css`), Pine Script (`pine.js`, `pine_worker.js`) and bundled libraries in `vendor/`: Lightweight Charts (Apache-2.0), PineTS (AGPL-3.0), CodeMirror 5 (MIT) |
 | `server/` | Install and auto-update scripts, the service files and the Caddy config |
 | `docs/` | Project brief, server details, setup guide |
 

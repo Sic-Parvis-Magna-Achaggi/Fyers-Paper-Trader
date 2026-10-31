@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 31 Oct 2026 (v0.18.0). This is the one task list for the project.
+Updated 1 Nov 2026 (v0.19.0). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -43,12 +43,20 @@ Updated 31 Oct 2026 (v0.18.0). This is the one task list for the project.
    - Pick a layout to open the chart exactly like that. Saved on the server, so every device has them.
 6. [ ] **Multi-charts in a layout** (asked 31 Oct 2026)
    - Several charts side by side and stacked (vertical and horizontal splits) inside one layout, each with its own contract, timeframe and indicators. Saved with the layout.
-7. [ ] **A proper mobile version** (asked 31 Oct 2026: "the mobile version is pathetic; I can't open the charts in full screen")
-   - Use the MT5 mobile app as the reference: a full-screen chart, simple bottom navigation (Quotes, Chart, Trade, History), one-tap trading and the position controls reachable with a thumb.
-
-8. [ ] **Measurement tool, a mix of MT5 and TradingView** (asked 31 Oct 2026)
+7. [ ] **Measurement tool, a mix of MT5 and TradingView** (asked 31 Oct 2026)
    - MT5's crosshair ruler (click-drag from a point: price change, % and bars / time, shown at the cursor) and TradingView's measure box (shaded box, green up / red down, change in points, %, ticks, bars, time and volume).
    - Plus what fits this app: the net ₹ for your lot size after all charges, and R against the current SL. Works on every chart type (P&F in boxes).
+
+8. [ ] **CFD prices for prop-firm analysis** (asked 31 Oct 2026: analysis only, for prop-firm trades, not broker trades). **On hold** (owner, 31 Oct 2026).
+   - Main source, free: the prop firm's own MT5. A small EA on that terminal sends every bid / ask tick (and back-history) for chosen symbols to the app, so charts use exactly the prices the prop firm fills at (they differ between CFD providers). Works while that MT5 runs (PC or VPS).
+   - In the app: every chart type, every indicator / Pine script, the P&F toolkit and paper trading on those symbols.
+   - Backup when MT5 is off: a free API (Twelve Data: 800 requests / day, 8 stream symbols "trial"; or AllTick's free stream) for a few forex / gold symbols, labelled as not the prop firm's prices. Global index CFDs have no good free source besides MT5.
+
+9. [ ] **Drawing tools, TradingView's full set** (asked 31 Oct 2026)
+   - Lines (trend line, ray, extended, horizontal / vertical line and ray, parallel channel, regression), Fibonacci (retracement, extension, fan, time zones), pitchforks, Gann, shapes (rectangle, circle, path, brush), text / notes / callouts, arrows, price and date ranges.
+   - **Magnet**: snaps to the bar's open / high / low / close (weak and strong modes, as on TradingView); lock, hide, clone, colours and styles; drawings saved per contract on the server.
+   - **Long / short position tools** for looking back: entry, stop and target drawn on past bars, showing risk, reward, R, and whether the stop or the target was hit first (and when). Separate from the trade manager: no orders, just a drawing.
+   - Work on every chart type (P&F included) and on the phone layout.
 
 ## Rules that shape live trading and other users (checked 30 Oct 2026)
 
@@ -70,12 +78,14 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Small follow-ups
 
+- [ ] The owner checks the phone layout on his own phone (tested on emulated Android and iPhone screens in Chromium, not on a real iPhone / Safari).
 - [ ] Partial closes.
 - [ ] Agri MCX contracts use the non-agri rates (low priority: Fyers doesn't offer agri commodities at present).
 - [ ] Ask Fyers in writing whether a second user's app may fetch market data from this server's IP (support request drafted 30 Oct).
 
 ## Done
 
+- [x] **v0.19.0** (1 Nov): the phone layout, like MT5's app (asked 31 Oct): bottom tabs (Quotes · Chart · Trade · History · More), full-height chart with one-tap SELL / BUY, order sheet, position and order sheets (SL / TP steppers, BE, trailing, close), full screen and landscape, LIVE badge and KILL.
 - [x] **v0.18.0** (31 Oct): P&F toolkit second set (horizontal counts, traps, catapults, poles, triangles, turtle, anchor follow-through).
 - [x] **v0.17.0** (31 Oct): every indicator on every chart type, P&F included (Pine compatibility test); the P&F toolkit (trend lines and breaks, signals, anchors, vertical counts).
 - [x] **v0.16.0** (31 Oct): Point & Figure chart type; the order-flow check (records the feed to measure whether it carries every trade).

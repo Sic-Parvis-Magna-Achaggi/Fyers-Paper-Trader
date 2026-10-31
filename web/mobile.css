@@ -1,0 +1,176 @@
+/* The phone layout (web/mobile.js switches it on with body.mob): a full-height chart, a one-tap SELL / BUY bar, an
+   order sheet that slides up, and five tabs at the bottom - Quotes, Chart, Trade, History, More (like MT5's app).
+   The desktop layout is untouched: everything here is under body.mob. */
+#mob{display:none}
+body.mob{--mt:48px;--mo:var(--mt);--mn:58px;--mb:58px;--sb:env(safe-area-inset-bottom,0px);overscroll-behavior:none}
+body.mob #mob{display:block}
+body.mob #app.hide ~ #mob{display:none!important}         /* not on the login screens */
+body.mob #app > header,body.mob #panel,body.mob main > aside,body.mob #ctools,body.mob #tool,body.mob #posbars,
+body.mob #bPine,body.mob #bPanel,body.mob #cSym,body.mob #cLtp,body.mob #cMeta,body.mob .charthead .spacer,body.mob #liveWarn,body.mob #pineDock{display:none!important}
+body.mob main{display:block!important;overflow:hidden}
+body.mob section.chartwrap{position:fixed;left:0;right:0;top:var(--mo);bottom:calc(var(--mn) + var(--mb) + var(--sb));display:flex;flex-direction:column;z-index:1}
+body.mob .charthead{flex-wrap:nowrap;overflow-x:auto;gap:4px;padding:4px 6px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+body.mob .charthead::-webkit-scrollbar{display:none}
+body.mob .charthead > *{flex:0 0 auto}
+body.mob .charthead button{min-height:34px;padding:4px 10px}
+body.mob #tf{flex-wrap:nowrap}
+body.mob #cTimer{font-size:11px}
+body.mob #chart{flex:1;min-height:0}
+
+/* top bar */
+#mTop{position:fixed;top:0;left:0;right:0;height:var(--mt);display:flex;align-items:center;gap:6px;padding:0 8px;background:var(--panel);border-bottom:1px solid var(--line);z-index:50}
+#mTop button{border:0;background:transparent;padding:4px 6px;min-height:40px;color:var(--text)}
+#mAcct{display:flex;flex-direction:column;align-items:flex-start;line-height:1.15;max-width:38%;text-align:left}
+#mAcct b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+#mAcct span{font-size:11px;color:var(--muted);font-family:var(--mono)}
+#mSym{flex:1;display:flex;flex-direction:column;align-items:center;line-height:1.15;min-width:0}
+#mSym b{font-family:var(--mono);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+#mSym span{font-family:var(--mono);font-size:13px}
+#mBack{font-size:15px;color:var(--accent)!important}
+#mLive{background:var(--down)!important;color:#fff!important;font-weight:700;font-size:11px;border-radius:5px;min-height:26px!important;padding:2px 7px!important}
+#mKill{background:var(--down)!important;color:#fff!important;font-weight:700;border-radius:6px;min-height:32px!important;padding:2px 10px!important}
+#mFeed{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:0 0 auto}
+#mFeed.ok{background:var(--up)} #mFeed.warn{background:var(--warn)}
+body.mob.is-live #mTop{border-bottom:2px solid var(--down)}
+#mWarn{position:fixed;top:var(--mt);left:0;right:0;z-index:45;background:color-mix(in srgb,var(--down) 16%,var(--panel));border-bottom:1px solid var(--down);font-size:12px;padding:5px 10px}
+#mWarn:empty{display:none}
+
+/* one-tap bar and the position chips (chart tab) */
+#mBar{position:fixed;left:0;right:0;bottom:calc(var(--mn) + var(--sb));height:var(--mb);display:grid;grid-template-columns:1fr auto 1fr;gap:6px;padding:6px 8px;background:var(--panel);border-top:1px solid var(--line);z-index:20}
+#mBar button{border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1;font-weight:600}
+#mSell{background:var(--down);border-color:var(--down);color:#fff}
+#mBuy{background:var(--up);border-color:var(--up);color:#fff}
+#mSell b,#mBuy b{font-family:var(--mono);font-size:14px}
+#mSell span,#mBuy span{font-size:11px;opacity:.9}
+#mSize{min-width:86px;font-size:12px;background:var(--panel2)}
+#mSize small{color:var(--muted);font-weight:400}
+body.mob.is-live #mBar{box-shadow:inset 0 2px 0 var(--down)}
+#mChips{position:fixed;left:0;right:0;bottom:calc(var(--mn) + var(--mb) + var(--sb));z-index:19;display:flex;gap:6px;overflow-x:auto;padding:0 8px 6px;pointer-events:none}
+#mChips button{pointer-events:auto;flex:0 0 auto;border-radius:999px;padding:6px 12px;font-size:12px;background:var(--panel);box-shadow:0 2px 8px rgba(0,0,0,.25);min-height:34px}
+#mChips button b{font-family:var(--mono)}
+body.mob:not([data-ms="chart"]) #mBar,body.mob:not([data-ms="chart"]) #mChips{display:none}
+
+/* bottom tabs */
+#mNav{position:fixed;left:0;right:0;bottom:0;height:calc(var(--mn) + var(--sb));padding-bottom:var(--sb);display:grid;grid-template-columns:repeat(5,1fr);background:var(--panel);border-top:1px solid var(--line);z-index:50}
+#mNav button{position:relative;border:0;border-radius:0;background:transparent;color:var(--muted);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:11px;padding:0}
+#mNav button svg{width:22px;height:22px}
+#mNav button.on{color:var(--accent)}
+#mNav .nb{position:absolute;top:5px;left:calc(50% + 6px);font-style:normal;background:var(--accent);color:#fff;border-radius:9px;font-size:10px;padding:0 5px;min-width:16px}
+
+/* the other tabs: full screens between the top bar and the tabs */
+.mscr{position:fixed;left:0;right:0;top:var(--mo);bottom:calc(var(--mn) + var(--sb));overflow:auto;background:var(--bg);z-index:30;display:none;padding:10px 10px 24px;-webkit-overflow-scrolling:touch}
+body.mob[data-ms="quotes"] #ms_quotes,body.mob[data-ms="trade"] #ms_trade,body.mob[data-ms="history"] #ms_history,body.mob[data-ms="more"] #ms_more{display:block}
+#ms_quotes{padding:0}
+#ms_quotes aside{border:0;height:100%}
+#ms_quotes .row{padding:12px 10px;border-bottom:1px solid var(--line);border-radius:0}
+#ms_quotes .row .x{opacity:1;padding:6px 10px}
+#ms_quotes input{font-size:16px}
+body.mob #pages{position:fixed!important;left:0;right:0;top:var(--mo);bottom:calc(var(--mn) + var(--sb));overflow:auto;z-index:35;padding:10px!important}
+body.mob #drawer{width:100%!important;max-width:100%!important;z-index:90}
+body.mob input,body.mob select{font-size:16px}          /* no zoom-in on focus (iOS) */
+
+.mcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px}
+.mcard.live{border-color:var(--down)}
+.mh{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 2px 6px;display:flex;align-items:center;gap:8px}
+.mh .sp{flex:1}
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
+.mgrid div span{display:block;font-size:11px;color:var(--muted)}
+.mgrid div b{font-family:var(--mono);font-size:14px}
+.mpos{display:block;width:100%;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;color:var(--text)}
+.mpos .r1{display:flex;align-items:center;gap:8px}
+.mpos .r1 .sym{font-family:var(--mono);font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mpos .r1 .net{font-family:var(--mono);font-size:15px;font-weight:600}
+.mpos .r2{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--muted);margin-top:4px}
+.mpos .r2 b{color:var(--text);font-weight:500;font-family:var(--mono)}
+.mpos .fy{font-size:11.5px;margin-top:4px}
+#mob .side{font-weight:700;font-size:12px}
+.mbtns{display:flex;gap:8px;margin-top:10px}
+.mbtns button{flex:1;min-height:44px}
+.mempty{color:var(--muted);text-align:center;padding:24px 8px}
+.mlist button{display:flex;width:100%;align-items:center;gap:12px;text-align:left;padding:14px 12px;background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:8px;min-height:52px;color:var(--text);font-size:15px}
+.mlist button span{flex:1}
+.mlist button small{color:var(--muted)}
+.mseg{display:flex;gap:4px;margin:6px 0}
+.mseg button{flex:1;min-height:40px;font-size:13px}
+.mseg button.on{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.mhist{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px}
+.mhist .r1{display:flex;gap:8px;align-items:center}
+.mhist .r1 .sym{flex:1;font-family:var(--mono);font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mhist .r2{font-size:12px;color:var(--muted);margin-top:3px}
+.mhist .bd{margin-top:8px;font-size:12px}
+.mhist .bd div{display:flex;justify-content:space-between}
+
+/* bottom sheets: the order ticket, a position, an order, the account switcher */
+#mSheetBg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:79;display:none}
+#mSheet{position:fixed;left:0;right:0;bottom:0;max-height:86vh;overflow:auto;background:var(--panel);border-radius:16px 16px 0 0;z-index:80;
+  transform:translateY(105%);transition:transform .18s ease-out;padding:6px 14px calc(14px + var(--sb));box-shadow:0 -10px 30px rgba(0,0,0,.35);-webkit-overflow-scrolling:touch}
+#mSheet.open{transform:translateY(0)}
+#mSheet.mini .sbody{display:none}
+#mSheet.ticket{max-height:64vh}                     /* the chart (with the SL / TP lines) stays visible above */
+#mSheetBg.open{display:block}
+#mSheetBg.ticket{background:transparent;pointer-events:none}
+.sgrip{width:40px;height:4px;border-radius:2px;background:var(--line);margin:4px auto 8px}
+.shead{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.shead b{flex:1;font-family:var(--mono);font-size:15px}
+.shead button{border:0;background:transparent;font-size:20px;padding:2px 8px;color:var(--muted)}
+.sides2{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:4px 0 8px}
+.sides2 button{min-height:44px;font-weight:700}
+.sides2 button.on.buy{background:var(--up);border-color:var(--up);color:#fff}
+.sides2 button.on.sell{background:var(--down);border-color:var(--down);color:#fff}
+.mrow{display:grid;grid-template-columns:86px 1fr;align-items:center;gap:8px;margin:7px 0}
+.mrow > span{font-size:13px;color:var(--muted)}
+.mrow > span i{display:block;font-style:normal;font-size:11.5px}
+.step{display:grid;grid-template-columns:44px 1fr 44px;gap:4px}
+.step button{min-height:44px;font-size:20px;padding:0}
+.step input{text-align:center;font-family:var(--mono);min-height:44px}
+.step.r{grid-template-columns:44px 1fr 44px 64px}
+.mpv{background:var(--panel2);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:13px}
+.mpv div{display:flex;justify-content:space-between;gap:10px;padding:2px 0}
+.mpv div span:first-child{color:var(--muted)}
+.mpv .note{color:var(--muted);font-size:12px;display:block}
+.mpv .note.down{color:var(--down)}
+button.mplace{width:100%;min-height:52px;font-size:16px;font-weight:700;border-radius:10px;color:#fff}
+button.mplace.buy{background:var(--up);border-color:var(--up)}
+button.mplace.sell{background:var(--down);border-color:var(--down)}
+button.mplace:disabled{opacity:1;filter:grayscale(.75);color:rgba(255,255,255,.7)}
+button.mplace.live{outline:3px solid var(--down);outline-offset:2px}
+.mtog{display:grid;grid-template-columns:1fr 64px 76px;gap:6px;align-items:center;margin:6px 0}
+.mtog span{font-size:13px}
+.mtog input{text-align:center;font-family:var(--mono);min-height:40px}
+.mtog button{min-height:40px}
+.mtog button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* popovers become sheets above the tabs */
+body.mob #tfPick,body.mob #indPick,body.mob #cfgPick,body.mob #ctPick{position:fixed!important;left:8px!important;right:8px!important;top:auto!important;
+  bottom:calc(var(--mn) + var(--mb) + var(--sb) + 8px)!important;width:auto!important;max-height:65vh!important;overflow:auto!important;z-index:60!important}
+body.mob #codeAsk,body.mob .modalwrap{z-index:95}
+/* messages drop in under the top bar (as on a phone), clear of the trade controls */
+body.mob .toast{top:calc(var(--mo) + 6px);bottom:auto;z-index:120;max-width:calc(100% - 24px);width:max-content;text-align:center;font-size:12.5px;padding:7px 12px;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+body.mob.chartfs .toast{top:44px}
+body.mob #ctimer{font-size:10px;overflow:hidden;white-space:nowrap}
+
+/* full screen: the chart, its slim toolbar and the SELL / BUY bar (one-tap trading stays, as in MT5) */
+body.mob.chartfs #mTop,body.mob.chartfs #mNav,body.mob.chartfs #mWarn{display:none!important}
+body.mob.chartfs main{position:fixed!important;top:0;left:0;right:0;bottom:calc(var(--mb) + var(--sb));z-index:40}
+body.mob.chartfs section.chartwrap{position:absolute;inset:0}
+body.mob.chartfs[data-ms="chart"] #mBar{display:grid;bottom:var(--sb)}
+body.mob.chartfs[data-ms="chart"] #mChips{display:flex;bottom:calc(var(--mb) + var(--sb));z-index:41}
+/* phones on their side: slimmer bars */
+@media (orientation:landscape) and (max-height:520px){
+  body.mob{--mt:40px;--mn:46px;--mb:46px}
+  #mNav button span{display:none}
+  #mBar button{flex-direction:row;gap:8px}
+}
+/* PLACE stays in reach at the bottom of the order sheet, however long the sheet is */
+#mSheet button.mplace{position:sticky;bottom:0;z-index:2;box-shadow:0 -8px 14px var(--panel)}
+/* narrow phones (320-360px): tighter rows so every box keeps room for a price */
+@media (max-width:360px){
+  #mSheet{padding-left:10px;padding-right:10px}
+  .mrow{grid-template-columns:62px 1fr;gap:6px}
+  .mrow > span{font-size:12px}
+  .step{grid-template-columns:38px 1fr 38px;gap:3px}
+  .step.r{grid-template-columns:36px 1fr 36px 44px}
+  .mseg button{font-size:12px;padding:4px 2px;white-space:nowrap}
+  .sides2 button{font-size:13px}
+  #mSize{min-width:72px}
+}

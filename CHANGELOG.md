@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.19.0 — 1 Nov 2026 — The phone layout
+
+Added
+- **A separate phone layout, modelled on MT5's mobile app.** Phones get it automatically; a desktop browser never
+  does. Five tabs at the bottom: Quotes · Chart · Trade · History · More.
+- **Chart tab:** the chart fills the screen between a slim top bar (account and equity, contract and price, a feed
+  dot) and a one-tap bar: **SELL (bid) · size · BUY (ask)**. Open positions show as chips above the bar with their
+  net P&L.
+- **Order sheet** (slides up from BUY / SELL): side, Market / Limit / Stop, price, stop loss and target with − / +
+  tick buttons (hold to repeat), target as R, size (Risk % / Risk ₹ / Lots), product, option stops on the option or
+  the future, the server's preview (lots, net ₹ at stop and target, BE + costs, charges, margin) and a big PLACE.
+  The reason an order can't go (a rule, the margin, the intraday cut-off) shows right above PLACE. The SL / TP lines
+  stay draggable on the chart; tap the sheet's grip to fold it away while you drag. It drives the desktop ticket
+  itself, so the sizing, rules and charges are identical.
+- **Position sheet** (tap a chip or a trade): net P&L, R, LTP, BE + costs, charges paid; SL and target steppers with
+  Save / Undo; BE-T and TRAIL for that trade with their R; BE now; open its chart; Close at market (two taps). On a
+  Live account it shows the stop at Fyers.
+- **Order sheet for pending orders:** move the price, SL and target; cancel.
+- **Trade tab:** account figures (balance, equity, open and today's P&L, day / max room, margin, open risk, trades
+  and charges today), position and order cards, BE all, Close all (two taps), Cancel all, trailing defaults.
+- **History tab:** Today / 7 days / 30 days / All with net P&L, win rate, profit factor, average R and charges; tap
+  a trade for every charge. The full History page is a tap away.
+- **More tab:** account, rules and charges; switch account; trades table; order book; log; settings; theme;
+  desktop layout; log out.
+- **Full screen** (⛶): just the chart and the SELL / BUY bar. Turning the phone sideways on the Chart tab does the
+  same, as in MT5.
+- **Live accounts on the phone:** red LIVE badge and KILL in the top bar, live warnings under it, LIVE on PLACE.
+- **Layout switch:** More → Desktop layout, and Settings → Layout (Automatic / Phone / Desktop) to come back.
+- **Tests:** `tests/mobile_flow.js` (47 checks on an emulated Pixel 7).
+
+Changed
+- Nothing on the desktop page (the phone layout is its own file, `web/mobile.js` + `web/mobile.css`).
+
 ## v0.18.0 — 31 Oct 2026 — P&F toolkit, second set
 
 Added

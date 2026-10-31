@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 31 Oct 2026, version **0.18.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 1 Nov 2026, version **0.19.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -11,7 +11,7 @@ an old zip. Every release: changelog text, a one-line commit message, the versio
 updated; `tests/routes_check.py` passes; the guide updated when behaviour changes; the project copies of the guide
 and roadmap updated too.
 
-## How the code is laid out (v0.18)
+## How the code is laid out (v0.19)
 
 - `helper/app.py`: FastAPI routes. Login is username + password + TOTP code; sensitive routes need a fresh code
   (HTTP 428, the page asks and retries). `X-Acct` header picks the paper account.
@@ -48,8 +48,15 @@ and roadmap updated too.
   (login gates, 2FA set-up, step-up, Security and Users settings, account switcher), `web/live.js` (LIVE badge, KILL,
   live warnings, the Fyers stop on each position, the Live card, the Paper <-> Live dialog; it wraps paperUpdate,
   renderPlan, pgPositions and pgAccount).
+- `web/mobile.js` + `web/mobile.css`: the phone layout (body class `mob`, chosen by `mWant()`: width <= 760 or a
+  touch screen under 500 px, or the `ftm.layout` override in localStorage). Loaded after the page's inline script; it
+  wraps onTick, openSymbol, feedPill, setFull, pgShow, openDrawer, refreshState, paperUpdate, renderTicket and
+  renderPlan. It adds its own shell (`#mob`: top bar, SELL / BUY bar, chips, tabs, screens, one bottom sheet), moves
+  the `<aside>` into the Quotes tab, and hides the desktop header / panel. The order sheet never keeps its own
+  ticket state: it sets the desktop ticket's inputs and fires their change events, or clicks its buttons, so
+  `paper.js` stays the only ticket logic. CSS for it lives only under `body.mob` / `#mob`.
 - `tests/`: the test kit (fake Fyers feed and order API, route check, engine tests incl. `live_test.py`, browser
-  tests incl. `live_flow.js`). See `tests/README.md`.
+  tests incl. `live_flow.js` and `mobile_flow.js`). See `tests/README.md`.
 
 ## Users on the server
 
@@ -109,5 +116,7 @@ indicator option to add (not built).
 1. The owner's first real trade (Monday at the earliest): whitelist 134.209.159.171 (order permission), turn on
    Live, 1 lot on MCX. Fix whatever that shows.
 2. Compare the app's charges with what Fyers deducted (roadmap item 1, last part).
-3. Monday: read the order-flow check with the owner; the footprint only if it's exact. Then Telegram alerts, the journal, saved layouts,
-   multi-charts and the mobile version (roadmap items 3-7, in that order).
+3. Monday: read the order-flow check with the owner; the footprint only if it's exact. Then Telegram alerts, the
+   journal, saved layouts, multi-charts, the measurement tool and the drawing tools (roadmap items 3-7 and 9, in
+   that order; item 8, CFD prices, is on hold).
+4. The owner tries the phone layout (v0.19.0) on his phone; fix what he reports.

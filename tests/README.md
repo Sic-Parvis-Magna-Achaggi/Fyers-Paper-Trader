@@ -16,6 +16,7 @@ FYERS_HELPER_DATA=/tmp/fyers_test node tests/security_flow.js      # upgrade log
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/live_flow.js          # Live on (client ID + 2FA), a trade, its Fyers stop, kill switch, back to Paper
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/charttypes_flow.js    # every chart type with Volume + 2 Pine scripts lined up, live ticks
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/pine_compat_flow.js   # the Pine battery (tests/pine_compat.js) on every chart type; the P&F toolkit
+FYERS_HELPER_DATA=/tmp/fyers_test node tests/mobile_flow.js        # the phone layout on an emulated Pixel 7: order sheet, positions, tabs, full screen (resets the admin's paper account)
 ```
 
 `fake_broker.py` is a fake Fyers order API (place / modify / cancel / order book / positions and order updates). It

@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#11151c">
 <title>Fyers Trade Manager</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -474,6 +475,7 @@ button.place.live,#tool .tp.live{outline:2px solid var(--down);outline-offset:2p
 #acctSel{width:auto;max-width:240px;padding:4px 8px;font-size:13px}
 body:not(.is-admin) .admin-only{display:none!important}
 </style>
+<link rel="stylesheet" href="/static/mobile.css?v=__V__">
 </head>
 <body data-page="chart">
 
@@ -1982,5 +1984,6 @@ clock(); setInterval(clock, 1000);
 setInterval(() => { if(!$("#app").classList.contains("hide")) refreshState(); }, 30000);
 boot();
 </script>
+<script src="/static/mobile.js?v=__V__"></script>
 </body>
 </html>
