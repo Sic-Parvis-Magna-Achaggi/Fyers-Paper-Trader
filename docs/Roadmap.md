@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 1 Nov 2026 (v0.20.6). This is the one task list for the project.
+Updated 1 Nov 2026 (v0.20.7). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -58,6 +58,13 @@ Updated 1 Nov 2026 (v0.20.6). This is the one task list for the project.
    - **Long / short position tools** for looking back: entry, stop and target drawn on past bars, showing risk, reward, R, and whether the stop or the target was hit first (and when). Separate from the trade manager: no orders, just a drawing.
    - Work on every chart type (P&F included) and on the phone layout.
 
+10. [ ] **Keep the candles the app saw live** (asked 1 Nov 2026). Fyers rewrote GOLDPETAL NOV's 30 Oct after the close
+    (its history and its own chart show a thin day ending at 14,201; the real Friday fell to 13,960 on heavy volume).
+    - The server builds candles from the live feed as they happen (for the contracts it's streaming), and keeps them.
+    - When Fyers' history for a finished day disagrees badly with what the app saw live (price path, volume), the live
+      candles are used, with a note on the chart; a setting chooses. Design to agree before building (it changes which
+      data charts and indicators use).
+
 ## Rules that shape live trading and other users (checked 30 Oct 2026)
 
 Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers' rules in force from 1 Apr 2026.
@@ -80,11 +87,14 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 - [ ] The owner checks the phone layout on his own phone (tested on emulated Android and iPhone screens in Chromium, not on a real iPhone / Safari).
 - [ ] Partial closes.
+- [ ] **Fyers support (owner, 1 Nov):** GOLDPETAL26NOVFUT's history for 29-30 Oct doesn't match Fyers' own live prices
+  (drafted 1 Nov). When Fyers fixes it, the app takes the corrected days on its own within a week (v0.20.7).
 - [ ] Agri MCX contracts use the non-agri rates (low priority: Fyers doesn't offer agri commodities at present).
 - [ ] Ask Fyers in writing whether a second user's app may fetch market data from this server's IP (support request drafted 30 Oct).
 
 ## Done
 
+- [x] **v0.20.7** (1 Nov): a day Fyers corrects later reaches the saved candles (the week before is re-checked); v0.20.6's explanation corrected (Fyers rewrote GOLDPETAL's 30 Oct; its own chart shows the same).
 - [x] **v0.20.6** (1 Nov): charts show the contract you opened: history no longer asks for Fyers' continuous series (GOLDPETAL NOV's 30 Oct came back as the expiring OCT contract); saved futures / options candles reloaded once; the browser re-takes the last 3 days from the server (reported 1 Nov).
 - [x] **v0.20.5** (1 Nov): empty candles at the closing price after MCX closes (no volume, away from the last trade) left off the chart, P&F, indicators and Pine; Chart settings switch (reported 1 Nov).
 - [x] **v0.20.4** (1 Nov): P&F zoomed out shows X's and O's (flattened to the column's width, then solid / hollow columns), never thin lines (reported 1 Nov).

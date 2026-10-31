@@ -1817,9 +1817,9 @@ async function loadHistory(){
   const have = saved && saved.rows && saved.rows.length && saved.from <= wantFrom + 86400;
   if(have) renderCandles(saved.rows.filter(r => r[0] >= wantFrom - 86400), plan);      // at once, from this browser
   if(!(S.fyers||{}).logged_in){ if(!have){ msg.textContent = "Log in to Fyers to load charts."; series.setData([]); } return; }
-  // the last 3 days come from the server every time (cheap: its own copy), so a day the server has corrected since
-  // replaces this browser's copy; older days are kept as saved
-  const since = have ? saved.rows[saved.rows.length - 1][0] - 3 * 86400 : 0;
+  // the last 7 days come from the server every time (cheap: its own copy), as far back as the server re-checks them
+  // with Fyers, so a day corrected since replaces this browser's copy; older days are kept as saved
+  const since = have ? saved.rows[saved.rows.length - 1][0] - 7 * 86400 : 0;
   const j = await api(`/api/history?symbol=${encodeURIComponent(cur.s)}&res=${plan.res}&days=${days}${since ? "&since=" + since : ""}`);
   if(my !== histToken) return;
   if(!j.ok){

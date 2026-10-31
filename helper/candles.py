@@ -16,6 +16,9 @@ IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 _dbs: dict = {}            # one database per user (u/<user>/candles.db): each user's candles come from their own login
 _lock = threading.Lock()
 FRESH_SEC = 45            # ask Fyers for new candles at most this often per chart
+RECHECK_DAYS = 7          # each fetch of new candles also takes the week before again (still one request): Fyers
+                          # sometimes rewrites a finished day (GOLDPETAL NOV's 30 Oct after the close), and a correction
+                          # it makes later then reaches the saved candles too
 
 
 def _conn(folder: str = ""):
@@ -119,7 +122,7 @@ def get(link, symbol: str, res: str, days: int, since: int = 0) -> list:
                 last = _conn(F).execute("SELECT MAX(t) FROM bars WHERE sym=? AND res=?", (symbol, res)).fetchone()[0]
             frm = dt.datetime.fromtimestamp(last, IST).date() if last else first
             try:
-                a = max(frm, today - dt.timedelta(days=cap))
+                a = max(frm - dt.timedelta(days=RECHECK_DAYS), first, today - dt.timedelta(days=cap))
                 rows = link.history_range(symbol, res, a, today)
                 with _lock:
                     _replace(F, symbol, res, a, today, rows)

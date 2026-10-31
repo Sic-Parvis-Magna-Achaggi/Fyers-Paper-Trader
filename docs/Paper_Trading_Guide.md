@@ -134,7 +134,7 @@ Phones get their own layout, like MT5's app (a desktop browser never does). **Mo
   - colour and style for every line: bid, ask, last, entry, SL, TP, BE, order and new-trade entry;
   - show or hide bid, ask and last;
   - candle colours, zone colours and strength, background and grid;
-  - Charts always show the contract you opened: a futures chart is that expiry's own candles, never Fyers' "continuous" series (which can fill a day with another expiry, e.g. the expiring month on its last day).
+  - Charts always show the contract you opened (never Fyers' "continuous" series), exactly as Fyers' own charts do. Candles are Fyers' history: if Fyers rewrites a day (it did GOLDPETAL NOV's 30 Oct after the close), the chart shows Fyers' version; when Fyers corrects it, the app picks the correction up within a week of that day.
   - **Hide no-trade candles** (on by default): after MCX closes, Fyers' history can carry the exchange's closing price on empty candles (GOLDPETAL on 30 Oct: last trade 13,960, then candles at 14,201 with no volume until 23:55). No one traded at that price, so these candles are left off the chart, P&F, indicators and Pine scripts. Only candles with **no volume at a price away from the last trade** are hidden; quiet candles at the last price and indices (which have no volume) stay. Untick it to see Fyers' candles exactly as sent.
 
   They're saved with your preferences.

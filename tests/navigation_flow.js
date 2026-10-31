@@ -100,7 +100,7 @@ let br;
   await pg.waitForFunction(() => cur && cur.s === "MCX:CRUDEOIL26NOVFUT" && RAW.length > 100, null, { timeout: 30000 });
 
   // ---------------------------------------------------------------- this browser's copy of the candles (owner, 1 Nov: an old copy
-  // and the server disagreed): the last 3 days come from the server every time a chart opens
+  // and the server disagreed): the last 7 days come from the server every time a chart opens
   const bc = await pg.evaluate(async () => {
     const key = cur.s + "|" + curPlan.res, saved = await CDB.get(key);
     const i = saved.rows.findIndex(r => r[0] > Date.now() / 1000 - 2 * 86400), t = saved.rows[i][0];

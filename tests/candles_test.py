@@ -90,5 +90,19 @@ c.execute("UPDATE cover SET fetched=0 WHERE sym=?", (NOV,)); c.commit()
 rows = candles.get(fl, NOV, "15", 3)
 ok(len(rows) == 58, "an empty answer (Fyers busy / no data) leaves the saved candles alone", len(rows))
 
+
+# ---- Fyers corrects a day a few days later (after newer days are saved): the correction reaches the saved candles
+d3 = today - dt.timedelta(days=3)
+fl.answer[NOV] = [[day(d3, 9) + 900 * i, 14201, 14201, 14201, 14201, 0] for i in range(10)] + exact
+c.execute("UPDATE cover SET fetched=0, first_day=? WHERE sym=?", ((today - dt.timedelta(days=5)).isoformat(), NOV)); c.commit()
+candles.get(fl, NOV, "15", 5)
+fixed = [[day(d3, 9) + 900 * i, 14300, 14310, 14290, 14305, 2500] for i in range(10)] + exact
+fl.answer[NOV] = fixed
+c.execute("UPDATE cover SET fetched=0 WHERE sym=?", (NOV,)); c.commit()
+rows = candles.get(fl, NOV, "15", 5)
+d3rows = [r for r in rows if day(d3, 0) <= r[0] < day(d3 + dt.timedelta(days=1), 0)]
+ok(len(d3rows) == 10 and all(r[4] == 14305 and r[5] == 2500 for r in d3rows),
+   "a day Fyers corrects 3 days later is replaced on the next fetch (the week before is re-checked)", d3rows[:2])
+
 print("ALL PASSED" if not fails else f"{len(fails)} FAILED")
 sys.exit(1 if fails else 0)

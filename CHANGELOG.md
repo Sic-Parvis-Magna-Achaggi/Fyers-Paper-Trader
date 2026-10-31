@@ -1,6 +1,29 @@
 # Changelog
 
+## v0.20.7 — 1 Nov 2026 — A day Fyers corrects later reaches your charts; v0.20.6's explanation corrected
+
+Changed
+- **Each fetch of new candles also takes the week before again** (still one Fyers request), and the browser takes the
+  last 7 days from the server each time a chart opens (was 3). Fyers sometimes rewrites a finished day: if it corrects
+  one later, the correction now replaces the saved candles on the server and in every browser. Before, only the
+  latest saved day was ever fetched again.
+
+Corrected (what v0.20.6 said)
+- v0.20.6 blamed `cont_flag=1` (Fyers' continuous series) for GOLDPETAL NOV's 30 Oct. That was wrong. Fetched
+  without it, Fyers still sends the thin day (a few lots, trading until about 17:00, then 14,201 to the close), and
+  **Fyers' own chart shows the same** - while Fyers' live prices for the contract are 13,951 / 13,958 and the real
+  Friday fell to 13,960 on heavy volume (which Fyers' history also sent during Friday). Fyers rewrote the day after
+  the close; it's Fyers' data, reported to Fyers. Dropping cont_flag still stands: with it, 29 Oct showed ~165,000 lots
+  that Fyers' own chart doesn't have; without it the app's candles match Fyers' charts.
+
+Tests
+- `tests/candles_test.py` (8 checks): a day Fyers corrects 3 days later is replaced on the next fetch (fails with the
+  re-check off).
+
 ## v0.20.6 — 1 Nov 2026 — Charts show the contract you opened (not Fyers' continuous series)
+
+> **Correction (v0.20.7):** the cause given below for 30 Oct is wrong. Fyers rewrote that day after the close; its own
+> chart shows the same thin day. Dropping cont_flag still makes the app's candles match Fyers' charts (see v0.20.7).
 
 Fixed
 - **A futures chart could show another contract's candles** (owner, 1 Nov: GOLDPETAL NOV on 30 Oct looked different on
