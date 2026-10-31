@@ -357,7 +357,15 @@ a.btnlink{border:1px solid var(--line);border-radius:6px;padding:6px 12px;color:
 #posbars .ta{font-family:var(--mono);font-size:11px;padding:0 4px}
 #posbars input.rr{width:38px;padding:2px 4px;font-size:11px;font-family:var(--mono);text-align:center;border-radius:4px}
 @media (max-width:760px){ #posbars .pbar{font-size:11px} #posbars input.rr{width:32px} }
-#histPill{position:absolute;left:8px;bottom:34px;z-index:4;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:3px 10px;font-size:11.5px;color:var(--muted);pointer-events:none}
+.navb{position:absolute;bottom:34px;z-index:5;width:28px;height:28px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:6px;background:var(--panel);border:1px solid var(--line);color:var(--muted);font-size:17px;line-height:1;cursor:pointer;opacity:.85}
+.navb:hover{color:var(--text);opacity:1}
+#goBtn{left:50px}
+#nowBtn{right:68px}
+#goPop{position:absolute;left:50px;bottom:68px;z-index:20;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;box-shadow:0 8px 24px #0006;min-width:220px;font-size:13px}
+#goPop .gph,#goPop .gpf{display:flex;align-items:center;gap:8px}
+#goPop label{display:flex;align-items:center;justify-content:space-between;gap:10px;color:var(--muted);margin:0}
+#goPop input{padding:4px 6px}
+#histPill{position:absolute;left:86px;bottom:36px;z-index:4;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:3px 10px;font-size:11.5px;color:var(--muted);pointer-events:none}
 #chartMsg{position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;color:var(--muted);text-align:center;padding:20px;pointer-events:none}
 
 /* drawer */
@@ -950,7 +958,7 @@ function buildChart(){
   indBuild();
   chart.subscribeCrosshairMove(param => { legendHover = !!(param && param.time != null && param.point); legendFill(legendHover ? param : null); });
   // scrolled to the left edge by you: load older candles
-  chart.timeScale().subscribeVisibleLogicalRangeChange(r => { if(r && r.from < 15 && Date.now() - histUserAt < 1500) histMore(); pineViewCheck(r); });
+  chart.timeScale().subscribeVisibleLogicalRangeChange(r => { if(r && r.from < 15 && Date.now() - histUserAt < 1500 && !goBusy) histMore(); pineViewCheck(r); navWatch(r); });
   setTimeout(positionTools, 60);
   // remember each indicator pane's height when you drag a divider
   el.addEventListener("mouseup", () => setTimeout(indSaveHeights, 50));
@@ -970,9 +978,19 @@ function ctOpts(){
   if(CT_SIZE == null && RAW.length){
     if(t === "renko") CT_SIZE = CT.size(RAW, c.renkoMode, (c.renkoBox || {})[k], c.renkoAtr, tick);
     if(t === "range") CT_SIZE = CT.size(RAW, c.rangeMode, (c.rangeSize || {})[k], c.rangeAtr, tick);
-    if(t === "pf") CT_SIZE = CT.size(RAW, c.pfMode, (c.pfBox || {})[k], c.pfAtr, tick);
+    if(t === "pf"){ const fx = c.pfMode === "fixed" ? pfFixed(c, k) : null; CT_SIZE = CT.size(RAW, fx ? "fixed" : "atr", fx, c.pfAtr, tick); }   // (no size for this timeframe yet: the ATR box)
   }
   return {...c, box: CT_SIZE, range: CT_SIZE};
+}
+/* P&F fixed box: saved per contract and timeframe ("GOLDPETAL@2m"). A size saved before v0.20.2 (per contract only)
+   still applies, but not on a timeframe where it's too small to draw - a typical bar spanning more than 8 boxes, as
+   a 5-point box on a GOLDPETAL day: there the ATR box is used until you set one for that timeframe. */
+function pfFixed(c, k){
+  const B = c.pfBox || {}, own = B[k + "@" + tf];
+  if(own) return own;
+  const old = B[k]; if(!old) return null;
+  const atr = RAW.length ? CT.atr(RAW, c.pfAtr || 14) : 0;
+  return atr && atr / old > 8 ? null : old;
 }
 function dispBars(){ return DISP; }
 function dispLast(){ return DISP.length ? DISP[DISP.length - 1] : null; }
@@ -1036,6 +1054,24 @@ class PfPrim {
       }
     });
   }
+}
+/* P&F opens at a zoom where the X's and O's read without zooming: columns get wider (12 to 40 px) until a box on
+   screen gives the biggest readable X / O, given the price range of the columns that fit */
+function pfZoom(){
+  const ts = chart.timeScale(), n = DISP.length, box = CT_SIZE;
+  if(!n || !box) return;
+  let W = 800, H = 400; try{ W = ts.width() || W; H = chart.panes()[0].getHeight() || H; }catch(e){}
+  H *= 0.84;                                     // (the candle pane's top / bottom margins)
+  // the column width (12-40 px) that gives the biggest X / O (up to 14 px); the narrowest one that comes close
+  const g = [];
+  for(let sp = 12; sp <= 40; sp += 2){
+    const k = Math.max(1, Math.min(n, Math.floor(W / sp) - 4));
+    let hi = -Infinity, lo = Infinity; for(let i = n - k; i < n; i++){ hi = Math.max(hi, DISP[i].high); lo = Math.min(lo, DISP[i].low); }
+    g.push([sp, Math.min(0.8 * sp, 0.85 * H / ((hi - lo) / box + 3), 14)]);
+  }
+  const top = Math.max(...g.map(x => x[1])), sp = g.find(x => x[1] >= top * 0.95)[0];
+  ts.applyOptions({barSpacing: sp, rightOffset: 4});
+  ts.scrollToRealTime();
 }
 /* the P&F toolkit (ctype.js: CT.pfTools) */
 function pfToolsCalc(r){
@@ -1574,7 +1610,7 @@ function renderCt(){
       : `<div class="cr"><span>ATR length</span><input id="ctGA" class="mono" inputmode="numeric" value="${c.rangeAtr}"></div>`}`;
   if(t === "pf") h += `<div class="sec">Point & Figure</div>
     <div class="cr"><span>Box size</span><select id="ctPM"><option value="atr" ${c.pfMode !== "fixed" ? "selected" : ""}>ATR</option><option value="fixed" ${c.pfMode === "fixed" ? "selected" : ""}>Fixed points</option></select></div>
-    ${c.pfMode === "fixed" ? `<div class="cr"><span>Points (${esc(k)})</span><input id="ctPB" class="mono" inputmode="decimal" value="${(c.pfBox || {})[k] ?? (CT_SIZE || "")}"></div>`
+    ${c.pfMode === "fixed" ? `<div class="cr"><span>Points (${esc(k)}, ${esc(tf)})</span><input id="ctPB" class="mono" inputmode="decimal" value="${pfFixed(c, k) ?? (CT_SIZE || "")}"></div>${pfFixed(c, k) == null && (c.pfBox || {})[k] ? `<p class="help" style="margin:2px 0 4px">${fmt((c.pfBox || {})[k], tick)} is too small for ${esc(tf)} candles: using the ATR box here until you set one for ${esc(tf)}.</p>` : ""}`
       : `<div class="cr"><span>ATR length</span><input id="ctPA" class="mono" inputmode="numeric" value="${c.pfAtr}"></div>`}
     <div class="cr"><span>Reversal (boxes)</span><input id="ctPR" class="mono" inputmode="numeric" value="${c.pfRev}"></div>
     <div class="cr"><span>Built from</span><select id="ctPS"><option value="close" ${c.pfSrc !== "hl" ? "selected" : ""}>Closes</option><option value="hl" ${c.pfSrc === "hl" ? "selected" : ""}>Highs and lows</option></select></div>
@@ -1596,7 +1632,7 @@ function renderCt(){
   on("#ctRW", el => ctSave({renkoWicks: el.checked}));
   on("#ctPM", el => ctSave({pfMode: el.value}));
   on("#ctPA", el => { const n = pos(el.value); if(n) ctSave({pfAtr: Math.round(n)}); });
-  on("#ctPB", el => { const n = pos(el.value); if(n) ctSave({pfBox: {...(c.pfBox || {}), [k]: n}}); });
+  on("#ctPB", el => { const n = pos(el.value); if(n) ctSave({pfBox: {...(c.pfBox || {}), [k + "@" + tf]: n}}); });   // (for this timeframe)
   on("#ctPR", el => { const n = pos(el.value); if(n) ctSave({pfRev: Math.max(1, Math.min(10, Math.round(n)))}); });
   on("#ctPS", el => ctSave({pfSrc: el.value}));
   on("#ctPI", el => ctSave({pfInd: el.value}));
@@ -1714,7 +1750,8 @@ function showRaw(){
   CT_SIZE = null;                              // Renko box / range size: worked out again for these candles
   dispSet();
   // the bar count can change a lot between chart types: P&F (a few dozen columns) fills the width, the rest scroll to now
-  if(ctType() === "pf" && DISP.length < 300) chart.timeScale().fitContent(); else chart.timeScale().scrollToRealTime();
+  chart.timeScale().applyOptions({timeVisible: !!(curPlan && curPlan.t.min)});   // daily and longer: dates only (no "05:30")
+  if(ctType() === "pf") pfZoom(); else { chart.timeScale().applyOptions({rightOffset: 24}); chart.timeScale().scrollToRealTime(); }
   indData();                                   // indicators follow the new candles (timeframe / contract change)
   series.applyOptions({priceFormat:{type:"price", precision:(String(cur.tick).split(".")[1]||"").length, minMove:cur.tick || 0.01}});
   lastBar = RAW.length ? RAW[RAW.length - 1] : null;
@@ -1722,7 +1759,7 @@ function showRaw(){
   const msg = $("#chartMsg");
   msg.classList.toggle("hide", RAW.length > 0);
   if(!RAW.length) msg.textContent = "No candles for this range yet.";
-  chart.timeScale().scrollToRealTime();
+  if(ctType() !== "pf") chart.timeScale().scrollToRealTime();
   if(last[cur.s]) bidAsk(last[cur.s]);
   drawLines();
 }
@@ -1802,7 +1839,12 @@ async function histMore(){
     return;
   }
   h.miss = 0;
-  const rows = older.concat(HROWS), from = Math.floor(Date.now() / 1000) - days * 86400;
+  histPrepend(older, plan, key, days);
+  histPill(`${older.length.toLocaleString("en-IN")} older candles loaded`, 1800);
+}
+/* older candles in front of the chart's: saved in this browser too; the view stays on the same candles */
+function histPrepend(older, plan, key, days){
+  const oldest = HROWS[0][0], rows = older.concat(HROWS), from = Math.floor(Date.now() / 1000) - days * 86400;
   CDB.get(key).then(saved => {                  // this browser's copy keeps the older part too
     const newer = saved && saved.rows ? saved.rows.filter(r => r[0] >= oldest) : HROWS;
     CDB.put(key, {from: Math.min(from, saved && saved.from || from), rows: older.concat(newer).slice(-120000)});
@@ -1817,7 +1859,91 @@ async function histMore(){
   const added = DISP.length - n0;
   if(vr && added > 0) ts.setVisibleLogicalRange({from: vr.from + added, to: vr.to + added});   // the view stays where it was
   indData();
-  histPill(`${older.length.toLocaleString("en-IN")} older candles loaded`, 1800);
+}
+
+/* ---------------------------------------------------------------- chart navigation
+   Go to (the calendar button at the chart's bottom left, or Alt+G): a date and time; older candles load first if the
+   chart doesn't reach that far back (as far as Fyers has them). The candle is centred and marked by the crosshair.
+   » (bottom right, shown when the latest candle is off screen): back to now. */
+function goToOpen(){
+  let p = $("#goPop");
+  if(!p){ p = document.createElement("div"); p.id = "goPop"; $("#chart").append(p); }
+  const plan = curPlan || tfPlan(tf), intraday = !!plan.t.min;
+  const d = new Date(Date.now() + IST * 1000), last = goToPop.last || {};
+  const day = last.day || d.toISOString().slice(0, 10), hm = last.hm || d.toISOString().slice(11, 16);
+  p.innerHTML = `<div class="gph"><b>Go to</b><span style="flex:1"></span><button class="ghost" data-x title="Close">✕</button></div>
+    <label>Date <input type="date" id="goDay" value="${day}" max="${d.toISOString().slice(0, 10)}"></label>
+    ${intraday ? `<label>Time <input type="time" id="goTime" value="${hm}"></label>` : ""}
+    <div class="gpf"><button class="ghost" data-now>Latest</button><span style="flex:1"></span><button class="primary" data-go>Go to</button></div>`;
+  p.classList.remove("hide");
+  p.querySelector("[data-x]").onclick = () => p.classList.add("hide");
+  p.querySelector("[data-now]").onclick = () => { p.classList.add("hide"); goToNow(); };
+  const go = () => { const dd = $("#goDay").value, tt = intraday ? ($("#goTime").value || "09:15") : "23:59"; if(!dd) return;
+    goToPop.last = {day: dd, hm: intraday ? tt : hm}; p.classList.add("hide");
+    goTo(Math.floor(Date.parse(dd + "T" + tt + ":00Z") / 1000) - IST); };      // the date and time are Indian time
+  p.querySelector("[data-go]").onclick = go;
+  p.querySelectorAll("input").forEach(i => i.addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); go(); } if(e.key === "Escape") p.classList.add("hide"); }));
+  setTimeout(() => $("#goDay").focus(), 0);
+}
+const goToPop = {};
+function goToNow(){                             // the latest candle at the right, keeping your zoom
+  if(!chart || !DISP.length) return;
+  const ts = chart.timeScale(), vr = ts.getVisibleLogicalRange(), w = vr ? vr.to - vr.from : 150, end = DISP.length - 1;
+  const R = ctType() === "pf" ? 4 : Math.min(24, Math.round(w * 0.15));
+  ts.setVisibleLogicalRange({from: end + R - w, to: end + R});
+  try{ chart.clearCrosshairPosition(); }catch(e){}
+}
+let goBusy = false;
+async function goTo(t){                          // t: epoch seconds (UTC)
+  if(!cur || !chart || !HROWS.length || goBusy) return;
+  const T = t + IST;
+  if(DISP.length && T >= DISP[DISP.length - 1].time){ goToNow(); return; }
+  const plan = curPlan, key = cur.s + "|" + plan.res, my = histToken;
+  const h = HX[key] || (HX[key] = {days: histDays(plan), miss: 0});
+  // load back to that date first (one Fyers request per step, as when you scroll)
+  goBusy = true;
+  try{
+    for(let step = 0; HROWS[0][0] > t && !h.end && step < 40; step++){
+      if(!(S.fyers || {}).logged_in){ histPill("Log in to Fyers to load older candles", 4000); break; }
+      const oldest = HROWS[0][0], days = Math.ceil((Date.now() / 1000 - t) / 86400) + 3;
+      histPill(`Loading back to ${new Date((t + IST) * 1000).toLocaleDateString("en-GB", {day: "numeric", month: "short", year: "numeric", timeZone: "UTC"})}…`);
+      let j = await api(`/api/history?symbol=${encodeURIComponent(cur.s)}&res=${plan.res}&days=${days}&until=${oldest}`);
+      if(my !== histToken) return histPill("");
+      if(!j.ok && /busy/.test(j.error || "")){ await new Promise(r => setTimeout(r, 3000)); step--; continue; }   // Fyers' queue: wait, try again
+      if(!j.ok){ histPill(j.error || "Couldn't load older candles", 4000); break; }
+      const older = (j.candles || []).filter(r => r[0] < oldest);
+      h.days = Math.max(h.days, days);
+      if(!older.length){ if(++h.miss >= 2) h.end = true; continue; }
+      h.miss = 0;
+      histPrepend(older, plan, key, h.days);
+    }
+  } finally { goBusy = false; }
+  if(my !== histToken) return;
+  // the candle at (or just before) that time
+  const d = DISP; let i = 0;
+  if(CT.timeBased(ctType())){ let lo = 0, hi = d.length - 1; while(lo < hi){ const m = (lo + hi + 1) >> 1; if(d[m].time <= T) lo = m; else hi = m - 1; } i = lo; }
+  else { const tt = dispTimeAt(T); i = Math.max(0, d.findIndex(b => b.time === tt)); }
+  const early = T < d[0].time;
+  const ts = chart.timeScale(), vr = ts.getVisibleLogicalRange(), w = vr ? vr.to - vr.from : 120;
+  ts.setVisibleLogicalRange({from: i - w / 2, to: i + w / 2});
+  try{ chart.setCrosshairPosition(d[i].close, d[i].time, series); }catch(e){}
+  histPill(early ? `The oldest candle Fyers has here: ${new Date(d[0].time * 1000).toLocaleString("en-GB", {day: "numeric", month: "short", year: "numeric", ...(plan.t.min ? {hour: "2-digit", minute: "2-digit"} : {}), timeZone: "UTC"})}`
+    : `${new Date(d[i].time * 1000).toLocaleString("en-GB", {day: "numeric", month: "short", year: "numeric", ...(plan.t.min ? {hour: "2-digit", minute: "2-digit"} : {}), timeZone: "UTC"})}`, early ? 5000 : 2500);
+}
+function navWatch(r){                            // » shows when the latest candle is off screen
+  const b = $("#nowBtn"); if(!b || !r) return;
+  const off = DISP.length && r.to < DISP.length - 1.5;
+  b.classList.toggle("hide", !off);
+  try{ b.style.right = ((chart.priceScale("right").width() || 60) + 8) + "px"; }catch(e){}
+}
+function navButtons(){
+  const box = $("#chart");
+  const g = document.createElement("button"); g.id = "goBtn"; g.className = "navb"; g.title = "Go to a date (Alt+G)";
+  g.innerHTML = `<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M3.5 9.5h17M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.7"/><path d="M12 12.5v4l2.5 1.5" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>`;
+  g.onclick = e => { e.stopPropagation(); const p = $("#goPop"); if(p && !p.classList.contains("hide")) p.classList.add("hide"); else goToOpen(); };
+  const n = document.createElement("button"); n.id = "nowBtn"; n.className = "navb hide"; n.title = "Back to the latest candle"; n.textContent = "»";
+  n.onclick = e => { e.stopPropagation(); goToNow(); };
+  box.append(g, n);
 }
 function histWatch(){
   const box = $("#chart"), user = () => { histUserAt = Date.now(); };
@@ -2004,6 +2130,7 @@ $("#bPanel").onclick = togglePanel;
 $("#bPanelX").onclick = togglePanel;
 document.addEventListener("fullscreenchange", () => { if(!document.fullscreenElement && document.body.classList.contains("chartfs")) setFull(false); });
 document.addEventListener("keydown", e => {
+  if(e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "g" || e.key === "G" || e.code === "KeyG")){ e.preventDefault(); goToOpen(); return; }   // Go to (TradingView's Alt+G)
   if(e.target.closest("input,select,textarea") || e.ctrlKey || e.metaKey || e.altKey) return;
   if(e.key === "f" || e.key === "F"){ e.preventDefault(); setFull(!document.body.classList.contains("chartfs"), e.shiftKey); }
   if(e.key === "p" || e.key === "P"){ e.preventDefault(); togglePanel(); }
@@ -2072,7 +2199,7 @@ async function boot(){
   if(p.get("fyers") === "error") toast("Fyers login failed: " + (p.get("msg") || ""));
   if(p.has("fyers")) history.replaceState(null, "", "/");
   if(!(S.fyers||{}).configured) openDrawer();
-  buildChart(); histWatch(); tfButtons(); renderWatch();
+  buildChart(); histWatch(); navButtons(); tfButtons(); renderWatch();
   await paperInit();
   pagesStart();                                // #trades, #history ... in the address opens that page
   if(cur){ $("#cSym").textContent = symLabel(cur.s); loadHistory();

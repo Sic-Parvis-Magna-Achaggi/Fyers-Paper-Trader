@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.20.2 — 1 Nov 2026 — Go to a date; readable P&F
+
+Added
+- **Go to** (calendar button at the chart's bottom left, or Alt+G): a date, and a time on intraday charts. Older
+  candles load first if needed (as far back as Fyers has them); the chart centres on that candle and the crosshair
+  marks it. Before a contract's first candle: the oldest one, with a note.
+- **»** at the bottom right whenever the latest candle is off screen: back to now, keeping your zoom.
+
+Fixed
+- **P&F looked tiny at the default zoom.** It opened with 6 px columns; it now picks a column width (12-40 px) that
+  makes the X's and O's as big as they can be (up to 14 px) for the prices on screen, with a 4-column right margin.
+- **P&F on a day chart drew thin lines instead of X's and O's.** The fixed box was saved per contract, so the
+  5-point box set on 2m also applied to 1D, making columns of 100+ boxes too small to draw (under 4 px a box, the
+  chart draws each column as a line). The box is now saved per timeframe; a per-contract box saved earlier still
+  applies except where a typical bar spans more than 8 boxes, where the ATR box is used until you set one, and the
+  menu says so. A fixed mode with no size now uses the ATR box (it used to fall to one tick).
+- Daily / weekly / monthly charts show dates only on the time axis (the crosshair said "05:30").
+
+Tests
+- `tests/navigation_flow.js` (16 checks): P&F zoom and right margin, the 1D box, per-timeframe boxes, Alt+G, Go to an
+  intraday time 20 days back (older candles loaded), », a date before the listing, a date on 1D.
+
 ## v0.20.1 — 1 Nov 2026 — Any script on another timeframe; scripts follow your scrolling
 
 Added

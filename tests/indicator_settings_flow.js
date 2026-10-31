@@ -50,7 +50,8 @@ let br;
   const d = await pg.evaluate(async s => { const j = await api(`/api/history?symbol=${encodeURIComponent(s)}&res=D&days=730`); return {ok: j.ok, n: (j.candles || []).length, err: j.error}; }, SYM);
   ok(d.ok && d.n > 100, `daily candles over 730 days load although Fyers has none before the listing (${d.n} days${d.err ? ", " + d.err : ""})`);
   await pg.evaluate(async s => { indSave([]); ctSave({type: "candles"}); setTf("2m"); await openBySymbol(s); }, SYM);   // (other tests may leave P&F on)
-  await pg.waitForFunction(() => DISP.length > 100, null, { timeout: 30000 });
+  await pg.waitForFunction(() => DISP.length > 100 && curPlan && curPlan.res === "2", null, { timeout: 30000 });   // (the 2m candles, not the last test's)
+  await pg.waitForTimeout(1500);
   const h0 = await pg.evaluate(() => ({n: RAW.length, first: RAW[0].time, vr: chart.timeScale().getVisibleLogicalRange(), firstShown: DISP[Math.max(0, Math.ceil(chart.timeScale().getVisibleLogicalRange().from))].time}));
   // you scroll to the left edge
   const scrollLeft = async () => { await pg.mouse.move(700, 400); await pg.mouse.wheel(0, 0);

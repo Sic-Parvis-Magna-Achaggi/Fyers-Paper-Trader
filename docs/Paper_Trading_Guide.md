@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.20.1)
+# Paper and live trading: how it works (v0.20.2)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -142,6 +142,8 @@ Phones get their own layout, like MT5's app (a desktop browser never does). **Mo
   - Type any other, such as `7m`, `90m`, `2h` or `3D`, and press Use.
   - Right-click one (or long-press on a phone) to pin or unpin it.
 - Timeframes Fyers doesn't serve directly are built from smaller candles, starting at the session open (09:00 for MCX).
+- **Go to a date: the calendar button** at the chart's bottom left (or **Alt+G**, as on TradingView). Pick a date (and a time, on intraday charts; Indian time) and press Go to or Enter: older candles load first if the chart doesn't reach that far back, and the chart centres on that candle (or the one just before, if the market was shut), marked by the crosshair. A date before Fyers' first candle for the contract goes to the oldest one and says so. **Latest** in the same box, or **»** (bottom right, shown whenever the latest candle is off screen), brings you back to now, keeping your zoom.
+- Daily, weekly and monthly charts show dates only on the time axis.
 - **⛶ or F** maximises the chart inside the browser window, so your tabs stay one click away. **Shift+F** gives real full screen. When maximised, **P** (or Panel) slides the trade panel in, its **✕** hides it, and **Esc** goes back to the normal view.
 
 ## Chart types
@@ -155,9 +157,11 @@ The button after the timeframes (it shows the current type, e.g. **Candles**, **
 | Renko | Bricks of one size. A new brick when price moves a box past the last one; a reversal needs two boxes. Box: ATR (default 14, worked out from the candles loaded, then fixed until you reload) or fixed points, saved per underlying (one for CRUDEOIL, another for NIFTY). Built from the closes, or from each candle's high and low; wicks optional. |
 | Range bars | Each bar spans the same range (high − low); a new bar starts when price goes beyond it. Range: ATR or fixed points. |
 | Line break | A new line when the close passes the highs (or lows) of the last 3 lines (settable). |
-| Point & Figure | Columns of X (rising) and O (falling), one mark per box. A new column needs a reversal of 3 boxes (settable) from the column's extreme and starts one box back from it. Box: ATR or fixed points (per underlying); built from the closes, or from highs and lows. The button shows box × reversal, e.g. **P&F 11 × 3**. |
+| Point & Figure | Columns of X (rising) and O (falling), one mark per box. A new column needs a reversal of 3 boxes (settable) from the column's extreme and starts one box back from it. Box: ATR or fixed points, **per underlying and timeframe** (5 for GOLDPETAL on 2m doesn't follow you to 1D); built from the closes, or from highs and lows. The button shows box × reversal, e.g. **P&F 11 × 3**. |
 
 - **Renko, range bars, line break and Point & Figure** are built from the timeframe's candles: pick **1m** for the finest bricks. They don't follow the clock, so the candle timer is off and the time axis shows when each brick formed.
+- **Point & Figure opens readable:** columns get wider (12 to 40 px) until the X's and O's are as big as they can be (up to 14 px) for the price range on screen, with little empty space on the right. Zoom as usual from there.
+- **P&F box per timeframe.** A fixed box you type is saved for that timeframe. A box saved before v0.20.2 (one per contract) still applies, except on a timeframe where it's too small to draw: when a typical bar would span more than 8 boxes (a 5-point box on a GOLDPETAL day), that timeframe uses the ATR box until you set one there, and the chart type menu says so. (Before, a 1D P&F chart with a 5-point box drew its columns as thin lines: 100+ boxes a column can't show as X's and O's.)
 - **Every indicator works on every type, Point & Figure included.** Volume, the built-in indicators and every Pine script (plots, fills, shapes, drawings, tables, request.security, arrays...) run on the bars the chart shows, as on TradingView: on Heikin-Ashi an RSI uses the Heikin-Ashi closes; on Renko there's one value per brick; on Point & Figure one per column. They line up bar for bar, on the candles and in their own panes, and follow live prices. A test of many Pine features on every chart type runs before every release, so this keeps holding for scripts you write later.
 - **On Point & Figure, Pine's `close` is the column's middle** by default (the usual convention for indicators on P&F, from du Plessis); choose **Last box** under *Indicators read* in the chart type menu. `open`, `high` and `low` are the column's own; a column closes when the next one starts.
 - **Prices stay real.** Bid, ask, last, your entry / SL / TP lines and every ₹ figure use real prices, whatever the chart type. (A Heikin-Ashi close isn't a price you can trade at.)

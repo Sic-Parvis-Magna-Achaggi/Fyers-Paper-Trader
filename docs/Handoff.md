@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 1 Nov 2026, version **0.20.1**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 1 Nov 2026, version **0.20.2**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -114,6 +114,11 @@ busy contract (gzip): turn recording off on the Log page once the question is se
   the view's left edge passes the script's first bar (`pineViewCheck()` on every visible-range change, 500 ms
   debounce). Keep the full re-run on each new bar: PineTS updateTail alone drifts on `var` / stateful values across
   bars that arrived tick by tick (checked: up to 12 points on a running total, 0 within a bar).
+- **v0.20.2:** chart navigation in index.html (`goToOpen()` / `goTo(t)` / `goToNow()` / `navWatch()`; buttons `#goBtn`,
+  `#nowBtn`; Alt+G). `goTo` loads older candles in a loop through `histPrepend()` (shared with the scroll-back) and
+  centres the view with setVisibleLogicalRange (not scrollToRealTime, which stopped short after a manual zoom). P&F:
+  `pfZoom()` picks the opening bar spacing; `pfFixed()` gives the fixed box per contract and timeframe
+  (`pfBox["CRUDEOIL@1D"]`), the old per-contract key only where ATR / box <= 8.
 - **Imports:** the page resolves them (`pineLibs()` in pine.js: a saved script named like the import path, then a
   saved `library("Name")`, then `PINE_BUILTIN_LIBS`) and sends `{path: source}` with each run; the worker gives
   PineTS a resolver over that. `TradingView_ta.pine` is our own implementation (standard formulas; ta.supertrend's
