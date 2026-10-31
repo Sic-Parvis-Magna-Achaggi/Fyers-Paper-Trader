@@ -1010,17 +1010,21 @@ function makeSeries(C){
   if(t === "bars") return chart.addSeries(LightweightCharts.BarSeries, {...base, upColor:C.up, downColor:C.down, thinBars:false});
   if(t === "pf"){                             // invisible columns (scale, indicators, the trade tool) + the X / O drawing
     const s = chart.addSeries(LightweightCharts.CandlestickSeries, {...base, ...PF_CLEAR});
-    s.attachPrimitive(new PfPrim());
+    s.attachPrimitive(PF_PRIM = new PfPrim());
     return s;
   }
   const boxes = t === "renko" && !ctCfg().renkoWicks || t === "lb";
   return chart.addSeries(LightweightCharts.CandlestickSeries, {...base, upColor:C.up, downColor:C.down, borderVisible:t === "hollow" || boxes,
     borderUpColor:C.up, borderDownColor:C.down, wickUpColor:C.up, wickDownColor:C.down, wickVisible:!boxes});
 }
+let PF_PRIM = null;
 const PF_CLEAR = {upColor:"rgba(0,0,0,0)", downColor:"rgba(0,0,0,0)", borderVisible:false, wickVisible:false};
-/* Point & Figure: an X (rising column) or an O (falling) on every box of every column on screen */
+/* Point & Figure: an X (rising column) or an O (falling) on every box of every column on screen, at every zoom.
+   Room for it: square X's and O's, as usual. Short boxes (zoomed out): they keep the column's width and get flatter,
+   so a column still reads as a stack of X's or O's (never a thin line). Too small for any shape (a box under 1.8 px,
+   or a column under 3 px wide): an X column is a solid bar, an O column a hollow one. */
 class PfPrim {
-  constructor(){ this.req = null; const self = this; this.views = [{zOrder: () => "normal", renderer: () => ({draw: t => self.draw(t)})}]; }
+  constructor(){ this.req = null; this.mode = ""; const self = this; this.views = [{zOrder: () => "normal", renderer: () => ({draw: t => self.draw(t)})}]; }
   attached(p){ this.req = p.requestUpdate; }
   detached(){ this.req = null; }
   updateAllViews(){}
@@ -1033,24 +1037,31 @@ class PfPrim {
       const y0 = series.priceToCoordinate(DISP[DISP.length - 1].low), y1 = series.priceToCoordinate(DISP[DISP.length - 1].low + box);
       if(y0 == null || y1 == null) return;
       const bh = Math.abs(y0 - y1), sp = ts.options().barSpacing || 6;
-      const sz = Math.max(2, Math.min(sp * 0.8, bh * 0.85)) / 2;
-      ctx.lineWidth = Math.max(1, Math.min(2, sz / 4));
+      const hw = Math.min(sp * 0.42, 8), hh = Math.min(bh * 0.45, 8), sq = Math.min(hw, hh);
+      const mode = sq >= 2.5 ? "xo" : hh * 2 >= 1.8 && hw * 2 >= 3 ? "flat" : "block";
+      this.mode = mode; this.bh = bh; this.sp = sp;
+      // the glyph's half width / half height: square while there's room; zoomed out, the column's width and the box's height
+      const gw = mode === "xo" ? sq : hw, gh = mode === "xo" ? sq : hh;
+      ctx.lineWidth = mode === "xo" ? Math.max(1, Math.min(2, sq / 4)) : 1;
       for(let i = Math.max(0, Math.floor(vr.from) - 1); i <= Math.min(DISP.length - 1, Math.ceil(vr.to) + 1); i++){
         const b = DISP[i], x = ts.timeToCoordinate(b.time); if(x == null) continue;
-        ctx.strokeStyle = b.pf > 0 ? C.up : C.down;
-        if(bh < 4 || sp < 4){                   // too small to read single boxes: the column as a line
-          const ya = series.priceToCoordinate(b.low), yb = series.priceToCoordinate(b.high);
-          if(ya != null && yb != null){ ctx.beginPath(); ctx.moveTo(x, ya); ctx.lineTo(x, yb); ctx.stroke(); }
+        const col = b.pf > 0 ? C.up : C.down;
+        ctx.strokeStyle = col;
+        if(mode === "block"){
+          const yt = series.priceToCoordinate(b.high), yb = series.priceToCoordinate(b.low); if(yt == null || yb == null) continue;
+          const w = Math.max(1, hw * 2), top = yt - bh / 2, h = Math.max(1, yb - yt + bh);
+          if(b.pf > 0 || w < 3){ ctx.fillStyle = b.pf > 0 ? col : rgbaHex(col, 0.55); ctx.fillRect(x - w / 2, top, w, h); }
+          else { ctx.fillStyle = rgbaHex(col, 0.18); ctx.fillRect(x - w / 2, top, w, h); ctx.strokeRect(x - w / 2 + .5, top + .5, w - 1, h - 1); }
           continue;
         }
         const n = Math.round((b.high - b.low) / box);
+        ctx.beginPath();
         for(let k = 0; k <= n; k++){
           const y = series.priceToCoordinate(b.low + k * box); if(y == null) continue;
-          ctx.beginPath();
-          if(b.pf > 0){ ctx.moveTo(x - sz, y - sz); ctx.lineTo(x + sz, y + sz); ctx.moveTo(x + sz, y - sz); ctx.lineTo(x - sz, y + sz); }
-          else ctx.arc(x, y, sz * 0.9, 0, 2 * Math.PI);
-          ctx.stroke();
+          if(b.pf > 0){ ctx.moveTo(x - gw, y - gh); ctx.lineTo(x + gw, y + gh); ctx.moveTo(x + gw, y - gh); ctx.lineTo(x - gw, y + gh); }
+          else { ctx.moveTo(x + gw * 0.9, y); ctx.ellipse(x, y, gw * 0.9, gh * 0.9, 0, 0, 2 * Math.PI); }
         }
+        ctx.stroke();
       }
     });
   }

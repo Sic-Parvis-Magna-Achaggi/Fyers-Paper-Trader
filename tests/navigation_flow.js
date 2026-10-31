@@ -49,6 +49,27 @@ let br;
   await pg.waitForFunction(() => curPlan && curPlan.res === "2" && CT_SIZE === 2, null, { timeout: 30000 })
     .then(() => ok(true, "back on 2m the box is 2 again")).catch(() => ok(false, "2m keeps its own box"));
 
+  // ---------------------------------------------------------------- P&F zoomed out: X's and O's, never thin lines (owner, 1 Nov)
+  // squeeze the boxes as zooming out on a busy day does (a box 3 px, then 1 px tall), and narrow the columns
+  const pfAt = async (spacing, pad) => {
+    await pg.evaluate(([sp, pd]) => {
+      chart.timeScale().applyOptions({barSpacing: sp}); chart.timeScale().scrollToRealTime();
+      const n = DISP.length; let hi = -Infinity, lo = Infinity; for(let i = Math.max(0, n - 200); i < n; i++){ hi = Math.max(hi, DISP[i].high); lo = Math.min(lo, DISP[i].low); }
+      series.priceScale().setVisibleRange({from: lo - pd, to: hi + pd});
+    }, [spacing, pad]);
+    await pg.waitForTimeout(500);
+    return pg.evaluate(() => { const p = PF_PRIM; return {mode: p.mode, bh: +p.bh.toFixed(1), sp: p.sp}; });
+  };
+  const zA = await pfAt(7, 120);
+  ok(zA.mode === "flat" && zA.bh < 4, `zoomed out (a box ${zA.bh} px, columns ${zA.sp} px): flattened X's and O's as wide as the column (mode "${zA.mode}"; under 4 px they used to be lines)`);
+  await pg.screenshot({ path: SHOT + "pf_zoomed_out_flat.png" });
+  const zB = await pfAt(4, 600);
+  ok(zB.mode === "block" && zB.bh < 1.8, `zoomed far out (a box ${zB.bh} px): X columns solid, O columns hollow (mode "${zB.mode}")`);
+  await pg.screenshot({ path: SHOT + "pf_zoomed_out_block.png" });
+  const zC = await pfAt(16, 5);
+  ok(zC.mode === "xo" && zC.bh >= 5, `zoomed back in (a box ${zC.bh} px): the usual square X's and O's`);
+  await pg.evaluate(() => { series.priceScale().applyOptions({autoScale: true}); pfZoom(); });
+
   // ---------------------------------------------------------------- Go to
   await pg.evaluate(() => ctSave({type: "candles"}));
   await pg.waitForFunction(() => DISP.length > 100 && curPlan.res === "2", null, { timeout: 30000 });

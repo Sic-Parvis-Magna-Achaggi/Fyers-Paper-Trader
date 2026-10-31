@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 1 Nov 2026, version **0.20.3**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 1 Nov 2026, version **0.20.4**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -63,10 +63,9 @@ and roadmap updated too.
 - `tests/`: the test kit (fake Fyers feed and order API, route check, engine tests incl. `live_test.py`, browser
   tests incl. `live_flow.js` and `mobile_flow.js`). See `tests/README.md`.
 
-Test-kit quirk (seen 1 Nov, v0.20.2 and v0.20.3 alike): `navigation_flow.js`'s "Go to a date on 1D" check failed
-when run at 01:49 IST. The mock stamps daily candles at 00:00 UTC (05:30 IST) while the test picks the day in IST, so
-it most likely fails only between 00:00 and 05:30 IST. Not confirmed with a fake clock; real Fyers stamps day candles
-at IST midnight.
+Test-kit quirk (1 Nov): `navigation_flow.js`'s "Go to a date on 1D" check failed once at 01:49 IST (landed a day
+late) on both v0.20.2 and v0.20.3 code, then passed at 02:10 IST. Cause not found: an intermittent test-kit issue
+(the mock stamps day candles at 00:00 UTC; real Fyers at IST midnight). Re-run it if it fails.
 
 ## Users on the server
 
@@ -122,6 +121,9 @@ busy contract (gzip): turn recording off on the Log page once the question is se
   the view's left edge passes the script's first bar (`pineViewCheck()` on every visible-range change, 500 ms
   debounce). Keep the full re-run on each new bar: PineTS updateTail alone drifts on `var` / stateful values across
   bars that arrived tick by tick (checked: up to 12 points on a running total, 0 within a bar).
+- **v0.20.4:** `PfPrim` never draws P&F columns as lines: square X / O while a glyph is >= 5 px; zoomed out ("flat"),
+  each X / O is as wide as the column and as tall as the box; under 1.8 px a box ("block"), X columns are solid bars
+  and O columns hollow ones. `PF_PRIM.mode` / `.bh` / `.sp` say which (tests/navigation_flow.js checks all three).
 - **v0.20.2:** chart navigation in index.html (`goToOpen()` / `goTo(t)` / `goToNow()` / `navWatch()`; buttons `#goBtn`,
   `#nowBtn`; Alt+G). `goTo` loads older candles in a loop through `histPrepend()` (shared with the scroll-back) and
   centres the view with setVisibleLogicalRange (not scrollToRealTime, which stopped short after a manual zoom). P&F:

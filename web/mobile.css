@@ -193,4 +193,8 @@ body.mob.chartfs[data-ms="chart"] #mChips{display:flex;bottom:calc(var(--mb) + v
   .mseg button{font-size:12px;padding:4px 2px;white-space:nowrap}
   .sides2 button{font-size:13px}
   #mSize{min-width:72px}
+  #mBub{padding-left:6px;padding-right:6px}
+  #mBub .bx{flex-basis:30px}
+  #mBub .bp{min-width:64px;padding:0 10px}
+  #mBub .l2{font-size:11px;letter-spacing:-.2px}
 }

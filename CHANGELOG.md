@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.20.4 — 1 Nov 2026 — P&F readable when zoomed out
+
+Fixed
+- **P&F turned into thin lines when zoomed out** (reported 1 Nov, GOLDPETAL 2m, 5 x 3). Zooming out puts more columns
+  on screen, so the price range grows and each box gets shorter; under 4 px a box, the chart drew each column as a 1-2 px
+  line. Now every zoom shows X's and O's: square while there's room; zoomed out, each X / O keeps the column's full
+  width and gets flatter (a column still reads as a stack of X's or O's); when a box is under 1.8 px, X columns are
+  solid bars and O columns hollow ones, in the up / down colours.
+- The order bubble (v0.20.3) on a 360 px phone: "2.04R" could be cut off; the bubble is a little tighter there.
+
+Tests
+- `tests/navigation_flow.js` (19 checks): the three looks, at a 2.8 px box, a 0.8 px box and back to normal.
+
 ## v0.20.3 — 1 Nov 2026 — Phone: the order shrinks to a bubble
 
 Added
