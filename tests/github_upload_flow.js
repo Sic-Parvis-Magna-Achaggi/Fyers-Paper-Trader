@@ -72,7 +72,9 @@ let br, srv;
      `Check finds 2 changed (VERSION, README), 1 new (journal.js), 1 only on GitHub`);
   ok(/version 0\.25\.0/.test(sum), "it shows GitHub's version");
   const msg = await pg.inputValue("#msg");
-  ok(/^v[\d.]+: .+/.test(msg), `the commit message is taken from CHANGELOG.md ("${msg}")`);
+  const cl = fs.readFileSync(path.join(ROOT, "CHANGELOG.md"), "utf8"), firstBody = cl.split(/\n## /)[1].split("\n").slice(1).join("\n").trim();
+  ok(new RegExp(`^v${cur.replace(/\./g, "\\.")}: .+\n\n`).test(msg) && msg.endsWith(firstBody) && !/\n## v/.test(msg),
+     `the commit message: "${msg.split("\n")[0]}", then this version's whole changelog entry (${msg.split("\n").length} lines), nothing of older versions`);
   ok(await pg.isVisible("#delWrap") && !(await pg.isChecked("#del")) && !(await pg.isVisible("#oldWrap")), "deleting is offered, not ticked; no version warning");
   // ---- GitHub's secondary rate limit on the first two blobs: waited out
   await call("/_limit", {n: 2});

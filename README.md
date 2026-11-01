@@ -111,7 +111,8 @@ Upload the new files to this repo. The server picks them up within a minute. See
 ## Releasing a new version to GitHub
 
 Open `tools/github_upload.html` in a browser (double-click it: a single file, nothing to install), paste a GitHub token, pick
-the release zip, **Check against GitHub**, then **Commit to GitHub**. It makes one commit through GitHub's API with only the
+the release zip, **Check against GitHub**, then **Commit to GitHub**. The commit message is filled in for you: the title line plus this
+version's whole entry from CHANGELOG.md. It makes one commit through GitHub's API with only the
 files that changed (no 100-file limit, unlike dragging into github.com). Nothing on GitHub is deleted unless you tick the box.
 
 **The token (once).** The repo belongs to the **Sic-Parvis-Magna-Achaggi** organization, so the token is made for the organization:

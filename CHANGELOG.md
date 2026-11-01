@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.26.3 — 1 Nov 2026 — Full changelog in the release commit
+
+Changed
+- Release to GitHub (`tools/github_upload.html`): the commit message is now the title line ("v0.26.3: …") **plus this
+  version's whole CHANGELOG.md entry** as the commit's description, so GitHub's history carries the full notes (asked 1 Nov:
+  "the message is not detailed like the ones you gave me before"). It's the entry for the zip's VERSION (else the top one),
+  filled in as soon as the zip is read; the box is bigger and still editable.
+
 ## v0.26.2 — 1 Nov 2026 — Release instructions for the organization's token
 
 Changed

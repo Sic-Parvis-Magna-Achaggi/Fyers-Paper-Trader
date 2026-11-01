@@ -90,7 +90,8 @@ a{color:var(--accent)}
   <div class="card" id="commitCard" hidden>
     <h2>3 · Commit</h2>
     <label for="msg">Commit message</label>
-    <textarea id="msg" rows="3"></textarea>
+    <textarea id="msg" rows="12"></textarea>
+    <small class="hint">The first line is the title GitHub shows; below it, this version's changelog entry. Edit freely.</small>
     <label class="check" id="delWrap" hidden><input type="checkbox" id="del"> <span id="delTxt"></span></label>
     <label class="check" id="oldWrap" hidden><input type="checkbox" id="old"> <span id="oldTxt"></span></label>
     <div class="btns"><button class="primary" id="go">Commit to GitHub</button><span class="muted" id="goNote"></span></div>
@@ -179,6 +180,7 @@ async function takeZip(file){
     S.files = files; S.zipName = file.name;
     const ver = files.find(f => f.path === "VERSION");
     S.zipVersion = ver ? new TextDecoder().decode(ver.data).trim() : "";
+    $("msg").value = defaultMsg();
     st("zipSt", `${file.name}: ${files.length} files${top ? ` (top folder "${top.slice(0, -1)}" left out)` : ""}${S.zipVersion ? ` · version ${S.zipVersion}` : ""}`, "ok");
     $("check").disabled = false;
   }catch(e){ st("zipSt", "Couldn't read the zip: " + e.message, "bad"); $("check").disabled = true; }
@@ -260,7 +262,7 @@ $("check").onclick = async () => {
     st("chkSt", changed.length + added.length ? `Ready: ${changed.length + added.length} file${changed.length + added.length === 1 ? "" : "s"} to send.`
       : "GitHub already has every file in this zip. Only the deletions below are left, if you want them.", "ok");
     $("commitCard").hidden = false;
-    $("msg").value = defaultMsg();
+    if(!$("msg").value.trim()) $("msg").value = defaultMsg();
     $("delWrap").hidden = !gone.length; $("del").checked = false;
     $("delTxt").textContent = `Also delete the ${gone.length} file${gone.length === 1 ? "" : "s"} that ${gone.length === 1 ? "is" : "are"} on GitHub but not in this zip (see the list above)`;
     const older = S.zipVersion && repoVer && cmpVer(S.zipVersion, repoVer) < 0;
@@ -271,9 +273,19 @@ $("check").onclick = async () => {
   $("check").disabled = false;
 };
 function cmpVer(a, b){ const A = a.split(".").map(Number), B = b.split(".").map(Number); for(let i = 0; i < Math.max(A.length, B.length); i++){ const d = (A[i] || 0) - (B[i] || 0); if(d) return d; } return 0; }
+/* The commit message: "vX: <title>" from the zip's CHANGELOG.md entry for its VERSION (else the top entry), then a blank line
+   and that entry's text, so GitHub's history carries the full notes. */
 function defaultMsg(){
   const cl = S.files.find(f => f.path === "CHANGELOG.md");
-  if(cl){ const m = new TextDecoder().decode(cl.data).match(/^##\s+v?([\d.]+)\s+[—-]+\s+[^—\n]*[—-]+\s+(.+)$/m); if(m) return `v${m[1]}: ${m[2].trim()}`; }
+  if(cl){
+    const text = new TextDecoder().decode(cl.data).replace(/\r\n/g, "\n");
+    const heads = [...text.matchAll(/^##\s+v?([\d.]+)\s+[—-]+\s+[^—\n]*?[—-]+\s+(.+)$/gm)];
+    const h = heads.find(x => x[1] === S.zipVersion) || heads[0];
+    if(h){
+      const next = heads.find(x => x.index > h.index), body = text.slice(h.index + h[0].length, next ? next.index : undefined).trim();
+      return `v${h[1]}: ${h[2].trim()}` + (body ? "\n\n" + body : "");
+    }
+  }
   return S.zipVersion ? `v${S.zipVersion}` : "Release " + S.zipName;
 }
 function goState(){ const P = S.plan;
