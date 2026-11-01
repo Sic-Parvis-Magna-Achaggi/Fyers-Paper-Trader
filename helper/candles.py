@@ -139,6 +139,14 @@ def get(link, symbol: str, res: str, days: int, since: int = 0) -> list:
     return [list(r) for r in out]
 
 
+def saved(folder: str, symbol: str, res: str, since: int = 0) -> list:
+    """The saved candles only (no Fyers request): the journal's server pictures fall back to these."""
+    with _lock:
+        out = _conn(folder).execute("SELECT t, o, h, l, c, v FROM bars WHERE sym=? AND res=? AND t>=? ORDER BY t",
+                                    (symbol, res, int(since or 0))).fetchall()
+    return [list(r) for r in out]
+
+
 def stats(folder: str = "") -> dict:
     with _lock:
         n = _conn(folder).execute("SELECT COUNT(*), COUNT(DISTINCT sym || res) FROM bars").fetchone()

@@ -1,5 +1,59 @@
 # Changelog
 
+## v0.27.0 — 1 Nov 2026 — Journal pictures and the Telegram backup; P&F trend lines fixed
+
+Added
+- **Journal pictures** (roadmap item 4, second of three releases), on every trade's card and in the audit form:
+  - **Drawn on the server at entry and exit** from your own Fyers candles (new `helper/jshots.py`, Pillow): the entry and any
+    adds, first stop, last stop, target, exit, the trade shaded by its result, net ₹ / R / charges; 1280×720 PNG; works with no
+    page open. Timeframe (5m) and candles (120) in Journal › Settings › Pictures. A failure (Fyers not answering) is shown on
+    the card and tried twice more; **Draw at entry / Draw at exit / Draw again** by hand (also for older trades).
+  - **The open chart's own picture** (LWC `takeScreenshot`, with indicators and drawings, a header with contract, timeframe
+    and time) when a chart of that contract is on screen as the trade opens or closes; one per timeframe (a second page
+    sending the same one is ignored). **📷 on the chart bar** adds this chart's picture to the trade on this contract.
+  - **Your own pictures:** ＋ Add pictures, paste (Ctrl+V) and drag-and-drop; PNG / JPEG / WebP / GIF up to 10 MB; each
+    labelled by timeframe (1m … 1M, custom like 7m, or Context).
+  - **The viewer:** chips, ← / → and swipe, label, Full size, Download, Draw again, Delete (two taps); full screen on the phone.
+  - Small copies (JPEG) for the list; 📷 n on each trade's row; space used in Settings.
+- **Telegram backup copy** (Journal › Settings › Pictures): every new picture to the journal's chat / channel as a silent file
+  with the trade in its caption, using the bot in Settings › Telegram alerts; deleting a picture deletes its copy; failures
+  shown (✈!) and retried (1, 5, 15, 60 min); **Send the pictures not in Telegram yet**; **Send a test**. At start-up, copies
+  that didn't go before a restart are sent (only pictures from after the backup was turned on).
+- Routes: `GET /api/journal/shot`, `POST /api/journal/shot/add` (the body is the picture), `/shot/edit`, `/shot/draw`,
+  `GET /api/journal/pictures`, `POST /api/journal/pictures/tg`. Socket message `{"jshot": {id, phase, s}}` asks open charts.
+- `helper/fonts/` (DejaVu Sans Mono, with its licence) so the server's pictures have ₹ and the same look on any server.
+- `requirements.txt`: **Pillow** (the update's install step adds it on the server).
+
+Fixed
+- **P&F 45° trend lines ran on after price crossed them** (reported 1 Nov with a screenshot): after a break, the next line
+  started at the plain highest top / lowest bottom since the broken line began, which columns before the break could already
+  have crossed, and the check only looked at columns after the break. So a line was drawn through price, and in a sideways
+  stretch a pair of lines was re-made from the same column every column (the "▲ break" / "▼ break" labels marching off in a
+  "<", as in the screenshot). Now the new line starts at the top (X column) / bottom (O column) whose 45° line no later column
+  has crossed (the most of high + column / least of low − column), so no line is ever drawn through a column before its break.
+
+Changed
+- `journal.json` trades carry `shots` (and `shot_err` while a server picture fails); journal settings carry `shots`.
+- The journal's saves take its lock (the pictures' worker thread changes trades too).
+
+Tests
+- `tests/jshots_test.py` (43 checks, new): settings, labels, picture types, captions, drawing at entry / exit (a stop on the
+  future, an entry past the last candle), trades on paper engines (one picture at entry and exit, an add doesn't draw again,
+  open charts asked, failure recorded and retried, Draw again replaces), one chart picture per timeframe, the Telegram copy
+  (silent PNG document with the caption, delete deletes it, a refused chat retried, start-up only since the backup began,
+  sending the rest).
+- `tests/jshots_flow.js` (45 checks, new): the four pictures of a trade with its chart on screen, served full size and small,
+  the card and viewer, Draw again, ＋ Add / paste / drop, refusals (not a picture, over 10 MB), delete, the audit form, chart
+  hidden = server only, 📷, Settings › Pictures, the Telegram copy end to end, the phone (strip, viewer, swipe, 📷).
+- Every suite in tests/README.md passed on this version (Python: routes, ctype 47, squareoff, feedcheck, feed, candles,
+  journal 58, jshots 43, alerts 57, live 61; browser: github_upload 25, jshots 45, journal 43, live 22, charttypes 92,
+  pine_compat 121, indicator_settings 37, navigation 36, watchlists 16, drawings 78, layouts 31, multichart 43, telegram 33,
+  mobile 61; security_flow run first).
+- `tests/ctype_test.js`: P&F lines on random walks (none crossed before its break, each broken where marked, none made twice);
+  the hand-worked line case corrected (column 2's line was crossed by column 4's equal top).
+- `tests/fake_telegram.py`: sendDocument (multipart) and deleteMessage; `/_docs`, `/_deleted`.
+- `tests/routes_check.py`: the new routes.
+
 ## v0.26.3 — 1 Nov 2026 — Full changelog in the release commit
 
 Changed

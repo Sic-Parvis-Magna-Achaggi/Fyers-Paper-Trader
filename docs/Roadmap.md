@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 1 Nov 2026 (v0.26.3). This is the one task list for the project.
+Updated 1 Nov 2026 (v0.27.0). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -29,6 +29,7 @@ ahead of 3-6.
      - **Rule (owner, 31 Oct 2026): every indicator works on P&F charts, not just a few: Volume, every Pine script, and any indicator or Pine feature added in future.** P&F columns are ordinary bars to indicators; a Pine compatibility test (many Pine features, on every chart type) runs before every release, and nothing ships that fails it on P&F.
      - [x] Every indicator on P&F: Pine gets ordinary bars on every chart type (a column closes when the next opens; `close` = the column middle by default, or the last box); the Pine compatibility test (9 scripts, every chart type) runs before every release. MA, BB, RSI and anything else are Pine scripts and work there. *(v0.17.0)*
      - [x] First set: the P&F toolkit (ƒx): 45° trendlines with breaks and the next line after each break; DTB / DBS / TTB / TBS at their trigger box (fresh or continuation); anchor columns (15+ boxes) and their levels; open vertical counts. *(v0.17.0)*
+     - [x] Fix (reported 1 Nov): 45° trend lines no longer run on through price after it crossed them. *(v0.27.0)*
      - [x] Second set: horizontal counts; patterns: bull / bear traps, catapults, high / low poles, triangles (symmetrical, ascending, descending), turtle breakouts, anchor follow-through; labels placed without overlaps; a switch per pattern family. *(v0.18.0)*
      - [ ] Mini tops / bottoms: Definedge doesn't publish the rule (the owner can paste it from Definedge's library).
      - [ ] Definedge's own indicators (PMOX, XO Zone %, Noiseless RSI, Smart Don, Oops patterns): their exact rules are in Definedge's logged-in library; built only from their published definitions (the owner can paste them), never guessed.
@@ -72,8 +73,9 @@ ahead of 3-6.
      Target), bias / KE, setup tags, plan, review; the session engine and lockouts (blocking, switchable); Today card;
      Reps with hold-to-claim and milestones; stats strip and equity curve (balance / P&L); filters (period, account,
      symbol, side, octagon, regime, tag, search); Octagon rules and pillar text in settings; ground-state practice. *(v0.26.0)*
-   - [ ] **v0.27.0:** screenshots on the server (automatic at entry and exit, server-drawn + the open chart's picture;
-     your own uploads / paste, labelled by timeframe), the image viewer, Telegram backup copy to the journal's channel.
+   - [x] **v0.27.0:** pictures on the server (automatic at entry and exit, server-drawn + the open chart's picture, 📷 on the
+     chart bar; your own uploads / paste / drop, labelled by timeframe), the viewer, Telegram backup copy to the journal's
+     channel (the bot from Settings › Telegram alerts). *(v0.27.0)*
    - [ ] **v0.28.0:** Insights (performance, by symbol / time of day / regime / tag / pillar / weekday, lockout stats,
      rep blocks, the equity chart with drawdown), the weekly Review and calendar with the walk-through and weekly focus,
      Copy for Gemini, CSV export, backup / restore.
@@ -197,6 +199,7 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Done
 
+- [x] **v0.27.0** (1 Nov): journal pictures (item 4, second step): the server draws each trade at entry and exit, the open chart adds its own picture, 📷 on the chart bar, your own uploads / paste / drop labelled by timeframe, the viewer, the Telegram backup copy; P&F trend lines no longer run on after price crossed them (reported 1 Nov).
 - [x] **v0.26.3** (1 Nov): Release to GitHub puts this version's whole changelog entry into the commit message.
 - [x] **v0.26.2** (1 Nov): release instructions for the organization's token (README, the tool's hints, project instructions).
 - [x] **v0.26.1** (1 Nov): Release to GitHub (`tools/github_upload.html`): a zip goes in as one commit through GitHub's API, only changed files, no 100-file limit (asked 1 Nov, after the 120-file v0.26.0 zip was refused by github.com's uploader).

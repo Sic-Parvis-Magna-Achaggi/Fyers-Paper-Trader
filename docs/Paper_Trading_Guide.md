@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.24.1)
+# Paper and live trading: how it works (v0.27.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -134,6 +134,31 @@ While locked, the ticket's preview says why, PLACE is off, and a red pill in the
 blocking" when its switch is off). Closing, BE, trailing and the stops of open trades are never blocked. The numbers (2%,
 20 minutes, 3 wins, 2R, the 2.5R stretched-target flag, the 5% block, the rep milestone) are in Journal › Settings, with the
 text of each pillar and the Pillar 1 checks (Original puts your text back).
+
+**Pictures** (each trade's card, and the audit form):
+- **Drawn on the server at entry and exit**, from your own Fyers candles (5m and 120 candles unless you change it): the
+  entry (and any adds), the first stop, the stop at the end, the target, the exit, the trade shaded green / red, and the net ₹,
+  R and charges. No page needs to be open. It's one Fyers history request each, on the usual request budget. If Fyers doesn't
+  answer (not logged in yet), the card says so and it tries twice more a few minutes apart; **Draw at entry / Draw at exit**
+  does it by hand (also for trades from before v0.27.0). When the stop follows the underlying future, the option's picture
+  leaves the stop and target lines out (they're on the future's prices) and says so.
+- **The open chart's own picture**, with your indicators and drawings, when a chart of that contract is on screen (any of your
+  devices) as the trade opens or closes: labelled **Chart 5m · entry** etc., one per timeframe (with two charts of different
+  timeframes you get both). Charts in a grid each add theirs. A chart that isn't on screen (another page open) adds nothing.
+- **📷 on the chart bar** adds this chart's picture whenever you like, to the open trade on this contract (this account first),
+  else the one that closed most recently in the last 24 hours.
+- **Your own pictures:** **＋ Add pictures**, paste (Ctrl+V / ⌘+V) with the trade open, or drop them on the card. PNG,
+  JPEG, WebP or GIF up to 10 MB (iPhone HEIC photos: share as JPEG). The viewer opens on it: pick its timeframe (1m … 1M,
+  or Context).
+- **The viewer:** a chip per picture, ← / → (swipe on the phone), change a label, **Full size**, **Download**, **Draw
+  again** (server pictures), **Delete** (tap twice; its Telegram copy goes too).
+- **Telegram backup copy** (Journal › Settings › Pictures): every new picture goes to the chat or channel you enter, silently,
+  as a file (full quality) with the trade in its caption (contract, side, account, entry / stop / target, net ₹ and R, the trade's
+  id). It uses the bot in Settings › Telegram alerts (admin only for now). Best: a new private channel just for the journal,
+  with the bot as an admin that can post and delete. ✈ on a picture = in Telegram (✈! = failed: the viewer says why; it
+  retries 4 times over an hour). **Send the pictures not in Telegram yet** sends the older ones. **Send a test** checks the
+  chat. Pictures stay on the server either way; Telegram is only a copy.
+- Settings › Pictures also shows how many pictures there are and the space they take.
 
 ## On a phone
 
@@ -293,7 +318,7 @@ The button after the timeframes (it shows the current type, e.g. **Candles**, **
 
 Drawn on Point & Figure charts (on other chart types its read-out says so and it draws nothing). Each part can be turned off in its settings (⚙).
 
-- **45° trend lines.** A bullish support line starts one box below a column's low and rises one box per column; it's broken when an O column reaches it. A bearish resistance line starts one box above a column's high and falls one box per column; it's broken when an X column reaches it. After each break the opposite line starts from the extreme of the move (the highest X or lowest O since the broken line began). The running line is solid; broken ones are faded, with **▲ break** / **▼ break** where they broke.
+- **45° trend lines.** A bullish support line starts one box below a column's low and rises one box per column; it's broken when an O column reaches it. A bearish resistance line starts one box above a column's high and falls one box per column; it's broken when an X column reaches it. After each break the opposite line starts from the top (X column) or bottom (O column) of the move since the broken line began, choosing the one whose 45° line no later column has already crossed (v0.27.0: before, it always started at the highest top / lowest bottom, which price could already have gone through, so a line could run on through price, and a pair of lines could be re-made from the same column every column). The running line is solid; broken ones are faded, with **▲ break** / **▼ break** where they broke.
 - **Signals** at the box that triggers them: **DTB** (Double Top Buy: an X column one box above the previous X column's top), **DBS** (Double Bottom Sell), **TTB / TBS** (triple top / bottom: the two previous tops, or bottoms, were equal). Filled = fresh (the first signal after one the other way), outlined = continuation. Zoomed far out, only fresh signals show.
 - **Anchor columns:** columns of 15+ boxes (settable), shaded, with their high and low as dashed levels to the right (the latest 3, settable).
 - **Vertical counts:** from finished columns of 5+ boxes (settable): target = boxes × box size × reversal, up from an X column's low or down from an O column's high. A count shows once a later column breaks the count column's high (low), and disappears when the target is reached: **VC ↑ 5,654** (the latest 2 per side, settable).
@@ -476,6 +501,6 @@ When BE-T has already moved the stop to break-even, a Trail SL of N R behind the
 
 - Footprint / delta (order flow): waiting for the order-flow check (Monday 2 Nov).
 - Comparing the charges the app counts with what Fyers actually deducted (live).
-- The journal's screenshots (automatic at entry and exit, and your own) and their Telegram backup: v0.27.0. Insights, the weekly review and calendar, Copy for Gemini, CSV / backup: v0.28.0.
+- The journal's Insights, the weekly review and calendar, Copy for Gemini, CSV / backup: v0.28.0.
 - Partial closes.
 - Agri MCX contracts use the non-agri rates.

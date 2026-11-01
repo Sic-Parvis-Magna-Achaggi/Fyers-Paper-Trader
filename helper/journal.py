@@ -20,7 +20,7 @@ import re
 import threading
 import time
 
-from . import charges, store, symbols
+from . import jshots, charges, store, symbols
 
 log = logging.getLogger("journal")
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
@@ -376,6 +376,8 @@ class Journal:
                     else:
                         cur.pop(str(n), None)
                 st["pillars"] = cur
+            if isinstance(b.get("shots"), dict):
+                st["shots"] = jshots.clean_cfg(b["shots"], st.get("shots") or {})
             if "p1" in b:
                 v = b["p1"]
                 if v is None:
@@ -397,9 +399,10 @@ class Journal:
 
     # -------------------------------------------------------- storage
     def _changed(self):
-        self.stamp += 1
-        self._cache = None
-        store.save(self.file, self.d)
+        with self.lock:                  # the pictures' worker thread changes trades too (helper/jshots.py)
+            self.stamp += 1
+            self._cache = None
+            store.save(self.file, self.d)
 
     def save(self):
         self._changed()
@@ -686,6 +689,70 @@ class Journal:
                 self.d["ended"][k] = now()
                 self._changed()
 
+    # -------------------------------------------------------- pictures (helper/jshots.py)
+    def shots_cfg(self) -> dict:
+        return jshots.cfg(self.d["settings"])
+
+    def _trade(self, key: str) -> dict:
+        t = self.d["trades"].get(key)
+        if not t:
+            raise KeyError("no such trade in the journal")
+        return t
+
+    def add_shot(self, key: str, sh: dict, replace: tuple | None = None, unique: tuple | None = None) -> list:
+        """Add a picture. replace = (kind, phase): earlier pictures of that kind and phase are dropped (returned, so their
+        files go too). unique = (kind, phase, tf): refused (KeyError "dup") if one like it is there already."""
+        with self.lock:
+            t = self._trade(key)
+            shots = list(t.get("shots") or [])
+            if unique and any(x["kind"] == unique[0] and x.get("phase") == unique[1] and x.get("tf") == unique[2] for x in shots):
+                raise KeyError("dup")
+            old = [x for x in shots if replace and x["kind"] == replace[0] and x.get("phase") == replace[1]]
+            shots = [x for x in shots if x not in old] + [sh]
+            t["shots"] = sorted(shots, key=jshots.order_key)
+            if sh.get("phase") and (t.get("shot_err") or {}).get(sh["phase"]) and sh["kind"] == "server":
+                t["shot_err"] = {k: v for k, v in t["shot_err"].items() if k != sh["phase"]}
+            self._changed()
+            return old
+
+    def set_shot(self, key: str, sid: str, tf: str) -> dict:
+        if not jshots.tf_ok(tf):
+            raise ValueError("label: a timeframe like 5m, 1h, 1D, or Context")
+        with self.lock:
+            t = self._trade(key)
+            sh = next((x for x in t.get("shots") or [] if x["id"] == sid), None)
+            if not sh:
+                raise KeyError("no such picture")
+            sh["tf"] = tf
+            t["shots"] = sorted(t["shots"], key=jshots.order_key)
+            self._changed()
+            return sh
+
+    def del_shot(self, key: str, sid: str) -> dict:
+        with self.lock:
+            t = self._trade(key)
+            sh = next((x for x in t.get("shots") or [] if x["id"] == sid), None)
+            if not sh:
+                raise KeyError("no such picture")
+            t["shots"] = [x for x in t["shots"] if x["id"] != sid]
+            self._changed()
+            return sh
+
+    def set_shot_tg(self, key: str, sid: str, tg: dict) -> None:
+        with self.lock:
+            t = self.d["trades"].get(key)
+            sh = next((x for x in (t or {}).get("shots") or [] if x["id"] == sid), None)
+            if sh is not None:
+                sh["tg"] = tg
+                self._changed()
+
+    def shot_error(self, key: str, ph: str, msg: str) -> None:
+        with self.lock:
+            t = self.d["trades"].get(key)
+            if t is not None:
+                t["shot_err"] = {**(t.get("shot_err") or {}), ph: {"msg": msg[:300], "at": now()}}
+                self._changed()
+
     # -------------------------------------------------------- what the page gets
     def view(self, urt, only: set | None = None) -> dict:
         """Everything the Journal page shows; with `only` (session keys) just those sessions' trades (after an edit:
@@ -726,6 +793,7 @@ class Journal:
             sessions = {k: v for k, v in sessions.items() if k in only}
         return {"partial": only is not None, "trades": trades, "sessions": sessions, "rules": self.rules(), "pillars": self.pillars(),
                 "p1": self.p1(), "faults": EXEC_FAULTS, "oct": OCT, "mantra": MANTRA,
+                "shots_cfg": self.shots_cfg(), "tfs": jshots.TFS, "draw_res": [[r, jshots.RES_LABEL[r]] for r in jshots.DRAW_RES],
                 "practice": self.d["practice"], "reviews": self.d["reviews"], "accounts": accts, "today": today,
                 "reps": {"before": reps["before"], "block": reps["block"], "total": reps["total"]},
                 "hidden_n": len([x for x in self.d["hidden"] if x in self.d["trades"]]), "now": now()}
@@ -787,12 +855,26 @@ def on_trade(urt, aid: str, kind: str, obj: dict):
         day = e.trading_day()
         before = j.lock_reason(aid, day)
         size = float(e.rules["size"] or 0)
+        key = f"{aid}:{base_id(obj['id'])}"
+        was = j.d["trades"].get(key)
+        was_status = was["status"] if was else None
         if kind == "close":
             still = any(base_id(p["id"]) == base_id(obj["id"]) and p["id"] != obj["id"] for p in e.positions)
             j.ingest_close(aid, a.get("name", ""), e.mode, size, obj, still)
         else:
             j.upsert_open(aid, a.get("name", ""), e.mode, size, obj, e.trading_day(obj.get("opened")))
         j.save()
+        t = j.d["trades"].get(key)
+        ph = None
+        if t and kind == "open" and was is None:
+            ph = "entry"
+        elif t and kind == "close" and t["status"] == "closed" and was_status != "closed":
+            ph = "exit" if was is not None else None       # closed before the journal saw it open: no pictures
+        if ph:
+            try:
+                jshots.phase(urt, key, ph)
+            except Exception as ex:
+                log.warning("[%s] journal picture: %s", getattr(urt, "label", "?"), ex)
         if kind == "close":
             check_lock(urt, aid, before)
         if on_change:

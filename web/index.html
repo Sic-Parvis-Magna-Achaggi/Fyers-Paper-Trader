@@ -929,6 +929,7 @@ function connectWS(){
     if(m.paper && (!m.acct || m.acct === ACCT)) paperUpdate(m.paper, m.events);
     if(m.depth){ renderBook(m.depth); pagesDepth(m.depth); }
     if(m.journal && typeof jnPush === "function") jnPush();
+    if(m.jshot && typeof jsShotReq === "function") jsShotReq(m.jshot);
     if(m.charges && (S.user || {}).role === "admin"){ chargePill(m.charges); toast("Fyers' charges page has changed: review it on the Account page"); }
   };
   ws.onclose = ev => {
@@ -2419,6 +2420,7 @@ boot();
 <script src="/static/layouts.js?v=__V__"></script>
 <script src="/static/multichart.js?v=__V__"></script>
 <script src="/static/journal.js?v=__V__"></script>
+<script src="/static/jshots.js?v=__V__"></script>
 <script src="/static/mobile.js?v=__V__"></script>
 </body>
 </html>

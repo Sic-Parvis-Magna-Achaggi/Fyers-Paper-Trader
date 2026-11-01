@@ -199,11 +199,20 @@ const CT = {
       const broke = L.dir > 0 ? x.dir < 0 && x.lo <= at(L, i) : x.dir > 0 && x.hi >= at(L, i);
       if(!broke) continue;
       out.lines.push({...L, c1: i, broken: true});
-      let best = L.c0;                              // the extreme of the move since this line began
-      for(let j = L.c0; j <= i; j++){
-        if(L.dir > 0 ? c[j].hi > c[best].hi : c[j].lo < c[best].lo) best = j;
+      // The next line starts at the top (X column) / bottom (O column) of the move since this line began, choosing the
+      // one whose 45-degree line no later column has already crossed: the most of hi + column (resistance) or the
+      // least of lo - column (support). The plain highest top / lowest bottom could be crossed already by columns
+      // before this break, and the line then ran on through them (v0.27.0 fix: lines drawn through price, and a
+      // pair of lines re-made from the same column every column).
+      const nd = -L.dir, want = nd < 0 ? 1 : -1;     // resistance from X columns, support from O columns
+      let best = -1;
+      for(let pass = 0; pass < 2 && best < 0; pass++){
+        for(let j = L.c0; j <= i; j++){
+          if(pass === 0 && c[j].dir !== want) continue;
+          if(best < 0 || (nd < 0 ? c[j].hi + j > c[best].hi + best : c[j].lo - j < c[best].lo - best)) best = j;
+        }
       }
-      L = L.dir > 0 ? {dir: -1, c0: best, k0: c[best].hi + 1} : {dir: 1, c0: best, k0: c[best].lo - 1};
+      L = nd < 0 ? {dir: -1, c0: best, k0: c[best].hi + 1} : {dir: 1, c0: best, k0: c[best].lo - 1};
     }
     out.lines.push({...L, c1: c.length - 1, broken: false});
     // buy / sell signals

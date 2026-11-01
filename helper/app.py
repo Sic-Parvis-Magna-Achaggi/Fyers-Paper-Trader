@@ -5,6 +5,7 @@ Run: uvicorn helper.app:app --host 127.0.0.1 --port 8000   (Caddy serves it over
 """
 import asyncio
 import json
+import os
 import logging
 import re
 import subprocess
@@ -12,11 +13,11 @@ import time
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 
 from fastapi.staticfiles import StaticFiles
 
-from . import alerts, charges, charges_watch, fyers_link, journal, logbuf, rt, store, symbols, telegram, users
+from . import alerts, charges, charges_watch, fyers_link, journal, jshots, logbuf, rt, store, symbols, telegram, users
 from .feedcheck import FC
 from . import candles as candles_store
 from .paper import Refused
@@ -129,6 +130,7 @@ async def _startup():
     rt.on_engine_change = _engine_changed
     journal.on_change = _journal_changed
     rt.start(loop)
+    jshots.startup([u["uid"] for u in users.all_users() if not u["disabled"]])   # Telegram copies left over
     loop.create_task(_engine_loop())
     if not users.any_users():
         code = users.setup_code()
@@ -1380,6 +1382,151 @@ async def journal_end(request: Request):
     journal.check_lock(r, aid, before)
     _engine_changed(r, aid, "Journal: session ended for today")
     return {"ok": True, "j": j.view(r)}
+
+
+# ------------------------------------------------------------------ journal pictures (helper/jshots.py, v0.27.0)
+def _jshot(j, key: str, sid: str):
+    t = j.d["trades"].get(key)
+    sh = next((x for x in (t or {}).get("shots") or [] if x["id"] == sid), None)
+    if not sh:
+        raise HTTPException(404, "no such picture")
+    return t, sh
+
+
+@app.get("/api/journal/shot")
+async def journal_shot(request: Request, id: str, shot: str, thumb: int = 0, dl: int = 0):
+    """One picture of a journal trade (your own journal only). thumb=1: the small copy for the list."""
+    u, r = _urt(request)
+    j = journal.get(u["uid"])
+    t, sh = _jshot(j, id, shot)
+    path = None
+    if thumb:
+        path = await asyncio.get_running_loop().run_in_executor(None, jshots.thumb, u["uid"], id, sh)
+    mime = "image/jpeg" if path else jshots.MIME.get(sh.get("ext") or "png", "image/png")
+    path = path or jshots.file_of(u["uid"], id, sh)
+    if not os.path.exists(path):
+        raise HTTPException(404, "the picture's file is missing")
+    hdr = {"Cache-Control": "private, max-age=31536000, immutable", "X-Content-Type-Options": "nosniff"}
+    if dl:
+        hdr["Content-Disposition"] = f'attachment; filename="{sh.get("name") or shot + "." + (sh.get("ext") or "png")}"'
+    return FileResponse(path, media_type=mime, headers=hdr)
+
+
+@app.post("/api/journal/shot/add")
+async def journal_shot_add(request: Request, id: str, tf: str = "Context", kind: str = "upload", phase: str = "",
+                           name: str = ""):
+    """Add a picture to a trade: the body is the image itself (PNG / JPEG / WebP / GIF, up to 10 MB).
+    kind "upload" (your own, labelled by tf) or "chart" (an open chart's picture at the trade's entry / exit: phase;
+    one per timeframe - a second page sending the same one is told dup)."""
+    _same_origin(request)
+    u, r = _urt(request)
+    if kind not in ("upload", "chart") or (kind == "chart" and phase not in ("entry", "exit")):
+        return _err("kind: upload, or chart with phase entry / exit")
+    if not jshots.tf_ok(tf):
+        return _err("label: a timeframe like 5m, 1h, 1D, or Context")
+    if int(request.headers.get("content-length") or 0) > jshots.MAX_BYTES:
+        return _err("pictures can be up to 10 MB", 413)
+    buf = bytearray()
+    async for chunk in request.stream():                   # stop at the limit even without a Content-Length
+        buf += chunk
+        if len(buf) > jshots.MAX_BYTES:
+            return _err("pictures can be up to 10 MB", 413)
+    data = bytes(buf)
+    ext = jshots.sniff(data)
+    if not ext:
+        return _err("that isn't a PNG, JPEG, WebP or GIF picture (HEIC photos: share them as JPEG)")
+    try:
+        w, h = await asyncio.get_running_loop().run_in_executor(None, jshots.image_size, data)
+    except ValueError as e:
+        return _err(e)
+    j = journal.get(u["uid"])
+    if id not in j.d["trades"]:
+        return _err("no such trade in the journal")
+    base = re.sub(r"[^A-Za-z0-9_.-]", "_", name.rsplit(".", 1)[0])[:40] if name else ""
+    sh = {"id": jshots.new_id(), "kind": kind, "phase": phase or None, "tf": tf,
+          "src": "browser" if kind == "chart" else "upload", "at": time.time(), "w": w, "h": h, "bytes": len(data), "ext": ext,
+          "name": (f"{base}.{ext}" if base else f"{j.d['trades'][id]['s'].split(':')[-1]}_{tf}{'_' + phase if phase else ''}.{ext}")}
+    try:
+        j.add_shot(id, sh, unique=(kind, phase, tf) if kind == "chart" else None)
+    except KeyError as e:
+        if str(e).strip("'\"") == "dup":
+            return {"ok": True, "dup": True}
+        return _err(str(e).strip("'\""))
+    jshots.write(u["uid"], id, sh, data)
+    _journal_changed(u["uid"])
+    jshots.after_add(u["uid"], id, sh)
+    return {"ok": True, "shot": sh, "j": j.view(r, {journal.session_key(j.d["trades"][id])})}
+
+
+@app.post("/api/journal/shot/edit")
+async def journal_shot_edit(request: Request):
+    """{id, shot, tf}: change a picture's label; {id, shot, delete: true}: delete it (and its Telegram copy)."""
+    _same_origin(request)
+    u, r = _urt(request)
+    b = await _body(request)
+    j = journal.get(u["uid"])
+    key, sid = str(b.get("id") or ""), str(b.get("shot") or "")
+    try:
+        if b.get("delete"):
+            sh = j.del_shot(key, sid)
+            jshots.forget(u["uid"], key, sh)
+        else:
+            j.set_shot(key, sid, str(b.get("tf") or ""))
+    except (KeyError, ValueError) as e:
+        return _err(str(e).strip("'\""))
+    _journal_changed(u["uid"])
+    return {"ok": True, "j": j.view(r, {journal.session_key(j.d["trades"][key])})}
+
+
+@app.post("/api/journal/shot/draw")
+async def journal_shot_draw(request: Request):
+    """{id, phase}: draw (again) the server's picture of a trade at its entry or exit (also for trades from before)."""
+    _same_origin(request)
+    u, r = _urt(request)
+    b = await _body(request)
+    j = journal.get(u["uid"])
+    t = j.d["trades"].get(str(b.get("id") or ""))
+    ph = str(b.get("phase") or "")
+    if not t:
+        return _err("no such trade in the journal")
+    if ph not in ("entry", "exit") or (ph == "exit" and t["status"] != "closed"):
+        return _err("phase: entry, or exit once the trade has closed")
+    if not jshots.pillow():
+        return _err("the server can't draw yet: Pillow isn't installed (it comes with the next update's install step)")
+    jshots.draw_now(u["uid"], t["id"], ph)
+    return {"ok": True}
+
+
+@app.get("/api/journal/pictures")
+async def journal_pictures(request: Request):
+    """Journal › Settings › Pictures: the settings, the Telegram bot (from Settings › Telegram alerts), space used."""
+    u, r = _urt(request)
+    j = journal.get(u["uid"])
+    use = await asyncio.get_running_loop().run_in_executor(None, jshots.usage, u["uid"])
+    unsent = sum(1 for t in j.d["trades"].values() for s in t.get("shots") or [] if not (s.get("tg") or {}).get("msg"))
+    return {"ok": True, "cfg": j.shots_cfg(), "tg": jshots.tg_state(u["uid"]), "usage": use, "unsent": unsent,
+            "pillow": jshots.pillow(), "queued": jshots.pending(), "admin": u["role"] == "admin"}
+
+
+@app.post("/api/journal/pictures/tg")
+async def journal_pictures_tg(request: Request):
+    """{action: "test", chat}: a test message to that chat with your bot; {action: "send"}: send every picture not
+    sent yet."""
+    _same_origin(request)
+    u, r = _urt(request)
+    b = await _body(request)
+    if b.get("action") == "test":
+        chat = str(b.get("chat") or "").strip()
+        if not jshots.CHAT_RE.match(chat):
+            return _err("Telegram chat: a number like -1001234567890, or @channelname")
+        try:
+            await asyncio.get_running_loop().run_in_executor(None, jshots.tg_test, u["uid"], chat)
+        except telegram.TgError as e:
+            return _err(e)
+        return {"ok": True}
+    if b.get("action") == "send":
+        return {"ok": True, "queued": jshots.tg_send_missing(u["uid"])}
+    return _err("action: test or send")
 
 
 # ------------------------------------------------------------------ live prices (each user's own feed)

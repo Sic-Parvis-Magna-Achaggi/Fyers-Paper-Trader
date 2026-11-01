@@ -13,6 +13,7 @@ python3 tests/feed_test.py                            # the price feed: 40 a pag
 python3 tests/alerts_test.py                          # Telegram alerts: the helper's checks, the watchdog (fake clock, then as its own process), the outside heartbeat
 node tests/github_upload_flow.js                      # tools/github_upload.html against a fake GitHub API (fake_github.py on :8768); no helper needed
 python3 tests/journal_test.py                         # the journal: the server's Octagon port vs Octagon's own JS (fixtures/octagon_core.js), then on paper engines: lockouts, switches, audit
+python3 tests/jshots_test.py                          # journal pictures: the server's drawing, entry / exit on paper engines, labels, the Telegram copy (fake Telegram on :8771)
 python3 tests/candles_test.py                         # saved candles: exact contract (no cont_flag), clean-out, a day fetched again replaces it
 
 python3 tests/make_old_data.py /tmp/fyers_test        # fresh v0.12-style data, admin password OldPass12345
@@ -29,11 +30,12 @@ FYERS_HELPER_DATA=/tmp/fyers_test node tests/layouts_flow.js       # saved layou
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/multichart_flow.js    # multi-charts: grids, each chart its own, the active chart (watchlist, BUY, Pine), crosshair sync, drawings per contract, ⛶, reload, phone buttons
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/telegram_flow.js     # Settings › Telegram alerts, the Live card, then the real watchdog with the helper frozen (SIGSTOP) -> the message; ~1.5 min
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/journal_flow.js       # the Journal page: trades arriving, the audit form, claim, filters, lockouts (on a fresh account each run, archived after), phone
+FYERS_HELPER_DATA=/tmp/fyers_test node tests/jshots_flow.js        # journal pictures: server + chart pictures of a trade, card, viewer, add / paste / drop, 📷, Settings › Pictures, Telegram copy, phone
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/mobile_flow.js        # the phone layout on an emulated Pixel 7: order sheet and its bubble, positions, tabs, full screen (resets the admin's paper account)
 ```
 
 `fake_telegram.py` is a fake Telegram Bot API and Healthchecks.io (`mock_server.py` starts it on :8767; `/_sent` lists the
-messages). Tokens starting `1234567:` are good.
+messages, `/_docs` the documents sent (journal pictures), `/_deleted` the deleted messages). Tokens starting `1234567:` are good.
 
 `fake_broker.py` is a fake Fyers order API (place / modify / cancel / order book / positions and order updates). It
 follows the Fyers rules live mode relies on (stops trigger on the last price; no type change on MCX; no SL-M on

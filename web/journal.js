@@ -336,7 +336,7 @@ function jCard(t){
     <div class="jt-row" data-act="toggle" data-id="${jEsc(t.id)}" role="button" tabindex="0" aria-expanded="${open}">
       ${jSeal(jStates(a), 32, {center: nb ? String(nb) : "", note: a.clean ? "Clean octagon" : nb + " pillar(s) broken"})}
       <div class="jt-main"><b>${jEsc(jShort(t.s))}</b><span class="jt-side ${t.side > 0 ? "buy" : "sell"}">${t.side > 0 ? "Buy" : "Sell"} ${t.lots ?? ""}</span>${t.mode === "live" ? '<span class="jt-live">LIVE</span>' : ""}
-        <div class="jt-sub">${t.rep ? `<span class="jt-rep${t.claimedAt ? "" : " open"}" title="${t.claimedAt ? "Claimed" : "Waiting to be claimed on the Reps card"}">Rep ${t.rep}${t.claimedAt ? "" : " ○"}</span> · ` : ""}${jEsc(when)} · ${jEsc(t.acct_name)}</div></div>
+        <div class="jt-sub">${t.rep ? `<span class="jt-rep${t.claimedAt ? "" : " open"}" title="${t.claimedAt ? "Claimed" : "Waiting to be claimed on the Reps card"}">Rep ${t.rep}${t.claimedAt ? "" : " ○"}</span> · ` : ""}${jEsc(when)} · ${jEsc(t.acct_name)}${(t.shots || []).length ? ` · <span class="jt-pics" title="Pictures">📷 ${t.shots.length}</span>` : ""}</div></div>
       <div class="jt-px"><div class="mono">${px}</div><div class="jt-sub">${dur}${t.tod ? " · " + jEsc(t.tod) : ""}</div></div>
       <div class="jt-net mono ${t.net > 0 ? "up" : t.net < 0 ? "down" : ""}">${m.closed ? jMoney(t.net) : "Open"}<small class="${t.r == null ? "muted" : t.r >= 0 ? "up" : "down"}">${t.r == null ? "" : jR(t.r)}</small></div>
       <span class="jt-chev">›</span>
@@ -360,6 +360,7 @@ function jCard(t){
       </div>
       ${t.notes ? `<p class="jt-note"><i>Plan</i>${jEsc(t.notes)}</p>` : ""}
       ${t.review ? `<p class="jt-note"><i>Review</i>${jEsc(t.review)}</p>` : ""}
+      ${typeof jsStrip === "function" ? jsStrip(t, "card") : ""}
       <div class="jt-foot"><span class="muted">${t.status === "closed" ? "" : "The audit can be done now; Pillar 8 is recorded once it closes."}</span>
         <span class="jt-acts">
           <button class="primary" data-act="audit" data-id="${jEsc(t.id)}">${a.recorded ? "Edit audit" : "Audit this trade"}</button>
@@ -384,7 +385,8 @@ async function jnListClick(e){
   const el = e.target.closest("[data-act]"); if(!el) return;
   const id = el.dataset.id, t = JN.d.trades.find(x => x.id === id); if(!t) return;
   const act = el.dataset.act;
-  if(act === "toggle"){ JN.exp.has(id) ? JN.exp.delete(id) : JN.exp.add(id); const node = el.closest(".jn-trade"), tmp = document.createElement("div");
+  if(typeof jsAct === "function" && jsAct(el)) return;
+  if(act === "toggle"){ JN.exp.has(id) ? JN.exp.delete(id) : JN.exp.add(id); if(JN.exp.has(id) && typeof JS !== "undefined") JS.last = id; const node = el.closest(".jn-trade"), tmp = document.createElement("div");
     tmp.innerHTML = jCard(t); node.replaceWith(tmp.firstElementChild); return; }
   if(act === "audit") jnForm(id);
   if(act === "chart") jnChart(t);
@@ -557,6 +559,7 @@ function jnForm(id){
           <label for="jnNotes">Plan and reason for entry</label><textarea id="jnNotes" rows="4" placeholder="What did you see? Why here?">${jEsc(o.notes)}</textarea>
           <label for="jnReview">Review</label><textarea id="jnReview" rows="4" placeholder="What went right, what went wrong, the lesson">${jEsc(o.review)}</textarea>
         </div>
+        ${typeof jsStrip === "function" ? `<div class="jn-card jn-fpics">${jsStrip(t, "form")}</div>` : ""}
       </div>
       <div class="jn-mright"><div class="jn-card">
         <div class="jn-ohead"><div id="jnFSeal"></div><div><h3 style="margin:0">Octagon audit</h3><p class="muted jn-small" id="jnFSealNote"></p></div></div>
@@ -571,12 +574,13 @@ function jnForm(id){
   jq("#jnNotes").oninput = e => { o.notes = e.target.value; JN.form.dirty = true; };
   jq("#jnReview").oninput = e => { o.review = e.target.value; JN.form.dirty = true; };
   jq("#jnOct").addEventListener("click", jnOctClick);
+  m.querySelector(".jn-mleft").addEventListener("click", e => { const el = e.target.closest("[data-act]"); if(el && typeof jsAct === "function") jsAct(el); });
   jq("#jnOct").addEventListener("change", e => { const f = e.target.dataset && e.target.dataset.flag; if(!f) return; o[f] = e.target.checked; JN.form.dirty = true; jnPreview(); });
   jnTagBind();
   jnOctRender();
   document.addEventListener("keydown", jnFormKey);
 }
-function jnFormKey(e){ if(e.key === "Escape" && JN.form && !jq("#jnTagSugg.open")) jnFormClose(); }
+function jnFormKey(e){ if(e.key === "Escape" && JN.form && !jq("#jnTagSugg.open") && !(typeof JS !== "undefined" && JS.view)) jnFormClose(); }
 function jnFormClose(force){
   if(JN.form && JN.form.dirty && !force && !confirm("Close without saving your changes?")) return;
   JN.form = null; const m = jq("#jnModal"); if(m){ m.classList.add("hide"); m.innerHTML = ""; }

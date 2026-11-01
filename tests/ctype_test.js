@@ -56,9 +56,32 @@ const cols = [C(1, 100, 110), C(-1, 104, 107), C(1, 105, 112), C(-1, 106, 109), 
 const T = CT.pfTools(cols, 1, 3, {anchorBoxes: 10, countMin: 5});
 // bullish line from 99 at column 0, +1 per column: col 5 -> 104, so the O column 5 (low 103) breaks it
 ok(T.lines[0].dir === 1 && T.lines[0].p0 === 99 && T.lines[0].c1 === 5 && T.lines[0].broken, "P&F line: bullish from 99 (below the first low), broken by the O column 5 at 103 (line at 104)", T.lines[0]);
-// then bearish from above the highest X since (col 2, high 112 -> 113), -1 per column: col 8 -> 107; X col 6 (108) vs line at col 6 = 109: no; col 8 (113 >= 107): broken
-ok(T.lines[1].dir === -1 && T.lines[1].c0 === 2 && T.lines[1].p0 === 113 && T.lines[1].c1 === 8 && T.lines[1].broken, "P&F line: then bearish from 113 (above the highest X, column 2), broken by column 8", T.lines[1]);
+// then bearish from above the top that no later column has crossed: columns 2 and 4 both top at 112; a line from column 2
+// (113, -1 per column) is at 111 by column 4, which reaches 112 - already crossed - so it starts above column 4 (v0.27.0):
+// 113 at col 4, 111 at col 6 (X 108: no), 109 at col 8 (113: broken)
+ok(T.lines[1].dir === -1 && T.lines[1].c0 === 4 && T.lines[1].p0 === 113 && T.lines[1].c1 === 8 && T.lines[1].broken, "P&F line: then bearish from 113 above column 4 (column 2's line was already crossed by column 4's equal top), broken by column 8", T.lines[1]);
 ok(T.lines[2].dir === 1 && T.lines[2].c0 === 7 && T.lines[2].p0 === 98 && !T.lines[2].broken, "P&F line: and a new bullish line from 98 (below the lowest O, column 7), still running", T.lines[2]);
+// v0.27.0 regression (owner's screenshot, 1 Nov): a line was started at the plain highest top / lowest bottom, which columns
+// before the break could have crossed already; the line then ran on through price, and two lines were re-made from the
+// same column every column (labels marching off in a "<"). On random walks: no line is crossed before the column where
+// it's marked broken, a broken line is broken by that column, and no line is made twice.
+{
+  let seed = 7, bad = 0, dup = 0, n = 0, wrongEnd = 0;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for(let run = 0; run < 40; run++){
+    let p = 1000; const rw = [];
+    for(let i = 0; i < 2000; i++){ const o = p; p += (rnd() - 0.5) * 6; rw.push({time: i * 60, open: o, high: Math.max(o, p) + rnd() * 2, low: Math.min(o, p) - rnd() * 2, close: p, vol: 1}); }
+    const cs = CT.pf(rw, 2, 3, "hl"), K = v => Math.round(v / 2), cc = cs.map(b => ({dir: b.pf, hi: K(b.high), lo: K(b.low)}));
+    const seen = new Set();
+    for(const L of CT.pfTools(cs, 2, 3).lines){
+      n++; const key = L.c0 + ":" + L.dir; if(seen.has(key)) dup++; seen.add(key);
+      const at = i => L.k0 + L.dir * (i - L.c0), cross = i => L.dir > 0 ? cc[i].lo <= at(i) : cc[i].hi >= at(i);
+      for(let i = L.c0 + 1; i < Math.min(L.c1, cc.length); i++) if(cross(i)){ bad++; break; }
+      if(L.broken && !cross(L.c1)) wrongEnd++;
+    }
+  }
+  ok(n > 1000 && bad === 0 && wrongEnd === 0 && dup === 0, "P&F lines on random walks: none crossed before its break, each broken where marked, none made twice", {n, bad, wrongEnd, dup});
+}
 const sig = T.signals.map(s => `${s.col}:${s.kind}@${s.price}${s.fresh ? "*" : ""}`).join(" ");
 ok(sig === "2:DTB@111* 5:DBS@105* 7:DBS@102 8:DTB@109*", "P&F signals: DTB at 111, DBS at 105, DBS at 102 (continuation), DTB at 109 (above column 6's 108); * = fresh", sig);
 const tt = CT.pfTools([C(1, 100, 110), C(-1, 104, 107), C(1, 105, 110), C(-1, 105, 107), C(1, 106, 111)], 1, 3).signals.map(s => `${s.col}:${s.kind}@${s.price}`).join(" ");

@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 1 Nov 2026, version **0.26.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 1 Nov 2026, version **0.27.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -66,6 +66,7 @@ and roadmap updated too.
   v0.20.3: the ticket sheet can shrink to a bubble (`M.min`, `mMin()`, `mBubFill()`; body class `tkmin` hides `#mBar`
   and shows `#mBub` in its slot, so the chart's size never changes). A pointerdown on `#chart` while the sheet is up
   shrinks it; pref `mobTicket` ("full" / "bubble") is what SELL / BUY open.
+- `helper/jshots.py` + `web/jshots.js`: the journal's pictures and their Telegram copy (v0.27.0, section below).
 - `tests/`: the test kit (fake Fyers feed and order API, route check, engine tests incl. `live_test.py`, browser
   tests incl. `live_flow.js` and `mobile_flow.js`). See `tests/README.md`.
 
@@ -76,6 +77,35 @@ runs on 1 Nov, on v0.20.2 code too). Cause not found; it's a test-kit issue so f
 probably the history read before the kill switch's close was booked. Same advice.
 `indicator_settings_flow.js`'s "at the start of a contract's history it stops asking" failed once in 2 runs on 1 Nov
 (v0.22.0; passed on re-run, 37/37). Same advice.
+
+## Journal pictures (v0.27.0, roadmap item 4: second of three releases)
+
+- `helper/jshots.py`: a trade's pictures are `t["shots"]` in journal.json = [{id, kind server / chart / upload, phase entry /
+  exit / None, tf label, src, at, w, h, bytes, ext, name, tg}], files `u/<user>/jshots/<trade key>/<id>.<ext>` (+ `<id>_t.jpg`
+  thumbnails, made on first request). Settings: journal `settings.shots` = `jshots.DEFAULTS` {auto, res, bars, chart, tg,
+  tg_chat, tg_since}; `clean_cfg()` validates; `tg_since` is stamped when the backup is turned on / its chat changes.
+- **One worker thread** (`queue(job, delay)`, a heap; jobs `("draw", uid, key, phase, manual[, tries])`, `("tg", uid, key, sid,
+  tries)`, `("tgdel", uid, chat, msg)`) does the slow parts one at a time. Journal saves now take `Journal.lock` (the worker
+  changes trades); the worker deep-copies a trade under the lock before reading it.
+- **Entry / exit:** `journal.on_trade` sees a new trade ("open", none before) -> `jshots.phase(urt, key, "entry")`; a close that
+  makes it "closed" -> "exit". `phase()` queues the server drawing (DELAY 3 s) and broadcasts `{"jshot": {id, phase, s, acct}}`
+  on the user's sockets. Backfilled trades get nothing automatic (Draw at entry / exit by hand: `/api/journal/shot/draw`).
+- **Server drawing:** `candles_for()` = `candles.get(urt.link, s, res, days)` (the user's own Fyers budget; falls back to
+  `candles.saved()`); `render()` (Pillow, 1280×720, fonts in `helper/fonts/`, DejaVu Sans Mono with ₹). A failure ->
+  `t["shot_err"][phase]`, retried at 2 and 4 min. Stop on the underlying (`basis` != self): no SL / TP lines.
+- **Browser:** `web/jshots.js` (after journal.js): `jsStrip(t)` (card and audit form), `jsAct` (journal.js's list click and the
+  form delegate to it), uploads / paste / drop (`jsUpload`: raw body to `/api/journal/shot/add?id&tf&kind=upload&name`),
+  the viewer (`jsView`, `#jsView`), `jsShotReq(m)` (index.html's socket handler: a page whose `cur.s` is the contract and whose
+  chart is on screen - not the outer page of a grid - waits 1.5 s, `chart.takeScreenshot(true)` + a header band, sends
+  kind=chart; the server keeps one per (phase, tf) and answers others `dup`), `jsSnap` (📷 `#bSnap`, before ⛶; not in grid
+  frames), `jsSettings` (wraps `jnSettings`: the Pictures card).
+- **Telegram:** `send_file()` (multipart sendDocument, stdlib), caption HTML; message id kept in `sh.tg`; delete ->
+  `deleteMessage`. Uses `telegram.load(uid)`'s bot (Settings › Telegram alerts is admin-only, so effectively the admin only).
+  `tg_journal.json` keeps the last send / error. Start-up (`jshots.startup`) re-queues unsent pictures since `tg_since`.
+- Not seen for real yet: the server's picture on real Fyers candles (the forming candle at entry: the mock's history stops at
+  the last finished candle, so its marker sits just past the candles); a real Telegram channel taking documents and deletes.
+- Pillow: added to requirements.txt; `update.sh` runs `install.sh`, which pip-installs it. Without it, drawing answers "Pillow
+  isn't installed" and Settings › Pictures says so.
 
 ## The journal (v0.26.0, roadmap item 4: first of three releases)
 
@@ -105,11 +135,8 @@ probably the history read before the kill switch's close was booked. Same advice
   (`jnReps`, `jnToday`, `jnGoal`, strip, `jCard`), the audit form (`jnForm`, a modal), Settings (`jnSettings`). Filters in
   prefs `jn`. Never rebuild under a held button (`JN.holding`: a rebuild cancelled holds in testing). The phone: a row
   added to More (wraps `mMore`).
-- Next (v0.27.0): screenshots (server-drawn at entry and exit with Pillow + the open chart's own picture via LWC
-  `takeScreenshot()`, own uploads / paste labelled by timeframe), image viewer, Telegram backup to the journal's channel
-  (the bot in Settings › Telegram alerts; the channel ID typed in Journal › Settings). Telegram is admin-only today: other
-  users would need their own bot setting. Then v0.28.0: Insights, Review + calendar + walk-through, Copy for Gemini,
-  CSV / backup. 4b (prop-firm journals) waits for the owner's yes.
+- v0.27.0 (pictures + Telegram backup) shipped, see above. Next: v0.28.0: Insights, Review + calendar + walk-through,
+  Copy for Gemini, CSV / backup. 4b (prop-firm journals) waits for the owner's yes.
 
 ## Telegram alerts (v0.25.0)
 
@@ -342,6 +369,9 @@ How it holds: indicators only ever read `DISP` (the shown bars); Pine gets them 
 `tests/pine_compat_flow.js`; when a Pine feature is added, add a script using it to `tests/pine_compat.js`.
 The P&F toolkit is `CT.pfTools` (ctype.js: lines, signals, anchors, counts, hcounts, patterns) drawn by `PfToolsPrim`
 (index.html, built-in indicator "pftools"; labels go through a priority queue so they never overlap).
+v0.27.0 fix: after a break the next 45° line starts at the X top / O bottom with the most `hi + column` / least `lo - column`
+in the move (the tangent no later column has crossed); `ctype_test.js` checks on random walks that no line is crossed
+before its break and none is made twice. Keep that check passing when touching the lines.
 
 ## Chart types (v0.15.0, Point & Figure v0.16.0)
 
@@ -356,9 +386,10 @@ indicator option to add (not built).
 2. Compare the app's charges with what Fyers deducted (roadmap item 1, last part).
 3. Monday: read the order-flow check with the owner; the footprint only if it's exact (and decide roadmap item 12,
    seconds / tick charts, from the same numbers). Next build: the journal (4) (the owner's order, 1 Nov; item 8, CFD
-   prices, is on hold): v0.26.0 shipped, v0.27.0 (screenshots + Telegram backup) next. Shipped and waiting for the owner's try: measurement and drawing tools (v0.22.0), layouts
+   prices, is on hold): v0.26.0 and v0.27.0 (pictures + Telegram backup) shipped, v0.28.0 (Insights, review, export) next. Shipped and waiting for the owner's try: measurement and drawing tools (v0.22.0), layouts
    (v0.23.0), angles (v0.23.1), multi-charts with sync (v0.24.0 / v0.24.1), Telegram alerts (v0.25.0: set up and tested
-   by the owner 1 Nov; the journal will reuse the same bot for screenshots), the journal (v0.26.0).
+   by the owner 1 Nov), the journal (v0.26.0), journal pictures + Telegram backup (v0.27.0: the owner turns on the backup
+   in Journal › Settings › Pictures with a new private channel).
 4. The owner tries the phone layout (v0.19.0) and the order bubble (v0.20.3) on his phone; fix what he reports.
 5. The owner checks v0.20.0 on real Fyers: Pivot Points and the Chandelier exit on GOLDPETAL 2m, scrolling back,
    and the Style / Visibility tabs on his own scripts.
