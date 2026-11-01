@@ -8,7 +8,8 @@ live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper
 The repo is `Sic-Parvis-Magna-Achaggi/Fyers-Paper-Trader` (private). The owner uploads release zips by dragging the
 folder's contents into GitHub; the server pulls every minute. Always start from the latest commit in the repo, not
 an old zip. The owner releases with `tools/github_upload.html` (Release to GitHub, v0.26.1): a single page opened from disk; with his
-fine-grained token (this repo, Contents: Read and write) it reads the zip in the browser, compares git blob ids with the
+fine-grained token (resource owner the Sic-Parvis-Magna-Achaggi organization, this repo, Contents: Read and write; the
+organization must allow fine-grained tokens; an owner's own tokens need no approval; steps in README) it reads the zip in the browser, compares git blob ids with the
 branch's tree, sends only changed files as blobs and makes ONE commit (fast-forward only; deletes only if ticked; warns on
 an older VERSION). GitHub's web upload takes at most 100 files (the repo has 110), so dragging is only the fallback (two
 drags: `tests/`, `docs/`, `server/`, `tools/` + top files; then `helper/`, `web/`). Every release is the full repo zip. A new

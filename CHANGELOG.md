@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.26.2 — 1 Nov 2026 — Release instructions for the organization's token
+
+Changed
+- README › Releasing a new version: the token is made with **Resource owner = Sic-Parvis-Magna-Achaggi** (the repo is the
+  organization's); how to allow fine-grained tokens in the organization's settings, approval ("Pending"), what "not found"
+  and "can't do this" usually mean, and renewing an expired token.
+- Release to GitHub (`tools/github_upload.html`): the same hint under the token box; its "not found" / "can't do this"
+  messages name the usual causes (token made for your username, not approved yet, no Contents: Read and write).
+- `docs/Project_Instructions.md` (paste into the claude.ai project): whole-repo zips only, released with the tool; new chats
+  start from GitHub's Download ZIP; the GitHub token never goes into chat; Journal in the page list.
+
 ## v0.26.1 — 1 Nov 2026 — Release to GitHub without the 100-file limit
 
 Added

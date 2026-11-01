@@ -9,13 +9,16 @@ WHAT IT IS
 
 ROADMAP (THE TASK LIST)
 - docs/Roadmap.md in the repo, with a copy at claude/Roadmap.md in this project, is the one task list. Read it, and claude/Handoff.md, at the start of every new chat.
+- A new chat starts from the latest commit: I attach GitHub's Code › Download ZIP (its top folder is "Fyers-Paper-Trader-main/").
 - When I ask for something new, add it to the roadmap straight away, in the order I say, with any design we agree.
 - When a task ships, tick it [x] with its version and move it to Done. Half-done tasks stay in Next with their finished parts ticked.
 - Update both copies (repo and project) with every zip, and whenever I change the order or add a task.
 - Keep docs/Handoff.md current too (where things stand, how the code is laid out, what's next).
 
 HOW TO DELIVER CODE
-- Give me a zip of the whole repo, with the top folder "Fyers-Paper-Trader/". I upload it with tools/github_upload.html (Release to GitHub: one commit through GitHub's API, only changed files sent, no 100-file limit). Dragging into github.com is the fallback (two drags: it takes at most 100 files at a time).
+- Give me a zip of the WHOLE repo (never a changes-only zip), with the top folder "Fyers-Paper-Trader/".
+- I upload it with tools/github_upload.html ("Release to GitHub", opened from disk): one commit through GitHub's API, only changed files sent, no 100-file limit, nothing deleted unless I tick it. It uses my fine-grained token (resource owner: the Sic-Parvis-Magna-Achaggi organization; only this repo; Contents: Read and write), typed only into that page. Setup steps: README › Releasing a new version. Dragging into github.com is the fallback (at most 100 files a drag, so two drags).
+- If a release deletes a file, say so: the tool only deletes when I tick its box.
 - EVERY zip comes with: (1) changelog text I can paste, (2) a one-line commit message, (3) the new version number. Keep VERSION and CHANGELOG.md updated in the repo.
 - Test everything before giving me a zip with the test kit in tests/ (tests/README.md): run the helper against the fake Fyers feed and click through the page in a real browser. Tell me plainly what was and wasn't tested, especially anything that needs the live Fyers feed.
 - Never remove existing features or routes by accident. Run tests/routes_check.py before each release, and add new routes to it.
@@ -41,7 +44,8 @@ CHART / UI EXPECTATIONS (MT5-like)
 - Indicators come from the ƒx menu, with show/hide and collapse like TradingView. My own Pine Script indicators are written in the in-app Pine Editor (TradingView-like), saved on the server and added from ƒx.
 - Chart types: candles, hollow, bars, line, area, Heikin-Ashi, Renko, range bars, line break, Point & Figure. EVERY indicator works on EVERY chart type, P&F included: Volume, every Pine script and every Pine feature, now and in future. tests/pine_compat.js + tests/pine_compat_flow.js check it before every release; add a script there whenever a Pine feature is added.
 - Footprint / order flow only from real trades, never an estimate.
-- Pages: Chart, Trades, History, Book, Account, Log.
+- Pages: Chart, Trades, History, Journal, Book, Account, Log.
+- Journal: the Octagon port (octagon_journal.html), on the server; trades arrive automatically; my 8 pillars word for word (editable); its lockouts block orders, each switchable.
 
 LIMITS
 - Fyers API v3 on the Standard plan. Data: 5/s, 50/min, 5,000/day; the helper keeps under 3/s, 35/min, 4,000/day and queues instead of failing. Orders and account calls: 10/s, 200/min, 1,00,000/day; the helper queues at 4/s, 120/min. Going over a per-minute limit more than 3 times in a day blocks the account for the day. Tell me if anything really needs Fyers Prime.
@@ -50,7 +54,7 @@ LIMITS
 SECURITY
 - Never ask me to paste passwords, 2FA codes, recovery codes, API secrets, tokens or private keys into chat. The Fyers App ID/Secret is entered only in the helper's own Settings screen.
 - I create accounts, enter card details and passwords myself.
-- The server's GitHub deploy key stays read-only.
+- The server's GitHub deploy key stays read-only. My GitHub token for releases is typed only into tools/github_upload.html, never into chat.
 - 2FA is mandatory for every user; sensitive actions ask for a fresh code. Locked out: python -m helper.users rescue admin on the server console.
 
 HOW TO WORK WITH ME

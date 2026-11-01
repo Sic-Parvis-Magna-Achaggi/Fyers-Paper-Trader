@@ -114,7 +114,18 @@ Open `tools/github_upload.html` in a browser (double-click it: a single file, no
 the release zip, **Check against GitHub**, then **Commit to GitHub**. It makes one commit through GitHub's API with only the
 files that changed (no 100-file limit, unlike dragging into github.com). Nothing on GitHub is deleted unless you tick the box.
 
-The token: github.com › Settings › Developer settings › Personal access tokens › **Fine-grained tokens** › Generate new token:
-Repository access "Only select repositories" = this repo; Repository permissions › **Contents: Read and write** (Metadata:
-Read-only is added on its own); an expiry date. Type it only into the page (or tick Remember on your own device).
+**The token (once).** The repo belongs to the **Sic-Parvis-Magna-Achaggi** organization, so the token is made for the organization:
+1. github.com › your profile picture › **Settings** › **Developer settings** › **Personal access tokens** › **Fine-grained tokens**
+   › **Generate new token**. Give it a name and an expiry date.
+2. **Resource owner:** pick **Sic-Parvis-Magna-Achaggi** (not your own username).
+3. **Repository access:** Only select repositories › **Fyers-Paper-Trader**.
+4. **Repository permissions:** **Contents › Read and write** (Metadata: read-only is added on its own). Nothing else.
+5. Generate, copy it, and type it only into the Release to GitHub page (tick Remember only on your own device).
 
+If the organization isn't offered under Resource owner, it doesn't allow fine-grained tokens yet. As its owner: profile picture
+› **Organizations** › Sic-Parvis-Magna-Achaggi › **Settings** › left sidebar, **Personal access tokens** › **Settings** ›
+**Fine-grained tokens** tab › "Allow access via personal access tokens" › **Save**. By default the organization asks an owner
+to approve each fine-grained token, but an owner's own tokens need no approval. If a token shows "Pending", approve it under
+the organization's **Settings** › **Personal access tokens** › **Pending requests**. If Check says "not found" or "can't do
+this", the token is usually still pending, made for your username instead of the organization, or without Contents: Read
+and write. When the token expires, make a new one the same way.

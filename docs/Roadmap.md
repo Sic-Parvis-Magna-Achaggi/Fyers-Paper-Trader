@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 1 Nov 2026 (v0.26.1). This is the one task list for the project.
+Updated 1 Nov 2026 (v0.26.2). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -197,6 +197,7 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Done
 
+- [x] **v0.26.2** (1 Nov): release instructions for the organization's token (README, the tool's hints, project instructions).
 - [x] **v0.26.1** (1 Nov): Release to GitHub (`tools/github_upload.html`): a zip goes in as one commit through GitHub's API, only changed files, no 100-file limit (asked 1 Nov, after the 120-file v0.26.0 zip was refused by github.com's uploader).
 - [x] **v0.26.0** (1 Nov): the journal, first step (item 4): the Journal page; trades arrive on their own; the 8-pillar audit; the session engine with lockouts that refuse orders (switchable); Today, Reps, stats and curve, filters, settings.
 - [x] **v0.25.0** (1 Nov): Telegram alerts for live trades (item 3): the server not answering (a watchdog service of its own), a live warning lasting 30 s, no prices for 60 s; your own bot, Find my chat, test message; optional outside heartbeat (Healthchecks.io) for the whole server being down.

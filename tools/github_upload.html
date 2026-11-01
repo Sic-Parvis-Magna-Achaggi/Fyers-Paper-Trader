@@ -12,7 +12,9 @@
   Check, then Commit. Only files whose content changed are sent; nothing is deleted unless you tick the box.
 
   The token: a fine-grained personal access token (github.com > Settings > Developer settings > Personal access tokens >
-  Fine-grained), "Only select repositories" = this repo, Repository permissions > Contents: Read and write. It stays in this
+  Fine-grained). Resource owner = the organization that owns the repo (Sic-Parvis-Magna-Achaggi), "Only select repositories"
+  = this repo, Repository permissions > Contents: Read and write. Full steps, incl. the organization's settings: README.md >
+  Releasing a new version. It stays in this
   page (and, only if you tick "Remember", in this browser's storage on this device). It is sent only to the API address.
 
   How: GET the branch and its tree, work out each file's git blob id locally (SHA-1 of "blob <size>\0" + bytes) to see what
@@ -68,8 +70,9 @@ a{color:var(--accent)}
       <div><label for="repo">Repository (owner/name)</label><input type="text" id="repo" class="mono" value="Sic-Parvis-Magna-Achaggi/Fyers-Paper-Trader" autocomplete="off"></div>
       <div style="flex:0 1 160px"><label for="branch">Branch (empty = default)</label><input type="text" id="branch" class="mono" placeholder="main" autocomplete="off"></div>
     </div>
-    <label for="token">GitHub token (fine-grained, this repo only, Contents: Read and write)</label>
+    <label for="token">GitHub token (fine-grained: resource owner = the organization, this repo only, Contents: Read and write)</label>
     <div class="row" style="flex-wrap:nowrap"><input type="password" id="token" autocomplete="off" placeholder="github_pat_…"><button type="button" id="show" style="flex:none">Show</button></div>
+    <small class="hint">Making one: github.com › Settings › Developer settings › Personal access tokens › Fine-grained tokens › Generate new token › Resource owner: <b>Sic-Parvis-Magna-Achaggi</b> › Only select repositories: this repo › Contents: Read and write. Steps in the repo's README.</small>
     <label class="check"><input type="checkbox" id="remember"> Remember the token in this browser on this device (otherwise it's forgotten when you close the page)</label>
     <details><summary class="muted">API address (only for testing)</summary><input type="text" id="api" class="mono" value="https://api.github.com" style="margin-top:6px"></details>
   </div>
@@ -215,8 +218,8 @@ async function gh(method, path, body, tries = 6){
     if(r.status >= 500 && a < 2){ await sleep(3000); continue; }
     if(!r.ok){
       const e = new Error(r.status === 401 ? "GitHub refused the token (wrong, expired or revoked)"
-        : r.status === 403 ? "the token can't do this: it needs Contents: Read and write on this repository (" + msg + ")"
-        : r.status === 404 ? "not found: check the repository name and that the token has access to it (" + path + ")" : msg);
+        : r.status === 403 ? "the token can't do this: it needs Contents: Read and write on this repository, and the organization may still have to approve it (" + msg + ")"
+        : r.status === 404 ? "not found: check the repository name, and that the token was made for the organization (Resource owner), includes this repository and is approved (" + path + ")" : msg);
       e.status = r.status; throw e;
     }
     return j;
