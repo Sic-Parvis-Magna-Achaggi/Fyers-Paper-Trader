@@ -742,6 +742,78 @@ async def scripts_delete(request: Request):
     return {"ok": True, "scripts": lst}
 
 
+# ------------------------------------------------------------------ chart drawings (v0.22.0)
+# Each user's drawings, one file per contract (u/<user>/drawings/<contract>.json), so every device and every chart
+# type / timeframe shows the same ones. The page sends the whole list for a contract each time it changes.
+DRAW_MAX = 500                # drawings per contract
+DRAW_BYTES = 400_000          # JSON size per contract (a brush stroke keeps at most 600 points)
+
+
+def _draw_file(r, s: str) -> str:
+    import hashlib
+    import re
+    safe = re.sub(r"[^A-Za-z0-9_-]", "_", s)[:80]
+    return r.dir + "drawings/" + safe + "-" + hashlib.sha1(s.encode()).hexdigest()[:8] + ".json"
+
+
+@app.get("/api/drawings")
+async def drawings_get(request: Request):
+    u, r = _urt(request)
+    s = str(request.query_params.get("s") or "")[:120]
+    if not s:
+        return _err("which contract?")
+    d = store.load(_draw_file(r, s), {"s": s, "items": []})
+    return {"ok": True, "s": s, "items": d.get("items", []) if isinstance(d, dict) else [], "updated": d.get("updated", 0)}
+
+
+@app.post("/api/drawings")
+async def drawings_save(request: Request):
+    """{s, items}: the contract's whole list of drawings (replaces what was saved)."""
+    _same_origin(request)
+    u, r = _urt(request)
+    b = await _body(request)
+    s = str(b.get("s") or "")[:120]
+    items = b.get("items")
+    if not s or not isinstance(items, list):
+        return _err("bad drawings")
+    if len(items) > DRAW_MAX:
+        return _err(f"too many drawings on one contract (over {DRAW_MAX})")
+    if any(not isinstance(x, dict) for x in items) or len(json.dumps(items)) > DRAW_BYTES:
+        return _err("drawings too large")
+    now = int(time.time())
+    store.save(_draw_file(r, s), {"s": s, "items": items, "updated": now})
+    return {"ok": True, "updated": now}
+
+
+@app.post("/api/measure")
+async def measure(request: Request):
+    """Net ₹ for moves measured on the chart (the measure tool, the long / short position drawings), after every charge
+    for the entry and the exit, with the same charges code as trades. {s, product, legs: [{side, qty, entry, exit}]};
+    qty in Fyers units (lots x lot size). Nothing is placed."""
+    u, r = _urt(request)
+    b = await _body(request)
+    row = symbols.get(str(b.get("s") or ""))
+    if not row:
+        return _err("unknown contract")
+    prod = b.get("product")
+    if prod in ("INTRADAY", "MARGIN", "CNC"):
+        row = {**row, "prod": prod}
+    legs = b.get("legs")
+    if not isinstance(legs, list) or not legs or len(legs) > 200:
+        return _err("bad legs")
+    out = []
+    for g in legs:
+        try:
+            side = 1 if float(g["side"]) > 0 else -1
+            qty, en, ex = float(g["qty"]), float(g["entry"]), float(g["exit"])
+            if qty <= 0 or en <= 0 or ex <= 0 or qty > 1e7:
+                raise ValueError
+            out.append(charges.net_at(row, side, qty, en, ex))
+        except (KeyError, TypeError, ValueError):
+            out.append(None)
+    return {"ok": True, "lot": row.get("lot") or 1, "legs": out}
+
+
 @app.get("/api/logs")
 def logs(request: Request):
     """The helper's own log: everything for the admin, a user's own lines for everyone else."""

@@ -21,6 +21,7 @@ FYERS_HELPER_DATA=/tmp/fyers_test node tests/pine_compat_flow.js   # the Pine ba
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/indicator_settings_flow.js  # indicator settings (Inputs / Style / Visibility, own timeframe), Pine imports, chart scroll-back, Pivot Points on daily candles
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/navigation_flow.js         # Go to a date (Alt+G), », P&F zoom and box, no-trade candles, the browser's candle copy, the data check
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/watchlists_flow.js    # several watchlists: new / rename / move / delete, + in Find, streaming, saved, phone
+FYERS_HELPER_DATA=/tmp/fyers_test node tests/drawings_flow.js       # drawing tools and the measure: toolbar, drawing, editing, undo, saved per contract, every chart type, net ₹ / R, position drawings, phone
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/mobile_flow.js        # the phone layout on an emulated Pixel 7: order sheet and its bubble, positions, tabs, full screen (resets the admin's paper account)
 ```
 

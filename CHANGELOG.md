@@ -1,5 +1,53 @@
 # Changelog
 
+## v0.22.0 — 1 Nov 2026 — Drawing tools and the measure tool
+
+Added
+- **Drawing tools, like TradingView's** (owner, 31 Oct; roadmap item 9). A toolbar down the left of the chart:
+  - Lines: trend line, ray, extended, horizontal line and ray, vertical, cross line, parallel channel, regression trend,
+    pitchforks (Andrews, Schiff, modified Schiff).
+  - Fibonacci and Gann: retracement, trend-based extension, fan, time zones, Gann fan, Gann box (levels, colours and
+    fills editable).
+  - Shapes: rectangle, ellipse, triangle, path, brush. Text, note, callout, price label, arrows and arrow marks.
+  - Price, date, and date & price ranges.
+  - Magnet (weak / strong; Ctrl flips it while drawing), stay in drawing mode, lock all, hide all, a list of the drawings
+    on the contract, remove all (click twice).
+  - Editing: select, handles, move (Ctrl+drag copies), a bar for colour / fill / width / style / text / lock / clone /
+    delete, a settings dialog (double-click), a right-click menu, Del, Ctrl+Z / Ctrl+Y, Ctrl+C / Ctrl+V (also to another
+    contract), and TradingView's Alt+T / H / J / V / C / F and Alt+Shift+R. The style you pick becomes the tool's
+    default.
+  - Saved per contract on the server, shown on every timeframe and every chart type (P&F, Renko too: a point sits on the
+    bar, brick or column its time falls in). The trade manager's own lines still win over a drawing on them.
+- **Show / hide the drawing toolbar** (owner, 1 Nov): ✎ on the chart's top bar, the D key, or Chart settings › Drawing
+  toolbar; saved on the server. Hiding the toolbar doesn't hide the drawings.
+- **Measure tool, MT5 + TradingView** (owner, 31 Oct; roadmap item 7). Shift+click / Shift+drag, a middle-button drag,
+  or the ruler button. A green / red box with the change in points, %, ticks (boxes on P&F, bricks on Renko), bars, time
+  and volume, plus the **net ₹ for your lots** after every charge (from the server, the same charges code as trades;
+  Chart settings › Lots for the measure) and **R against your trade's current stop** on that contract.
+- **Long / short position drawings** for looking back: entry, stop and target with net ₹ and R:R, and which was hit
+  first and when, checked on the timeframe's real candles (a candle that opens past a level exits at its open; a candle
+  that reaches both is marked and counted as the stop).
+- **Accurate coordinates in each drawing's settings** (owner, 1 Nov): the settings dialog has tabs (Style · Text ·
+  Levels · Coordinates). Coordinates lists every point: its price (shown and saved on the tick) and its date and time
+  (Indian time), all editable, with the bar each time lands on in this chart shown as you type ("on the bar of 31 Oct 26
+  23:10 (5m bar holding it)"). A position drawing lists entry, target, stop and its right edge. Wrong values are refused
+  with a message and nothing changes (a long's stop above its entry, a date that isn't one). Right-click › Coordinates…
+  opens it directly; Ctrl+Z undoes it.
+- Phone: ✎ opens the tools as a strip above the chart; draw with a finger, tap a drawing to select it.
+
+Server
+- `GET / POST /api/drawings` (a contract's drawings, per user: `u/<user>/drawings/`; 500 a contract) and
+  `POST /api/measure` (net ₹ of moves, nothing placed). Both in `tests/routes_check.py`.
+
+Tests
+- `tests/drawings_flow.js` (71 checks, new): toolbar show / hide (saved), drawing by drag and by clicks, magnet, select,
+  handles, move, undo / redo, delete, colour and width as the default, settings, coordinates (shown, typed, refused,
+  undone; a position's), lock, hide all, text, path, brush,
+  right-click menu, clone, the list, saved on the server and after a reload, per contract, copy to another contract,
+  timeframes, every chart type, the measure (Shift-drag, middle button, ruler; net ₹ checked against gross − charges; R
+  with a long open), the position drawing's outcome against the candles, the SL line winning over a drawing, and the
+  phone (✎ strip, finger drawing, tap to select).
+
 ## v0.21.0 — 1 Nov 2026 — Multiple watchlists
 
 Added

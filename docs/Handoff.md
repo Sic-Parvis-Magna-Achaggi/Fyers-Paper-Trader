@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 1 Nov 2026, version **0.21.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 1 Nov 2026, version **0.22.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -11,7 +11,7 @@ an old zip. Every release: changelog text, a one-line commit message, the versio
 updated; `tests/routes_check.py` passes; the guide updated when behaviour changes; the project copies of the guide
 and roadmap updated too.
 
-## How the code is laid out (v0.20)
+## How the code is laid out (v0.20; drawings: see "Drawing tools and the measure" below)
 
 - `helper/app.py`: FastAPI routes. Login is username + password + TOTP code; sensitive routes need a fresh code
   (HTTP 428, the page asks and retries). `X-Acct` header picks the paper account.
@@ -68,6 +68,8 @@ runs on 1 Nov, on v0.20.2 code too). Cause not found; it's a test-kit issue so f
 00:00 UTC, real Fyers at IST midnight). Re-run it if it fails; worth a proper look when touching Go to.
 `live_flow.js`'s "history: the trade, closed by the kill switch" failed once in 4 runs on 1 Nov (passed on re-run):
 probably the history read before the kill switch's close was booked. Same advice.
+`indicator_settings_flow.js`'s "at the start of a contract's history it stops asking" failed once in 2 runs on 1 Nov
+(v0.22.0; passed on re-run, 37/37). Same advice.
 
 ## Live candles, watchlists, seconds (agreed 1 Nov, roadmap 10-12)
 
@@ -78,6 +80,36 @@ plus the order-flow check's contracts for the admin); browsers add theirs throug
 Standard: **100 contracts** on the data socket (5,000 on Prime); seconds history (5S-45S) is Prime-only, 30 trading
 days. Item 11 (multiple watchlists) comes right after item 10; item 12 (seconds / tick charts) is decided after
 Monday's order-flow check.
+
+## Drawing tools and the measure (v0.22.0)
+
+- `web/draw.js` (engine), `web/drawui.js` (screens), `web/draw.css`. Loaded after the inline script, before mobile.js.
+  Hooks: `buildChart()` calls `drAttach()` (attaches `DrawPrim` to the new series; also on chart-type rebuilds);
+  drawui.js wraps `openSymbol` (-> `drSymbol(s)`: saves the old contract's drawings, loads the new) and `renderCfg`
+  (adds Chart settings › Drawings). State: `DR` (items of the contract on screen, sel, tool, draft, drag, meas).
+- A drawing: `{id, type, pts: [{t, p}], st, text, lock, hide, lots}`; t is chart time (epoch + IST, like the bars).
+  `t2L(t, free)` / `L2t(L)` map time <-> logical bar index on `DISP` (snapped: the bar holding t, on any timeframe or
+  chart type; past the last bar: bars of `drBarSec()`; the brush is `free`, fractional). x = `drView().xL(L)`.
+- Tools are `DT[type]` = {name, g (group), n (points; -1 path, -2 brush), st (default style), geom(A), handles,
+  axP / axT (axis labels), pos / levels / fill / text / ext flags}. `drGeom()` builds lines / polys / ellipses / text
+  boxes / handles once per frame; `drPaint()` draws them and `drHitG()` hit-tests the same geometry (`DR.geo`).
+  Adding a tool = one `DT` entry + an icon in `DR_ICONS` + its group in `DR_GROUPS`.
+- Events: capture listeners on `#chart`'s parent (mousedown / touchstart run before LWC and paper.js's trade-line drag;
+  `drNearTradeLine()` lets the SL / TP / entry lines win). Keyboard: window capture listener in drawui.js.
+- Saved: `/api/drawings` (per user, one file per contract under `u/<user>/drawings/`, 500 a contract, 400 KB), whole list
+  each save (700 ms debounce). Prefs `draw` = {mag, stay, lockAll, hideAll, tb (toolbar shown, desktop), styles (per-tool
+  defaults), last (last tool per group), lots (measure)}. Phone: body class `dtbm` = the strip is open (not saved).
+- Net ₹: `drMoney(legs)` batches to `POST /api/measure` (charges.net_at; nothing placed) and caches; labels show "…"
+  until it answers. R: `drRefTrade()` (an open position on this contract with a stop on its own price, else the armed
+  BUY / SELL tool). Position drawings: `drPosEval()` on `RAW` (real candles), from the candle after the entry to the box's
+  end; a candle reaching both levels = "both" (counted as the stop); opened past a level = its open.
+- Settings dialog (`drSettings(d, tab)`, drawui.js): tabs style / text / lv / xy. Coordinates come from `drCoordDefs(d)`
+  (which points have a price, a time, or both); typed IST date + time -> chart time with `drPartsTime()`; `drBarNote()`
+  says which bar it lands on. Everything is checked before anything changes.
+- After Ctrl+Z, `DR.items` holds new copies: UI handlers look a drawing up by id when clicked (`drFind(id)`), never keep
+  the object (a v0.22.0 bug found in testing: 🔒 locked a stale copy).
+- Not built (roadmap item 9's last line): Inside pitchfork, Gann square, Fib circles / spiral, Elliott / XABCD,
+  per-drawing timeframe visibility, sharing drawings across a future's expiries.
 
 ## Watchlists (v0.21.0)
 
@@ -204,9 +236,9 @@ indicator option to add (not built).
    Live, 1 lot on MCX. Fix whatever that shows.
 2. Compare the app's charges with what Fyers deducted (roadmap item 1, last part).
 3. Monday: read the order-flow check with the owner; the footprint only if it's exact (and decide roadmap item 12,
-   seconds / tick charts, from the same numbers). Then Telegram alerts, the
-   journal, saved layouts, multi-charts, the measurement tool and the drawing tools (roadmap items 3-7 and 9, in
-   that order; item 8, CFD prices, is on hold).
+   seconds / tick charts, from the same numbers). Then Telegram alerts, the journal, saved layouts, multi-charts
+   (roadmap items 3-6, in that order; item 8, CFD prices, is on hold). The measurement and drawing tools (items 7 and
+   9) shipped in v0.22.0: the owner tries them (desktop and phone) and reports.
 4. The owner tries the phone layout (v0.19.0) and the order bubble (v0.20.3) on his phone; fix what he reports.
 5. The owner checks v0.20.0 on real Fyers: Pivot Points and the Chandelier exit on GOLDPETAL 2m, scrolling back,
    and the Style / Visibility tabs on his own scripts.

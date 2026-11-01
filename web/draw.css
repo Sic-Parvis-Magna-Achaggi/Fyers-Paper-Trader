@@ -1,0 +1,101 @@
+/* Drawing tools (web/draw.js, web/drawui.js): the toolbar left of the chart, its menus, the bar over a selected
+   drawing, colours, the right-click menu, the drawings list, the settings dialog. Phone: under body.mob. */
+section.chartwrap{grid-template-columns:auto minmax(0,1fr)}
+section.chartwrap > .charthead{grid-column:1 / -1;grid-row:1}
+section.chartwrap > #chart{grid-column:2;grid-row:2}
+section.chartwrap > #pineDock{grid-column:1 / -1;grid-row:3}
+#dtb{grid-column:1;grid-row:2;display:flex;flex-direction:column;align-items:center;gap:1px;padding:4px 3px;width:42px;min-height:0;
+  border-right:1px solid var(--line);background:var(--panel);overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
+#dtb::-webkit-scrollbar{display:none}
+body.notb:not(.mob) #dtb{display:none}
+#bDraw.on{color:var(--accent)}
+.dtb-b{width:34px;height:32px;padding:0;display:flex;align-items:center;justify-content:center;border:1px solid transparent;background:transparent;color:var(--muted);border-radius:6px;flex:0 0 auto}
+.dtb-b:hover{color:var(--text);background:var(--panel2);border-color:transparent}
+.dtb-b.on{color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.dtb-b.arm{color:#fff;background:var(--down)}
+.dtb-g{position:relative;display:flex;flex:0 0 auto}
+.dtb-more{position:absolute;right:-3px;top:50%;transform:translateY(-50%);width:10px;height:22px;padding:0;border:0;background:transparent;color:var(--muted);font-size:11px;line-height:1;opacity:.55}
+.dtb-g:hover .dtb-more,.dtb-more:hover{opacity:1;color:var(--text)}
+.dtb-sep{display:block;width:24px;height:1px;background:var(--line);margin:4px 0;flex:0 0 auto}
+#dtbFly,#drMenu,#drLst,#dcol{position:fixed;z-index:90;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.4);padding:5px;font-size:13px}
+#dtbFly{min-width:230px;max-height:calc(100vh - 16px);overflow:auto}
+#dtbFly .fh,#drMenu .fh,#drLst .fh{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:4px 8px 6px}
+#dtbFly button,#drMenu button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:0;background:transparent;border-radius:5px;padding:5px 8px;color:var(--text)}
+#dtbFly button:hover,#drMenu button:hover{background:var(--panel2)}
+#dtbFly button.on{color:var(--accent)}
+#dtbFly button span{flex:1} #dtbFly kbd{font:11px var(--mono);color:var(--muted)}
+#drMenu{min-width:180px} #drMenu .danger-t{color:var(--down)}
+#drLst{width:320px;max-height:60vh;overflow:auto}
+#drLst .dl-r{display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:5px;cursor:pointer;color:var(--text)}
+#drLst .dl-r:hover{background:var(--panel2)} #drLst .dl-r.on{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+#drLst .dl-r.off .dl-n{opacity:.45}
+#drLst .dl-r svg{width:18px;height:18px;color:var(--muted);flex:0 0 auto}
+#drLst .dl-n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px}
+#drLst .dl-r button{border:0;background:transparent;padding:2px 4px;color:var(--muted);display:inline-flex}
+#drLst .dl-r button svg{width:15px;height:15px}
+#drLst .dl-r button.on{color:var(--warn)}
+#drLst .dl-r button:hover{color:var(--text)}
+#drLst .help{margin:6px 8px 2px;font-size:11.5px}
+#dsel{position:absolute;z-index:9;left:50%;top:6px;transform:translateX(-50%);display:flex;align-items:center;gap:3px;padding:3px 4px;
+  background:var(--panel);border:1px solid var(--line);border-radius:7px;box-shadow:0 4px 14px rgba(0,0,0,.3);font-size:12px;white-space:nowrap;max-width:calc(100% - 80px);overflow-x:auto;scrollbar-width:none}
+#dsel .ds-name{color:var(--muted);padding:0 6px;font-size:11.5px}
+#dsel button{padding:3px 6px;border-color:transparent;background:transparent;display:inline-flex;align-items:center;color:var(--text);min-height:26px}
+#dsel button:hover{background:var(--panel2)}
+#dsel button svg{width:17px;height:17px}
+#dsel button.on{color:var(--warn)}
+#dsel .ds-col i{display:block;width:18px;height:18px;border-radius:4px;border:1px solid var(--line)}
+#dsel select{width:auto;padding:2px 4px;font-size:12px}
+#dsel .ds-lots{display:inline-flex;align-items:center;gap:4px;margin:0 4px;color:var(--muted);font-size:12px}
+#dsel .ds-lots input{width:56px;padding:2px 4px}
+#dsel.locked .ds-name::after{content:" · locked";color:var(--warn)}
+#dcol{padding:10px;display:flex;flex-direction:column;gap:8px;width:214px}
+#dcol .dc-pal{display:grid;grid-template-columns:repeat(6,1fr);gap:5px}
+#dcol .dc-pal button{width:28px;height:24px;padding:0;border-radius:4px;border:1px solid var(--line)}
+#dcol .dc-pal button.on{outline:2px solid var(--accent);outline-offset:1px}
+#dcol label{display:flex;align-items:center;gap:8px;margin:0;color:var(--muted);font-size:12px}
+#dcol input[type=color]{width:60px;height:26px;padding:0;border:1px solid var(--line);border-radius:4px;background:none}
+#dcol input[type=range]{flex:1}
+#dcol input[type=checkbox]{width:15px;height:15px}
+#drTxtBox{position:absolute;z-index:12}
+#drTxtBox textarea{width:240px;min-height:46px;background:var(--panel);color:var(--text);border:1px solid var(--accent);border-radius:6px;padding:6px 8px;font:13px/1.4 var(--sans);box-shadow:0 6px 20px rgba(0,0,0,.35);resize:both}
+#drSetWrap{position:fixed;inset:0;z-index:150;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;padding:8vh 16px}
+#drSetWrap.hide{display:none}
+#drSet{width:min(420px,100%);max-height:80vh;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.45);font-size:13px}
+#drSet .pih{display:flex;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+#drSet .pib{padding:4px 14px 12px;overflow:auto}
+#drSet .pig{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 0 4px}
+#drSet .ds-r{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:6px 0}
+#drSet .ds-r input[type=number],#drSet .ds-r select,#drSet .ds-r input[data-pt]{width:130px;padding:4px 8px}
+#drSet .ds-r input[type=color]{width:44px;height:26px;padding:0;border:1px solid var(--line);border-radius:4px;background:none}
+#drSet .ds-r input[type=checkbox]{width:16px;height:16px}
+#drSet textarea{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:6px;color:inherit;font:inherit;padding:6px 8px}
+#drSet .ds-lv{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px}
+#drSet .ds-l{display:flex;align-items:center;gap:6px}
+#drSet .ds-l input[type=checkbox]{width:15px;height:15px;flex:0 0 auto}
+#drSet .ds-l input[data-lvv]{width:70px;padding:3px 6px;font-family:var(--mono)}
+#drSet .ds-l input[type=color]{width:34px;height:24px;padding:0;border:1px solid var(--line);border-radius:4px;background:none}
+#drSet .pif{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--line)}
+#drSet .help{font-size:12px}
+
+/* phone: ✎ opens the toolbar as a strip above the chart; menus drop below it */
+body.mob #dtb{display:none;flex:0 0 46px;width:auto;height:46px;flex-direction:row;padding:4px 6px;gap:2px;border-right:0;border-bottom:1px solid var(--line);overflow-x:auto;overflow-y:hidden}
+body.mob.dtbm #dtb{display:flex}
+body.mob #dtb .dtb-b{width:38px;height:36px}
+body.mob #dtb .dtb-g .dtb-more{position:static;transform:none;width:16px;height:36px;opacity:.8}
+body.mob #dtb .dtb-sep{width:1px;height:24px;margin:0 4px}
+body.mob #dtbFly button,body.mob #drMenu button{padding:9px 10px}
+body.mob #dsel{top:auto;bottom:8px;max-width:calc(100% - 16px)}
+body.mob #dsel button{min-height:36px;padding:4px 8px}
+body.mob #drLst{width:min(340px,calc(100vw - 16px))}
+/* settings dialog: tabs (Style / Text / Levels / Coordinates) and one block per point */
+#drSet .ds-tabs{display:flex;gap:2px;padding:0 10px;border-bottom:1px solid var(--line)}
+#drSet .ds-tabs button{background:none;border:0;border-bottom:2px solid transparent;border-radius:0;padding:8px 10px;color:var(--muted);font-weight:500}
+#drSet .ds-tabs button.on{color:var(--text);border-bottom-color:var(--accent)}
+#drSet .ds-xy{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 10px;padding:8px 0;border-bottom:1px dashed var(--line)}
+#drSet .ds-xyh{flex-basis:100%;font-weight:600;font-size:12.5px}
+#drSet .ds-xy label{display:flex;flex-direction:column;gap:3px;margin:0;font-size:11.5px;color:var(--muted)}
+#drSet .ds-xy input[data-xp]{width:120px;padding:4px 8px}
+#drSet .ds-xy input[type=date]{width:142px;padding:3px 6px}
+#drSet .ds-xy input[type=time]{width:100px;padding:3px 6px}
+#drSet .ds-bar{flex-basis:100%;font-size:11.5px}
+#drSet [data-err]{margin-top:8px}

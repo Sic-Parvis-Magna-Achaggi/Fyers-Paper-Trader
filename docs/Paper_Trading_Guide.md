@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.20.2)
+# Paper and live trading: how it works (v0.22.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -151,6 +151,45 @@ Phones get their own layout, like MT5's app (a desktop browser never does). **Mo
 - Daily, weekly and monthly charts show dates only on the time axis.
 - **⛶ or F** maximises the chart inside the browser window, so your tabs stay one click away. **Shift+F** gives real full screen. When maximised, **P** (or Panel) slides the trade panel in, its **✕** hides it, and **Esc** goes back to the normal view.
 
+## Drawing tools (the toolbar left of the chart)
+
+**Show or hide the toolbar:** the **✎** button on the chart's top bar, the **D** key, or Chart settings › Drawing toolbar. The choice is saved on the server. Hiding the toolbar never hides your drawings; that's the 👁 button on the toolbar ("Hide all drawings"). On a phone, ✎ opens the tools as a strip above the chart (it starts closed).
+
+**The tools** (each group button shows the tool you used last; **›** lists the whole group):
+- **Lines:** trend line (Alt+T), ray, extended line, horizontal line (Alt+H), horizontal ray (Alt+J), vertical line (Alt+V), cross line (Alt+C), parallel channel, regression trend (±2σ, settable), pitchfork, Schiff and modified Schiff pitchforks.
+- **Fibonacci and Gann:** Fib retracement (Alt+F; 1 at the first point, 0 at the second, as on TradingView), trend-based Fib extension, Fib fan, Fib time zones, Gann fan, Gann box. Levels, their colours and the fills are editable in each drawing's settings.
+- **Shapes:** rectangle (Alt+Shift+R), ellipse, triangle, path (click points, double-click or Enter to finish), brush.
+- **Text and arrows:** text, note, callout, price label, arrow, arrow marks up / down.
+- **Positions and ranges:** long and short position (see below), price range, date range, date & price range.
+
+**Drawing:** pick a tool, then drag on the chart, or click, move, click (three clicks for channels, pitchforks, the Fib extension and the triangle). Points sit on bars and on the tick. The tool goes back to the cursor after each drawing unless **Stay in drawing mode** (pencil with a lock) is on. **Esc** cancels.
+
+**Magnet** (the horseshoe; › for the mode): *weak* snaps to the bar's open / high / low / close when you're close to one, *strong* always snaps to the nearest. Holding **Ctrl** while you draw flips it on or off.
+
+**Editing:** click a drawing to select it. Drag its handles to reshape it, or drag the line to move it (**Ctrl+drag** moves a copy). The bar at the top of the chart sets colour, fill, width, style and text, and has settings ⚙, lock, clone and delete. A colour or style you pick becomes that tool's default for new drawings. **Double-click** opens the settings (text tools: the text). **Right-click** gives settings, clone, copy, lock, hide, bring to front / send to back and remove. **Del** removes, **Ctrl+Z / Ctrl+Y** undo and redo, **Ctrl+C / Ctrl+V** copy a drawing, also to another contract. A locked drawing can be selected but not moved (dragging scrolls the chart). The trade manager's SL / TP / entry lines always win over a drawing lying on them.
+
+**Settings and exact coordinates:** double-click a drawing (or ⚙ on its bar, or right-click › Settings / Coordinates). Tabs: **Style**, **Text** (text tools), **Levels** (Fibonacci and Gann), **Coordinates**. Coordinates lists every point with its **price** (on the tick) and its **date and time** (Indian time), all editable; under each time it says which bar that lands on in this chart ("on the bar of 31 Oct 26 23:10", or "(5m bar holding it)" for a time inside a bar). A horizontal line has only a price, a vertical line only a time; a long / short drawing has entry, target, stop and its right edge. A wrong value is refused with a message and nothing changes; Ctrl+Z undoes a change.
+
+**The toolbar's other buttons:** lock all, hide all, the drawings list (every drawing on this contract, with show / hide, lock and remove; a click selects it and brings it into view), and 🗑 remove all (click twice; Ctrl+Z brings them back).
+
+**Saved per contract on the server:** every device, every timeframe and every chart type shows the same drawings. A point belongs to the bar its time falls in: a line drawn on 5m starts on the 15m or daily bar holding that 5m bar, and on Renko / P&F on the brick or column formed then. Drawings on GOLDPETAL NOV don't appear on GOLDPETAL DEC (copy them across with Ctrl+C / Ctrl+V).
+
+## Measure (ruler)
+
+**Shift+click** or **Shift+drag** on the chart (as on TradingView), a **middle-button drag** (as MT5's crosshair), or the ruler button then click, move, click. The box is green for a rise and red for a fall, with the figures beside the cursor:
+- the change in points and %, and in ticks (in **boxes** on P&F, **bricks** on Renko);
+- bars (columns on P&F), the time between the two points, and the volume of the bars in between;
+- **the net ₹ for your lots**: what that many lots would make bought at the start and sold at the end (sold first and bought back if it fell), after every charge on both sides. It comes from the server, using the same charges code as your trades. Lots: Chart settings › Lots for the measure (default 1). For stocks a "lot" is 1 share. The product (Intraday / Delivery) is your ticket's.
+- **R for your trade:** with an open position on this contract whose stop is on its own price (or the BUY / SELL tool set up), how many R a move this size is worth to it: the net ₹ of such a move ÷ the net loss at its current stop. With the stop at or past break-even there's no risk left, so no R.
+
+A click clears the measure; Esc too.
+
+## Long / short position drawings (looking back)
+
+Separate from the trade manager: no orders, just a drawing. Click on a bar: the entry is there, the stop 1.5 ATR away, the target 2R away and the box 20 bars wide. Drag the handles on the left to move the entry, target and stop (the stop never goes past the entry), and the right-hand one to change how far it checks. Set lots on its bar or in its settings (the measure's lots are the default).
+- Target and stop, in points, %, and **net ₹** for those lots; R:R net of charges.
+- **The outcome**, checked on this timeframe's **real candles** (never Heikin-Ashi or P&F values) from the candle after the entry to the box's right edge: the first candle that reaches the stop or the target closes it, at that price, or at the candle's open if it opened past it. It shows when, after how many bars, and the net ₹ and R. A candle that reaches both can't show which came first: it's marked, and counted as the stop. With neither hit, it shows the result at the last candle.
+
 ## Chart types
 
 The button after the timeframes (it shows the current type, e.g. **Candles**, **Renko 11**) picks how the chart draws the candles. Your choice is saved on the server, so every device opens the same way.
@@ -274,7 +313,7 @@ Candles are saved on the server and in your browser.
 
 ## Saved on the server
 
-Everything here is per user. Your Pine scripts and libraries, the indicators on your chart (with their inputs, style, timeframe and visibility), your watchlist, pinned timeframes, last chart, theme, panel on/off, ticket defaults (risk mode and amount, product, R) and remembered stop distances are saved on the server. Rules and trailing settings are saved per paper account. Any device, after any login, opens the same set-up.
+Everything here is per user. Your Pine scripts and libraries, the indicators on your chart (with their inputs, style, timeframe and visibility), your watchlists, your drawings (per contract) and drawing settings, pinned timeframes, last chart, theme, panel on/off, ticket defaults (risk mode and amount, product, R) and remembered stop distances are saved on the server. Rules and trailing settings are saved per paper account. Any device, after any login, opens the same set-up.
 
 ## Every ₹ figure is net
 

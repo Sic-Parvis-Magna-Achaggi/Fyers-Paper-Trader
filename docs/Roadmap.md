@@ -1,11 +1,14 @@
 # Roadmap: the task list
 
-Updated 1 Nov 2026 (v0.21.0). This is the one task list for the project.
+Updated 1 Nov 2026 (v0.22.0). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
 
 ## Next, in this order
+
+**Order change (owner, 1 Nov 2026):** items 7 (measurement tool) and 9 (drawing tools) were built first (v0.22.0),
+ahead of 3-6.
 
 1. [ ] **Live mode** (the admin only). Design agreed 31 Oct 2026; built and tested on the fake Fyers in **v0.14.0**. Still to do: the first real trade, then the charges check.
    - [x] Each account is Paper or Live, behind a broker layer, so switching is a flip of a setting (flat first; the old trades are archived and a fresh ledger starts). Live sends orders to Fyers on the owner's own login and reads fills back from Fyers' order-update socket (it doesn't count against the API limits), with the order book as a fallback. *(v0.14.0)*
@@ -43,20 +46,31 @@ Updated 1 Nov 2026 (v0.21.0). This is the one task list for the project.
    - Pick a layout to open the chart exactly like that. Saved on the server, so every device has them.
 6. [ ] **Multi-charts in a layout** (asked 31 Oct 2026)
    - Several charts side by side and stacked (vertical and horizontal splits) inside one layout, each with its own contract, timeframe and indicators. Saved with the layout.
-7. [ ] **Measurement tool, a mix of MT5 and TradingView** (asked 31 Oct 2026)
-   - MT5's crosshair ruler (click-drag from a point: price change, % and bars / time, shown at the cursor) and TradingView's measure box (shaded box, green up / red down, change in points, %, ticks, bars, time and volume).
-   - Plus what fits this app: the net ₹ for your lot size after all charges, and R against the current SL. Works on every chart type (P&F in boxes).
+7. [x] **Measurement tool** (MT5 + TradingView, with net ₹ and R): shipped in **v0.22.0**, see Done.
 
 8. [ ] **CFD prices for prop-firm analysis** (asked 31 Oct 2026: analysis only, for prop-firm trades, not broker trades). **On hold** (owner, 31 Oct 2026).
    - Main source, free: the prop firm's own MT5. A small EA on that terminal sends every bid / ask tick (and back-history) for chosen symbols to the app, so charts use exactly the prices the prop firm fills at (they differ between CFD providers). Works while that MT5 runs (PC or VPS).
    - In the app: every chart type, every indicator / Pine script, the P&F toolkit and paper trading on those symbols.
    - Backup when MT5 is off: a free API (Twelve Data: 800 requests / day, 8 stream symbols "trial"; or AllTick's free stream) for a few forex / gold symbols, labelled as not the prop firm's prices. Global index CFDs have no good free source besides MT5.
 
-9. [ ] **Drawing tools, TradingView's full set** (asked 31 Oct 2026)
-   - Lines (trend line, ray, extended, horizontal / vertical line and ray, parallel channel, regression), Fibonacci (retracement, extension, fan, time zones), pitchforks, Gann, shapes (rectangle, circle, path, brush), text / notes / callouts, arrows, price and date ranges.
-   - **Magnet**: snaps to the bar's open / high / low / close (weak and strong modes, as on TradingView); lock, hide, clone, colours and styles; drawings saved per contract on the server.
-   - **Long / short position tools** for looking back: entry, stop and target drawn on past bars, showing risk, reward, R, and whether the stop or the target was hit first (and when). Separate from the trade manager: no orders, just a drawing.
-   - Work on every chart type (P&F included) and on the phone layout.
+9. [ ] **Drawing tools, TradingView's full set** (asked 31 Oct 2026). Built in **v0.22.0**; a few extras left.
+   - [x] Lines (trend line, ray, extended, horizontal / vertical line and ray, cross line, parallel channel, regression),
+     Fibonacci (retracement, extension, fan, time zones), pitchforks (Andrews, Schiff, modified Schiff), Gann (fan, box),
+     shapes (rectangle, ellipse, triangle, path, brush), text / notes / callouts / price label, arrows, price and date
+     ranges. *(v0.22.0)*
+   - [x] **Magnet** (weak / strong; Ctrl flips it); lock, hide, clone, colours and styles (your last style is the tool's
+     default); undo / redo; copy / paste (also to another contract); the drawings list; drawings saved per contract on
+     the server. *(v0.22.0)*
+   - [x] **Long / short position tools** for looking back: entry, stop and target on past bars, risk, reward, R (net ₹),
+     and whether the stop or the target was hit first, and when (on the real candles). *(v0.22.0)*
+   - [x] Every chart type (P&F included) and the phone layout. *(v0.22.0)*
+   - [x] **The drawing toolbar can be hidden or shown** (asked 1 Nov 2026): ✎ on the chart's top bar, Chart settings, the
+     D key; saved on the server. Hiding it never hides the drawings. *(v0.22.0)*
+   - [x] **Accurate coordinates in each drawing's settings** (asked 1 Nov 2026): a Coordinates tab like TradingView's, with
+     every point's price (on the tick) and date / time (IST) editable, and the bar each time lands on shown. *(v0.22.0)*
+   - [ ] Still to add, if wanted: Inside pitchfork, Gann square / fixed square, Fib circles / spiral / arcs, Elliott and
+     XABCD patterns, show-on-timeframes per drawing (TradingView's Visibility tab), and drawings shared across a future's
+     expiries (today: per contract; copy with Ctrl+C / Ctrl+V).
 
 10. [ ] **Keep the candles the app saw live** (asked 1 Nov 2026; design agreed 1 Nov). Fyers rewrote GOLDPETAL NOV's
     30 Oct after the close (its history and its own chart show a thin day ending at 14,201; the real Friday fell to 13,960
@@ -121,6 +135,11 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Done
 
+- [x] **v0.22.0** (1 Nov): drawing tools (item 9, extras left there) with a toolbar you can hide / show and exact coordinates in each drawing's settings; long / short position drawings for looking back.
+  - [x] **Measurement tool, a mix of MT5 and TradingView** (item 7, asked 31 Oct): MT5's ruler (middle-button drag, figures at
+    the cursor) and TradingView's measure box (Shift+click / Shift+drag, the ruler button; green up / red down; points, %,
+    ticks, bars, time, volume); the net ₹ for your lots after all charges and R against your trade's current SL; every
+    chart type (P&F in boxes).
 - [x] **v0.21.0** (1 Nov): multiple watchlists (item 11, the lists; recording them comes with item 10).
 - [x] **v0.20.8** (1 Nov): data check on every chart: a warning when the candles disagree with Fyers' live figures for the same day (open, high, low, volume, last price after the close) (asked 1 Nov).
 - [x] **v0.20.7** (1 Nov): a day Fyers corrects later reaches the saved candles (the week before is re-checked); v0.20.6's explanation corrected (Fyers rewrote GOLDPETAL's 30 Oct; its own chart shows the same).
