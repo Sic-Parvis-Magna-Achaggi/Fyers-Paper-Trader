@@ -1,5 +1,62 @@
 # Changelog
 
+## v0.29.0 — 2 Nov 2026 — Trade replay: every trade on its recorded chart, and ▶ Play
+
+Added
+- **▶ On chart for every finished trade** (asked 1 Nov: "capture which indicators were present with what settings and then
+  show the trade on the chart"; roadmap 4c, replacing the hidden-browser picture idea). Journal cards, History's row
+  details and the phone's History tab open the trade over the page; ← Back / Esc returns to the page untouched.
+- **The chart's set-up recorded at every entry and exit, on the server** (no page needed): contract, timeframe, chart
+  type, Chart settings, every indicator with its inputs / style / visibility / own timeframe, a copy of each Pine script's
+  code as it was then (library imports resolve the same way), the contract's drawings as they were. The entry uses the chart
+  the order was placed from (PLACE now sends its set-up; kept until a limit order fills); otherwise the saved layout's chart
+  for that contract. The exit: the same layout chart as it is then. Entry / Exit set-up switch; Pine as recorded / My
+  current Pine. Code and drawings are stored once per version (`u/<user>/replay/`).
+- **The trade drawn on its chart:** entries and adds, exits with net ₹ and R, the stop's path step by step (BE marked),
+  the target, break-even + costs, the trade's zones; the price scale takes in the trade's prices; every chart type.
+- **Every stop / target move is recorded** per position with its time and kind (open, BE, trail step, edit, add); history
+  records and journal trades keep it. Trades from before this release: the path is rebuilt from the account's own log
+  (each BE / trail step / SL-TP edit it noted, last 500 entries), marked as such; past the log, first and last stop only.
+  Never estimated from candles (asked 1 Nov: "why can't we capture this too?").
+- **▶ Play: the trade as it played out** (asked 1 Nov: "show it like a real trade as it played out"), like TradingView's
+  bar replay: from 30 candles before the entry, one candle at a time; a forming candle builds from the 1-minute candles
+  (5m on 2h-4h charts, 15m on daily); indicators and Pine work out each candle as it closes through the chart's own live
+  path, from what was known then; request.security / other timeframes stop at the replay's time; the stop, target and BE
+  move when they moved; the open trade's net ₹ and R after all charges at each step (from the server's charges). ⏮, ▶ / ⏸
+  (Space), +1 (→), ⏭ next candle (Shift+→), speed 1-32 candles a second, Entry / Exit jumps, ■ Stop.
+- Routes: `GET /api/journal/replay?id=` (the trade, its path, BE, both set-ups), `POST /api/journal/replay/net`
+  (net ₹ and R at given times and prices).
+
+Changed
+- **Automatic journal pictures are off** (owner, 1 Nov: the replay replaces them): the server's drawing at entry / exit
+  and the open chart's picture. Accounts that had them on are switched off once by this update; Journal › Settings ›
+  Pictures turns them back on (and they stay on). 📷, uploads, paste and drop are unchanged; nothing was deleted.
+- Replays read candles through `/api/history`, the chart's own route, so roadmap item 10's recorded live candles will
+  reach them the same way.
+
+Tests
+- New `tests/replay_test.py` (42 checks, no browser): the engine's path (kinds, order, a long's stop never back), the
+  history record and journal trade carry it; entry snapshot from the order's chart, a limit filled after a restart, the
+  layout fallbacks; Pine code and drawings as at entry vs exit; stored once; a refused order's set-up dropped; the old-trade
+  path from the log (other contracts ignored, partial log marked, no log = ends); net ₹ with an add and a partial close vs
+  `charges.net_at`; pictures off by default / after upgrade / on again.
+- New `tests/replay_flow.js` (48 checks, browser): a trade from a 1m chart with Volume + a Pine script; the script and chart
+  changed afterwards; ▶ On chart shows the recorded timeframe and code, the trade drawn, nothing saved; Play, Pine up to the
+  replay's time, request.security cut at it, +1, ⏭, Entry / Exit with net ₹ and R, a 5m candle built from its minutes,
+  every chart type, Stop, My current Pine, Exit set-up, Esc, History's button, the phone (bar size, ⋯, Play).
+- `tests/mock_server.py`: `POST /_mock/allday?on=1` gives the fake Fyers candles round the clock (a test trade at night
+  needs candles under it); off by default.
+- `tests/jshots_test.py`, `tests/jreview_test.py`: turn the automatic pictures on first (now off by default).
+  `tests/jinsights_flow.js`: the walk-through checks its picture only when that trade has one (trades made by other suites
+  no longer get automatic pictures); it prints the copied text when a Copy for Gemini check fails.
+- The whole kit run on fresh data (2 Nov, 00:10-01:30 IST): every engine test passes (routes, square-off, feed, order-flow
+  check, journal 58, pictures 43, review 25, candles, replay 42, live engine, alerts, chart types); browser suites: security
+  29, live 22, chart types 92, Pine on every chart type 121, indicator settings 37, navigation 36, watchlists 16, drawings
+  78, layouts 31, multi-chart 43, Telegram 33, journal 43, pictures 45, phone 61, replay 48 - all pass; insights 38 of 41:
+  its three Copy for Gemini "today" / "this week" checks fail between midnight and the day's reset hour (a trade at 01:00
+  IST belongs to the previous trading day; unrelated to this release, noted in the roadmap's follow-ups).
+- `tests/routes_check.py`: the two new routes.
+
 ## v0.28.1 — 1 Nov 2026 — Multi-chart grids work on the server
 
 Fixed

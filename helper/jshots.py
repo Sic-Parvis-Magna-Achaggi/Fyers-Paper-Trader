@@ -44,10 +44,11 @@ def tf_ok(tf: str) -> bool:
 
 
 DRAW_RES = ["1", "2", "3", "5", "10", "15", "30", "60", "120", "240", "D"]
-DEFAULTS = {"auto": True,        # draw a picture on the server at every entry and exit
+DEFAULTS = {"auto": False,       # draw a picture on the server at every entry and exit (off since v0.29.0: the
+                                 # trade replay shows each trade on its recorded chart instead; owner, 1 Nov)
             "res": "5",          # ...on this timeframe (Fyers resolution)
             "bars": 120,         # ...this many candles
-            "chart": True,       # ask an open chart of the contract for its own picture at entry and exit
+            "chart": False,      # ask an open chart of the contract for its own picture at entry and exit
             "tg": False,         # send a backup copy of every picture to Telegram
             "tg_chat": "",       # ...to this chat / channel (the bot is the one in Settings › Telegram alerts)
             "tg_since": 0}       # when the backup was turned on (or its chat changed): older pictures go only when asked
@@ -60,14 +61,20 @@ CHAT_RE = re.compile(r"^(-?\d{3,20}|@[A-Za-z][A-Za-z0-9_]{4,31})$")
 # ---------------------------------------------------------------- settings
 def cfg(settings: dict) -> dict:
     out = dict(DEFAULTS)
-    for k, v in ((settings or {}).get("shots") or {}).items():
+    sh = (settings or {}).get("shots") or {}
+    for k, v in sh.items():
         if k in DEFAULTS:
             out[k] = v
+    if not sh.get("v29"):                 # settings saved before v0.29.0: automatic pictures off once (owner, 1 Nov);
+        out["auto"] = out["chart"] = False    # turning them back on in Settings saves the v29 mark
     return out
 
 
 def clean_cfg(b: dict, old: dict) -> dict:
     out = {k: v for k, v in (old or {}).items() if k in DEFAULTS}
+    if not (old or {}).get("v29"):            # (the one-time switch-off above, made permanent)
+        out["auto"] = out["chart"] = False
+    out["v29"] = True
     for k in ("auto", "chart", "tg"):
         if k in b:
             out[k] = bool(b[k])

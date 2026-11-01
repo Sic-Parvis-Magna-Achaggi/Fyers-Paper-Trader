@@ -174,7 +174,25 @@ class Paper:
     def _save_extra(self) -> dict:
         return {}
 
+    PATH_MAX = 2000
+
+    def _path_scan(self):
+        """Every stop / target move of each open position, with its time (v0.29.0: the trade replay draws the stop's
+        path). [t, sl, tp, kind]: kind open / be / trail / edit / add. Called on every save, so nothing is missed."""
+        t = now()
+        for p in self.positions:
+            path = p.get("path")
+            if not path:
+                path = p["path"] = [[p.get("opened") or t, p.get("first_sl"), p.get("tp"), "open"]]
+            kind = p.pop("_pk", None)
+            last = path[-1]
+            if (p.get("sl"), p.get("tp")) != (last[1], last[2]):
+                path.append([t, p.get("sl"), p.get("tp"), kind or "edit"])
+                if len(path) > self.PATH_MAX:
+                    del path[1]                           # (the first point is the opening stop: always kept)
+
     def save(self):
+        self._path_scan()
         store.save(self.dir + "paper.json", {"acct": self.acct, "day": self.day, "positions": self.positions,
                                   "orders": self.orders, "seq": self.seq, "trail": self.trail, "ticket": self.ticket,
                                   "events": self.events[-500:], **self._save_extra()})
@@ -608,6 +626,7 @@ class Paper:
                 pos["sl"] = plan["sl"]
             if plan.get("tp") is not None:
                 pos["tp"] = plan["tp"]
+            pos["_pk"] = "add"
             verb = "Added to"
         self._symbols_changed()
         self.changed(f"{verb} {'LONG' if side > 0 else 'SHORT'} {self.short(plan['s'])}: {qty // (row.get('lot') or 1)} lot "
@@ -634,6 +653,9 @@ class Paper:
             "gross": round(g, 2), "charges": allc, "net": net, "init_risk": pos["init_risk"],
             "r": round(net / pos["init_risk"], 2) if pos["init_risk"] else None,
             "balance_after": bal, "day": self.trading_day(pos["opened"]),
+            "path": (pos.get("path") or [[pos["opened"], pos.get("first_sl"), pos.get("tp"), "open"]]) + (
+                [[now(), pos.get("sl"), pos.get("tp"), pos.pop("_pk", None) or "edit"]]
+                if pos.get("path") and (pos.get("sl"), pos.get("tp")) != tuple(pos["path"][-1][1:3]) else []),
         }
         self.history.append(rec)
         self.positions = [p for p in self.positions if p["id"] != pos["id"]]
@@ -770,6 +792,7 @@ class Paper:
         else:
             if pos.get("sl") is None or pos["side"] * (be - pos["sl"]) > 0:
                 pos["sl"] = be
+                pos["_pk"] = "be"
         pos["be_done"] = True
         self.event(f"{self.short(pos['s'])}: stop to break-even + costs {be} ({why})")
 
@@ -906,6 +929,7 @@ class Paper:
             if cur is None or udir * (cand - cur) >= 0.05 * R:
                 if udir * (b - cand) > 0:
                     pos["sl"] = cand
+                    pos["_pk"] = "trail"
                     pos["trail"] = True
                     moved = True
         if moved:

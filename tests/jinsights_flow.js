@@ -96,7 +96,11 @@ let br;
   await pg.click('.ji-rvtabs button[data-rvf="all"]'); await pg.waitForTimeout(200);
   await pg.click(".ji-walkbar button");
   await pg.waitForSelector("#jiWalk #jiWRight");
-  await pg.waitForFunction(() => { const i = document.querySelector("#jiWImg"); return i && i.complete && i.naturalWidth > 0; }, null, {timeout: 10000});
+  // (since v0.29.0 automatic pictures are off by default, so trades made by other suites may have none: the picture is
+  // checked when the walk's first trade has one)
+  const walkPic = await pg.evaluate(() => { const t = JN.d.trades.find(x => x.id === JI.walk.ids[0]); return !!(t && (t.shots || []).length); });
+  if(walkPic) await pg.waitForFunction(() => { const i = document.querySelector("#jiWImg"); return i && i.complete && i.naturalWidth > 0; }, null, {timeout: 10000});
+  else ok(!(await pg.$("#jiWImg")), "walk-through: a trade without pictures shows none (the reflection still there)");
   const nWalk = await pg.evaluate(() => JI.walk.ids.length);
   const nWeek = await pg.evaluate(() => jiWeekStats(jiRvItems(), JI.rv.week).items.length);
   ok(new RegExp(`1 / ${nWalk}\\b`).test(await pg.textContent("#jiWalk .jn-mhead")) && nWalk === nWeek && nWalk >= 3,
@@ -124,6 +128,7 @@ let br;
   // ---- Copy for Gemini
   await pg.click("#jnAiBtn"); await pg.waitForSelector("#jiAiText");
   let txt = await pg.inputValue("#jiAiText");
+  if(!/### Trade 1 of/.test(txt)) fs.writeSync(1, "  (Copy for Gemini, today: " + txt.slice(0, 300).replace(/\n/g, " | ") + ")\n");
   ok(/# My trades — today/.test(txt) && /### Trade 1 of/.test(txt) && /Octagon:/.test(txt) && /net of every charge/.test(txt), "Copy for Gemini: today's trades with all 8 pillars, IST, net of charges");
   ok(/1\. .* — (held|BROKEN|not recorded)/.test(txt) && /Equity through the session/.test(txt), "each pillar's state, and the session's equity and lockouts");
   await pg.check("#jiAiRules"); await pg.waitForTimeout(100);
@@ -131,6 +136,7 @@ let br;
   ok(/^# My Octagon framework/.test(txt) && /trailing drawdown lockout/.test(txt), "Start with my Octagon rules (remembered)");
   await pg.selectOption("#jiAiScope", "thisweek"); await pg.waitForTimeout(100);
   txt = await pg.inputValue("#jiAiText");
+  if(!/## My weekly reflection/.test(txt)) fs.writeSync(1, "  (Copy for Gemini, this week: " + txt.slice(0, 300).replace(/\n/g, " | ") + ")\n");
   ok(/the week of/.test(txt) && /## My weekly reflection/.test(txt) && /Only from the Zen Temple/.test(txt), "this week: the trades and your weekly reflection");
   await pg.click("#jiAiCopy"); await pg.waitForTimeout(300);
   ok(/Copied/.test(await pg.textContent("#jiAiCount")) && /My trades/.test(await pg.evaluate(() => navigator.clipboard.readText())), "Copy puts it on the clipboard");

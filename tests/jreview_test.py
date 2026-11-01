@@ -94,6 +94,7 @@ E = U.add("A1", "Main")
 J = journal.get("u1")
 J.sync(U, full=True)
 J.set_settings({"rules": {"block_dd": False, "block_afk": False, "block_end": False}})
+J.set_settings({"shots": {"auto": True}})                        # automatic pictures are off by default since v0.29.0
 F = "MCX:CRUDEOIL26NOVFUT"
 
 

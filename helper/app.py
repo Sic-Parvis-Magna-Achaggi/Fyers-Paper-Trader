@@ -4,6 +4,7 @@ accounts; charts, Pine Script, paper trading net of every charge.
 Run: uvicorn helper.app:app --host 127.0.0.1 --port 8000   (Caddy serves it over HTTPS)
 """
 import asyncio
+import copy
 import json
 import os
 import logging
@@ -17,7 +18,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 
 from fastapi.staticfiles import StaticFiles
 
-from . import alerts, charges, charges_watch, fyers_link, journal, jshots, logbuf, rt, store, symbols, telegram, users
+from . import alerts, charges, charges_watch, fyers_link, journal, jreplay, jshots, logbuf, rt, store, symbols, telegram, users
 from .feedcheck import FC
 from . import candles as candles_store
 from .paper import Refused
@@ -775,10 +776,7 @@ DRAW_BYTES = 400_000          # JSON size per contract (a brush stroke keeps at 
 
 
 def _draw_file(r, s: str) -> str:
-    import hashlib
-    import re
-    safe = re.sub(r"[^A-Za-z0-9_-]", "_", s)[:80]
-    return r.dir + "drawings/" + safe + "-" + hashlib.sha1(s.encode()).hexdigest()[:8] + ".json"
+    return jreplay.draw_file(r.dir, s)          # (the replay keeps a copy of the same file at entry / exit)
 
 
 @app.get("/api/drawings")
@@ -975,11 +973,17 @@ async def paper_place(request: Request):
     b = await _body(request)
     engine = _eng(request, b)
     await _prefetch_margin(engine, b)
+    u, r = _urt(request)
+    aid = next((k for k, v in r.engines.items() if v is engine), "")
+    if b.get("setup"):
+        jreplay.note_order(u["uid"], aid, b)          # the chart it came from, for the trade replay (v0.29.0)
     try:
         plan = engine.place(b)
     except Refused as e:
+        jreplay.drop_pending(u["uid"], aid, b)
         return _err(e)
     except (KeyError, TypeError, ValueError) as e:
+        jreplay.drop_pending(u["uid"], aid, b)
         return _err(f"bad request: {e}")
     return _ok(engine, {"plan": plan})
 
@@ -1295,6 +1299,39 @@ async def journal_trade(request: Request):
         return _err(str(e).strip("'\""))
     journal.check_lock(r, t["acct"], before)
     return {"ok": True, "j": j.view(r, {journal.session_key(t)})}
+
+
+@app.get("/api/journal/replay")
+async def journal_replay(request: Request, id: str = ""):
+    """A trade for the replay (v0.29.0): its facts, the stop's path, BE, and the chart's set-up at entry and exit."""
+    u, r = _urt(request)
+    j = journal.get(u["uid"])
+    if id not in j.d["trades"]:
+        j.sync(r)                                        # (History opened before the journal had seen the trade)
+    with j.lock:
+        t = copy.deepcopy(j.d["trades"].get(id))
+    if not t or t.get("status") == "removed":
+        return _err("that trade isn't in the journal")
+    return {"ok": True, **jreplay.view(r, t)}
+
+
+@app.post("/api/journal/replay/net")
+async def journal_replay_net(request: Request):
+    """{id, pts: [[time, price], ...]} -> net ₹ after all charges at each (what was open then, at that price)."""
+    _same_origin(request)
+    u, r = _urt(request)
+    b = await _body(request)
+    j = journal.get(u["uid"])
+    with j.lock:
+        t = copy.deepcopy(j.d["trades"].get(_jkey(b)))
+    if not t:
+        return _err("that trade isn't in the journal")
+    pts = b.get("pts") if isinstance(b.get("pts"), list) else []
+    if len(pts) > 5000:
+        return _err("at most 5,000 prices at a time")
+    net = jreplay.net_series(t, pts)
+    risk = t.get("init_risk") or 0
+    return {"ok": True, "net": net, "r": [round(n / risk, 2) if n is not None and risk else None for n in net]}
 
 
 @app.post("/api/journal/audit")

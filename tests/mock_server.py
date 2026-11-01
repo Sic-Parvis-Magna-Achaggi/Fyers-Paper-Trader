@@ -61,7 +61,7 @@ def fake_get(self, url, params):
         out = []
         t = (a // sec + 1) * sec
         while t <= b and len(out) < 20000:
-            if sec >= 86400 or 3.5 * 3600 <= (t % 86400) <= 18 * 3600:        # 09:00-23:30 IST
+            if sec >= 86400 or ALLDAY[0] or 3.5 * 3600 <= (t % 86400) <= 18 * 3600:        # 09:00-23:30 IST (all day: /_mock/allday)
                 base = 5600 + 60 * math.sin(t / 20000) + 15 * math.sin(t / 1300)
                 o = base + (hash((params["symbol"], t)) % 7 - 3); c = base + (hash((params["symbol"], t + 1)) % 7 - 3)
                 out.append([t, round(o), round(max(o, c) + 2), round(min(o, c) - 2), round(c), 100])
@@ -76,6 +76,7 @@ def fake_get(self, url, params):
 
 
 FL._get = fake_get
+ALLDAY = [os.environ.get("FAKE_ALLDAY") == "1"]     # candles round the clock (replay_flow.js: a trade at night needs candles)
 LISTED_DAYS = int(os.environ.get("FAKE_LISTED_DAYS", "200"))
 
 # Live accounts: Fyers' order API and order-update socket are faked too (tests/fake_broker.py)
@@ -168,6 +169,12 @@ async def _caddy(request, call_next):
     for k, v in CADDY.items():
         resp.headers.setdefault(k, v)
     return resp
+
+
+@app.post("/_mock/allday")
+async def _mock_allday(on: int = 0):
+    ALLDAY[0] = bool(on)
+    return {"ok": True, "allday": ALLDAY[0]}
 
 
 uvicorn.run(app, host="127.0.0.1", port=8766, log_level="warning")

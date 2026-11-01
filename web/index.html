@@ -549,6 +549,7 @@ body:not(.is-admin) .admin-only{display:none!important}
 <link rel="stylesheet" href="/static/draw.css?v=__V__">
 <link rel="stylesheet" href="/static/multichart.css?v=__V__">
 <link rel="stylesheet" href="/static/journal.css?v=__V__">
+<link rel="stylesheet" href="/static/replay.css?v=__V__">
 <link rel="stylesheet" href="/static/mobile.css?v=__V__">
 </head>
 <body data-page="chart">
@@ -786,7 +787,9 @@ body:not(.is-admin) .admin-only{display:none!important}
 </div>
 
 <script>window.APP_V = "__V__"; window.FTM_CELL = (/[?&]cell=(\d)/.exec(location.search) || [])[1];   // a chart inside a multi-chart grid (multichart.js)
-if(window.FTM_CELL != null) document.documentElement.classList.add("cell");</script>
+if(window.FTM_CELL != null) document.documentElement.classList.add("cell");
+window.FTM_REPLAY = (function(){ const m = /[?&]replay=([^&]+)/.exec(location.search); return m ? decodeURIComponent(m[1]) : null; })();   // a trade replay (replay.js)
+if(window.FTM_REPLAY) document.documentElement.classList.add("cell", "replay");</script>
 <script src="/static/ctype.js?v=__V__"></script>
 <script src="/static/paper.js?v=__V__"></script>
 <script src="/static/pine.js?v=__V__"></script>
@@ -2422,6 +2425,7 @@ boot();
 <script src="/static/journal.js?v=__V__"></script>
 <script src="/static/jshots.js?v=__V__"></script>
 <script src="/static/jinsights.js?v=__V__"></script>
+<script src="/static/replay.js?v=__V__"></script>
 <script src="/static/mobile.js?v=__V__"></script>
 </body>
 </html>

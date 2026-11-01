@@ -644,7 +644,8 @@ class LiveEngine(Paper):
         self._nsplit = getattr(self, "_nsplit", 0) + 1
         part = {**p, "id": f"{p['id']}p{self._nsplit}", "qty": qty, "max_qty": qty, "paid": round(p["paid"] * f, 2),
                 "charges": {k: (round(v * f, 2) if isinstance(v, (int, float)) else v) for k, v in p["charges"].items()},
-                "init_risk": round(p["init_risk"] * f, 2), "margin": round(p.get("margin", 0) * f, 2)}
+                "init_risk": round(p["init_risk"] * f, 2), "margin": round(p.get("margin", 0) * f, 2),
+                "path": [list(x) for x in p.get("path") or []]}    # (its own copy of the stop's path)
         for k in ("paid", "init_risk", "margin"):
             p[k] = round(p.get(k, 0) - part[k], 2)
         p["charges"] = {k: (round(v - part["charges"][k], 2) if isinstance(v, (int, float)) else v) for k, v in p["charges"].items()}

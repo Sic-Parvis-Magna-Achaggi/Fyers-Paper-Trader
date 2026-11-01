@@ -16,6 +16,7 @@ python3 tests/journal_test.py                         # the journal: the server'
 python3 tests/jshots_test.py                          # journal pictures: the server's drawing, entry / exit on paper engines, labels, the Telegram copy (fake Telegram on :8771)
 python3 tests/jreview_test.py                         # journal v0.28.0: weekly review + its Telegram summary, CSV, backup and restore (fake Telegram on :8772)
 python3 tests/candles_test.py                         # saved candles: exact contract (no cont_flag), clean-out, a day fetched again replaces it
+python3 tests/replay_test.py                          # trade replay: the stop's path, entry / exit set-ups (order's chart, layouts), code + drawings as then, old trades from the log, net ₹
 
 python3 tests/make_old_data.py /tmp/fyers_test        # fresh v0.12-style data, admin password OldPass12345
 FYERS_HELPER_DATA=/tmp/fyers_test python3 tests/mock_server.py &   # the app on http://localhost:8766
@@ -34,10 +35,14 @@ FYERS_HELPER_DATA=/tmp/fyers_test node tests/journal_flow.js       # the Journal
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/jshots_flow.js        # journal pictures: server + chart pictures of a trade, card, viewer, add / paste / drop, 📷, Settings › Pictures, Telegram copy, phone
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/jinsights_flow.js     # journal v0.28.0: Insights, the weekly review, walk-through, calendar, Copy for Gemini, export / backup / restore, phone
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/mobile_flow.js        # the phone layout on an emulated Pixel 7: order sheet and its bubble, positions, tabs, full screen (resets the admin's paper account)
+FYERS_HELPER_DATA=/tmp/fyers_test node tests/replay_flow.js        # trade replay: ▶ On chart (recorded chart + Pine code, nothing saved), ▶ Play, every chart type, History, the phone; ~5 min (resets the admin's paper account)
 ```
 
 `mock_server.py` sends the same response headers as the server's Caddy (read from `server/Caddyfile`), so browser
 tests see the real rules (v0.28.1: Caddy's frame header broke multi-chart grids on the server only).
+
+`POST /_mock/allday?on=1` (mock_server.py) makes the fake Fyers' candles run round the clock instead of 09:00-23:30 IST:
+`replay_flow.js` turns it on (its test trade can be at night) and off again at the end.
 
 `fake_telegram.py` is a fake Telegram Bot API and Healthchecks.io (`mock_server.py` starts it on :8767; `/_sent` lists the
 messages, `/_docs` the documents sent (journal pictures), `/_deleted` the deleted messages). Tokens starting `1234567:` are good.

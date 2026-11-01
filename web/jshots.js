@@ -302,7 +302,7 @@ async function jsSettings(){
   const st = jnSettings;
   jnSettings = function(){ st(); jsSettings(); };
   document.addEventListener("DOMContentLoaded", () => {
-    if(typeof FTM_CELL !== "undefined" && FTM_CELL != null) return;      // a chart inside a grid: no chart-bar button
+    if(typeof FTM_CELL !== "undefined" && FTM_CELL != null || window.FTM_REPLAY) return;      // a chart inside a grid: no chart-bar button
     const full = document.getElementById("bFull");
     if(full && !document.getElementById("bSnap")){
       const b = document.createElement("button"); b.className = "ghost fsb"; b.id = "bSnap"; b.textContent = "📷";

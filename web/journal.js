@@ -370,6 +370,7 @@ function jCard(t){
       <div class="jt-foot"><span class="muted">${t.status === "closed" ? "" : "The audit can be done now; Pillar 8 is recorded once it closes."}</span>
         <span class="jt-acts">
           <button class="primary" data-act="audit" data-id="${jEsc(t.id)}">${a.recorded ? "Edit audit" : "Audit this trade"}</button>
+          ${t.status === "closed" ? `<button data-act="replay" data-id="${jEsc(t.id)}" title="The trade on its chart: the set-up as recorded at entry / exit, the stop's path, ▶ Play to watch it as it happened">▶ On chart</button>` : ""}
           <button data-act="chart" data-id="${jEsc(t.id)}">Chart</button>
           <button data-act="ai" data-id="${jEsc(t.id)}" title="This trade with all 8 pillars, as text to paste into Gemini">Copy for Gemini</button>
           ${t.hidden ? `<button data-act="restore" data-id="${jEsc(t.id)}">Bring back</button>` : `<button class="ghost" data-act="hide" data-id="${jEsc(t.id)}" title="Leaves the stats, reps and sessions (the trade stays in History)">Remove from journal</button>`}
@@ -398,6 +399,7 @@ async function jnListClick(e){
   if(act === "audit") jnForm(id);
   if(act === "ai" && typeof jiAiOpen === "function") jiAiOpen("trade", id);
   if(act === "chart") jnChart(t);
+  if(act === "replay" && typeof rpOpen === "function") rpOpen(id);
   if(act === "hide" || act === "restore"){
     const j = await japi("/api/journal/hide", {id, hidden: act === "hide"});
     if(j.ok){ jnMerge(j.j); jnRender(); jToast(act === "hide" ? "Removed from the journal (still in History). Filter Octagon › Removed to bring it back." : "Back in the journal"); }

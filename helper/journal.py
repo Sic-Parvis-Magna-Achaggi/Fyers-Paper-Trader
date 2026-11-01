@@ -20,7 +20,7 @@ import re
 import threading
 import time
 
-from . import jshots, charges, store, symbols
+from . import jreplay, jshots, charges, store, symbols
 
 log = logging.getLogger("journal")
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
@@ -471,6 +471,9 @@ class Journal:
                 balance_after=cl[-1].get("bal"), day=rec.get("day") or t["day"],
                 status="open" if still_open else "closed", updated=iso())
             t["r"] = round(t["net"] / t["init_risk"], 2) if t["init_risk"] else None
+            if rec.get("path"):                          # the stop's path (v0.29.0): the longest record of it
+                if len(rec["path"]) >= len(t.get("path") or []):
+                    t["path"] = rec["path"]
             for k, f in (("best", max if rec["side"] > 0 else min), ("worst", min if rec["side"] > 0 else max)):
                 vals = [x for x in (t.get(k), rec.get(k)) if x is not None]
                 t[k] = f(vals) if vals else None
@@ -496,6 +499,8 @@ class Journal:
                      first_sl=pos.get("first_sl"), sl=pos.get("sl"), tp=pos.get("tp"), init_risk=pos.get("init_risk"),
                      best=pos.get("best"), worst=pos.get("worst"), status="open", open_qty=pos.get("qty"),
                      day=t.get("day") or day)
+            if pos.get("path"):
+                t["path"] = copy.deepcopy(pos["path"])
             t["planned_r"] = self._planned(t)
 
     def sync(self, urt, full: bool = False) -> bool:
@@ -929,6 +934,10 @@ class Journal:
                 self._changed()
 
     # -------------------------------------------------------- what the page gets
+    def _replays(self) -> set:
+        """Trades whose chart set-up was recorded (v0.29.0)."""
+        return jreplay.recorded(self.uid)
+
     def view(self, urt, only: set | None = None) -> dict:
         """Everything the Journal page shows; with `only` (session keys) just those sessions' trades (after an edit:
         a pillar on one trade can change the others of its session)."""
@@ -944,7 +953,8 @@ class Journal:
                 if only is not None and session_key(t) not in only:
                     continue
                 a = by_id.get(t["id"]) or audit_trade(t, None, self.rules(), EXEC_FAULTS)   # a removed trade: no session
-                row = {k: v for k, v in t.items() if k not in ("closes",)}
+                row = {k: v for k, v in t.items() if k not in ("closes", "path")}
+                row["replay"] = t["id"] in self._replays()
                 row["parts_n"] = len(t["closes"])
                 row["acct_name"] = (names.get(t["acct"]) or {}).get("name") or t.get("acct_name") or "deleted account"
                 row["hidden"] = t["id"] in hid
@@ -1046,6 +1056,10 @@ def on_trade(urt, aid: str, kind: str, obj: dict):
         elif t and kind == "close" and t["status"] == "closed" and was_status != "closed":
             ph = "exit" if was is not None else None       # closed before the journal saw it open: no pictures
         if ph:
+            try:
+                jreplay.capture(urt, key, ph, t)         # the chart's set-up for the replay (v0.29.0)
+            except Exception as ex:
+                log.warning("[%s] replay snapshot: %s", getattr(urt, "label", "?"), ex)
             try:
                 jshots.phase(urt, key, ph)
             except Exception as ex:

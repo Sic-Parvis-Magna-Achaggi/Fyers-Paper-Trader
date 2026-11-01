@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 1 Nov 2026, version **0.28.1**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 2 Nov 2026, version **0.29.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -85,8 +85,60 @@ runs on 1 Nov, on v0.20.2 code too). Cause not found; it's a test-kit issue so f
 00:00 UTC, real Fyers at IST midnight). Re-run it if it fails; worth a proper look when touching Go to.
 `live_flow.js`'s "history: the trade, closed by the kill switch" failed once in 4 runs on 1 Nov (passed on re-run):
 probably the history read before the kill switch's close was booked. Same advice.
+`jinsights_flow.js`'s three Copy for Gemini checks (today / this week) fail when run between midnight and the account's
+reset hour (2 Nov, 01:00 IST: trades belong to the previous trading day, Gemini's "today" is the calendar day). Run it in
+the daytime. (Roadmap follow-up.)
+`replay_flow.js` turns the mock's round-the-clock candles on (`/_mock/allday`) and off at the end; it sets the journal's
+automatic pictures off itself (other suites turn them on).
 `indicator_settings_flow.js`'s "at the start of a contract's history it stops asking" failed once in 2 runs on 1 Nov
 (v0.22.0; passed on re-run, 37/37). Same advice.
+
+## Trade replay (v0.29.0, roadmap 4c)
+
+- **Server, `helper/jreplay.py`.** `note_order(uid, aid, b)` (from `/api/paper/place`, before `engine.place`; dropped again
+  on a refusal: `drop_pending`) keeps the PLACE body's `setup` (the chart keys `KEYS` = cur, tf2, ctype, chart, indicators,
+  lgdMin0, as layouts hold them; `clean_setup`, 300 KB at most) and `from` {lay, cell} in `replay/pending.json` under
+  "aid|contract|product" (10 days). `capture(urt, key, ph, t)` is called from `journal.on_trade` right before
+  `jshots.phase` (entry / exit): entry = the pending set-up (`src` "order") else `_from_layouts` (the {lay, cell} asked, the
+  active layout's chart of the contract, other layouts', prefs if they show it, else the active chart's set-up on this
+  contract = "other"); exit = the entry's layout chart if it still shows the contract, else the same search, else the
+  entry's chart ("entry"). `snapshot()` adds every saved script as {id, name, h} (code in `replay/code/<sha1>.json`) and
+  the contract's drawings (`replay/draw/<sha1>.json`); written to `replay/t/<key file>.json` {entry, exit};
+  `replay/index.json` lists recorded trades (`recorded()`, the journal's `row.replay`). `full()` puts code / drawings back.
+- **The stop's path:** `Paper._path_scan()` runs at the start of every `save()`: each position's `path` = [[t, sl, tp,
+  kind]], a point added whenever (sl, tp) differ from the last; kind from `pos["_pk"]` (set in `_set_be` "be", the trail
+  "trail", an add "add"; anything else "edit"), popped before saving. `close()` puts the path (plus a last point if needed)
+  on the history record; `LiveEngine._split` gives the part its own copy. `Journal.ingest_close` keeps the longest path on
+  the trade, `upsert_open` the open one; `view()` leaves `path` out of the list. `trade_path()`: "recorded", else
+  `log_path()` from `engine.events` (messages "<short>: stop to break-even + costs X", "stop now X", "SL X, TP Y" between
+  opened and closed; "log" / "log-part"), else "ends".
+- **Routes:** `GET /api/journal/replay?id=` (syncs the journal if the trade isn't there yet) -> `jreplay.view()` {trade facts,
+  closes, path, path_src, be (`charges.breakeven` like the engine), row, setup {entry, exit} in full}; `POST
+  /api/journal/replay/net` {id, pts [[t, p]] <= 5000} -> net ₹ (`net_series`: entries up to t, closes up to t, the rest at p
+  with its share of the entry charges) and R (net / init_risk).
+- **Page, `web/replay.js` + `web/replay.css`** (after jinsights.js, before mobile.js). Every page: `papi("place")` gets
+  `setup` (prefGet of the chart keys: in a grid frame that's the frame's own chart) and `from`. Main page: `rpOpen(key, ph)` /
+  `rpClose()`; `#rpWrap` iframe `/?replay=<key>&ph=&code=`; `rpKeyOf(h)` = ACCT + ":" + base id; postMessage {rp: "close"}.
+  journal.js card button `data-act="replay"`; pages.js History detail `.rp-open`; mobile.js History detail `.mrp`.
+- **The replay frame** (`window.FTM_REPLAY`, set in index.html's head script; html classes `cell replay` = chart only):
+  `loadPrefs` wrapped to fetch the replay and set `RP.C` (the snapshot's chart, or the current chart keys with the trade's
+  contract); `prefGet` / `prefSet` for chart keys live in `RP.C`, other prefs only in `PREF` (nothing to the server or
+  localStorage); `connectWS`, `dataCheck` off; `paperUpdate` sees no positions / orders; `arm` refused; `pineLoad` returns
+  the snapshot's scripts ("Pine as recorded"); `drSymbol` loads the snapshot's drawings (locked) + the trade itself as a
+  drawing of type `rptrade` (`DT.rptrade.geom`; `drHit` ignores it); `drSaveSoon/Now` no-ops; layouts.js, mobile.js and
+  jshots.js skip themselves when `FTM_REPLAY` is set. `DrawPrim.prototype.autoscaleInfo` takes the trade's prices into the
+  price scale. `loadHistory` replaced: `/api/history` back to the trade's opening + `histDays()` (asked again up to 8 times as
+  the server reaches further back), `renderCandles`, `rpFrame()` (trade in view).
+- **▶ Play:** `rpPrepare()` (start 30 candles before the entry's, end 15 after the exit's or now; sub-candles `subResFor`: 1m
+  up to 1h charts, 5m for 2h-4h, 15m for D/W/M, via `/api/history`; `RP.steps` = each sub-candle's end), `rowsAt(T)` (Fyers
+  rows closed by T + the forming row built from sub-candles), `rpSeek(T)` (full redraw, `showRaw`), `rpStepTo(T)` (one step:
+  RAW replaced, `dispLive()` - the live path, so Pine updates its live bar and re-runs on a new bar), `rpNextBar`, `rpJump`
+  (first step at or after the fill / close), `rpStop`. `pineNeed` wrapped (other-timeframe candles cut at T, the forming one
+  rebuilt from the chart's bars, another contract's forming one dropped), `pineBar` (a non-time chart's last bar closes at T).
+  `rpNetLoad()` asks the server for the net at each step's close. `window.rpTest` is for the tests.
+- **Item 10:** replays get candles only through `/api/history`; when item 10 patches that route with recorded live candles,
+  replays follow. Not seen for real yet: a replay on real Fyers candles (the mock's live prices and its candles differ, so
+  test trades sit off their candles).
 
 ## Journal: Insights, review, Gemini, export (v0.28.0, roadmap item 4: last of three releases)
 
@@ -103,7 +155,7 @@ probably the history read before the kill switch's close was booked. Same advice
   `backup_zip(path)` (journal.json + pictures/), `restore(path)` (adds only what's missing; picture files only with a
   matching id / type; logged in the security log). Routes `/api/journal/review`, `/export.csv`, `/backup.zip`, `/restore`
   (streamed to `data/tmp/`, 500 MB at most).
-- Proposed, not built (roadmap 4c): the full layout's picture at every entry / exit with a hidden browser on the server.
+- 4c became the trade replay (v0.29.0, above); the hidden-browser picture idea was dropped.
 
 ## Journal pictures (v0.27.0, roadmap item 4: second of three releases)
 
@@ -114,6 +166,8 @@ probably the history read before the kill switch's close was booked. Same advice
 - **One worker thread** (`queue(job, delay)`, a heap; jobs `("draw", uid, key, phase, manual[, tries])`, `("tg", uid, key, sid,
   tries)`, `("tgdel", uid, chat, msg)`) does the slow parts one at a time. Journal saves now take `Journal.lock` (the worker
   changes trades); the worker deep-copies a trade under the lock before reading it.
+- **Automatic pictures are off since v0.29.0** (`DEFAULTS` auto / chart False; `cfg()` switches settings saved before it off
+  once, `clean_cfg()` marks `v29` so turning them on again sticks).
 - **Entry / exit:** `journal.on_trade` sees a new trade ("open", none before) -> `jshots.phase(urt, key, "entry")`; a close that
   makes it "closed" -> "exit". `phase()` queues the server drawing (DELAY 3 s) and broadcasts `{"jshot": {id, phase, s, acct}}`
   on the user's sockets. Backfilled trades get nothing automatic (Draw at entry / exit by hand: `/api/journal/shot/draw`).
@@ -414,10 +468,13 @@ indicator option to add (not built).
 3. Monday: read the order-flow check with the owner; the footprint only if it's exact (and decide roadmap item 12,
    seconds / tick charts, from the same numbers). Next build: the journal (4) (the owner's order, 1 Nov; item 8, CFD
    prices, is on hold): v0.26.0, v0.27.0 (pictures + Telegram backup) and v0.28.0 (Insights, review, export) shipped: the
-   journal is complete. Next in the roadmap's order: 4b / 4c if the owner says yes, else item 10 (live candles). Shipped and waiting for the owner's try: measurement and drawing tools (v0.22.0), layouts
+   journal is complete. v0.29.0: the trade replay (4c as agreed 1 Nov). Next in the roadmap's order: item 10 (live
+   candles), 4b only if the owner says yes. Shipped and waiting for the owner's try: measurement and drawing tools (v0.22.0), layouts
    (v0.23.0), angles (v0.23.1), multi-charts with sync (v0.24.0 / v0.24.1), Telegram alerts (v0.25.0: set up and tested
    by the owner 1 Nov), the journal (v0.26.0), journal pictures + Telegram backup (v0.27.0: the owner turns on the backup
    in Journal › Settings › Pictures with a new private channel).
-4. The owner tries the phone layout (v0.19.0) and the order bubble (v0.20.3) on his phone; fix what he reports.
+4. The owner tries the trade replay (v0.29.0) on real trades: ▶ On chart on a Journal trade, ▶ Play; trades from
+   before v0.29.0 show his current chart and the stop's path from the account's log. (The phone layout and the order
+   bubble: tried by the owner 1 Nov, working.)
 5. The owner checks v0.20.0 on real Fyers: Pivot Points and the Chandelier exit on GOLDPETAL 2m, scrolling back,
    and the Style / Visibility tabs on his own scripts.

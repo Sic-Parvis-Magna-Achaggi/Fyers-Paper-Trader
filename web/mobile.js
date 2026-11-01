@@ -12,7 +12,7 @@ const prodName = p => ({INTRADAY: "Intraday", MARGIN: "Carry", CNC: "Delivery"})
 const mqa = s => [...document.querySelectorAll(s)];
 const mPref = () => { try{ return localStorage.getItem("ftm.layout") || ""; }catch(e){ return ""; } };
 function mWant(){
-  if(window.FTM_CELL != null) return false;                 // a chart inside the desktop multi-chart grid
+  if(window.FTM_CELL != null || window.FTM_REPLAY) return false;   // a chart inside the desktop multi-chart grid, a trade replay
   const p = mPref(); if(p === "desk") return false; if(p === "mob") return true;
   const coarse = matchMedia("(pointer:coarse)").matches;
   return innerWidth <= 760 || (coarse && Math.min(innerWidth, innerHeight) <= 500);
@@ -625,7 +625,9 @@ async function mHistory(reload){
   const det = (el, h) => { el.innerHTML = breakdown(h.charges, "All charges, entry + exit") +
       `<div><span>Gross P&L</span><span>${rs(h.gross)}</span></div><div class="tot"><span>Net P&L</span><span>${rs(h.net)}</span></div>` +
       `<div><span>First SL / risk</span><span>${h.first_sl ?? "–"} / ${rs(h.init_risk)}</span></div>` +
-      `<div><span>Product</span><span>${esc(prodName(h.product))}</span></div><div><span>Opened</span><span>${istTime(h.opened)}</span></div>`; };
+      `<div><span>Product</span><span>${esc(prodName(h.product))}</span></div><div><span>Opened</span><span>${istTime(h.opened)}</span></div>` +
+      (typeof rpOpen === "function" ? `<div class="mrp"><button class="primary rp-open">▶ On chart</button></div>` : "");
+    const rb = el.querySelector(".rp-open"); if(rb) rb.onclick = e => { e.stopPropagation(); rpOpen(rpKeyOf(h)); }; };
   box.querySelectorAll(".mhist").forEach(el => {
     const h = rows[+el.dataset.i], bd = el.querySelector(".bd");
     if(!bd.classList.contains("hide")) det(bd, h);

@@ -71,7 +71,7 @@ async function layFlush(){
    disagrees with the open layout takes the layout's set-up straight into the preferences, so the chart opens as the
    layout with nothing to redo. The saved layout is what counts, never the other way round (a layout switched on
    another device, or a page closed before a switch reached the server). layInit is the late fallback. */
-async function layBoot(){ if(window.FTM_CELL != null) return; try{ await layLoad(true); }catch(e){} }
+async function layBoot(){ if(window.FTM_CELL != null || window.FTM_REPLAY) return; try{ await layLoad(true); }catch(e){} }
 async function layInit(){ await layLoad(false); }
 async function layLoad(boot){
   if(LAY.ready || LAY.loading) return;
@@ -268,7 +268,7 @@ function layBuild(){
 }
 /* every chart setting goes through prefSet: the open layout follows it */
 (function layHooks(){
-  if(window.FTM_CELL != null) return;                   // a grid's chart frame: the page around it keeps the layouts
+  if(window.FTM_CELL != null || window.FTM_REPLAY) return;   // a grid's chart frame (the page around it keeps the layouts), a trade replay
   const ps = prefSet;
   prefSet = function(k, v){
     ps.apply(this, arguments);

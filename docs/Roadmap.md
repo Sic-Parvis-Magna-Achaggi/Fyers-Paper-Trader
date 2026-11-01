@@ -1,11 +1,14 @@
 # Roadmap: the task list
 
-Updated 1 Nov 2026 (v0.28.1). This is the one task list for the project.
+Updated 2 Nov 2026 (v0.29.0). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
 
 ## Next, in this order
+
+**Order change (owner, 1 Nov 2026, late):** 4c (trade replay on the chart, below under item 4) was built first
+(v0.29.0); item 10 is next.
 
 **Order change (owner, 1 Nov 2026):** items 7 (measurement tool) and 9 (drawing tools) were built first (v0.22.0),
 ahead of 3-6.
@@ -52,7 +55,7 @@ ahead of 3-6.
    - **The whole server down** (droplet off, network): nothing on it can send, so an optional outside heartbeat
      (Healthchecks.io, free): the watchdog pings it every minute while a live trade is open and pauses it when flat (with its
      API key; without the key it pings all the time); Healthchecks.io sends its own Telegram message when the pings stop.
-4. [x] **Journal: full Octagon port** (three releases done: v0.26.0, v0.27.0, v0.28.0; 4b and 4c wait for the owner's yes) (from `octagon_journal.html`; started 1 Nov 2026, owner: "Let's start the journal").
+4. [x] **Journal: full Octagon port** (three releases done: v0.26.0, v0.27.0, v0.28.0; 4c, the trade replay, done in v0.29.0; 4b waits for the owner's yes) (from `octagon_journal.html`; started 1 Nov 2026, owner: "Let's start the journal").
    It stays on the server (per user); the Cloudflare relay isn't needed (Telegram is only a backup copy, prices come from
    the app's own Fyers candles). The Telegram bot is the one saved in Settings › Telegram alerts.
    Agreed 1 Nov 2026 (owner's answers):
@@ -79,12 +82,33 @@ ahead of 3-6.
    - [x] **v0.28.0:** Insights (performance, by symbol / time of day / regime / tag / pillar / weekday, lockout stats,
      rep blocks, the equity chart with drawdown), the weekly Review and calendar with the walk-through and weekly focus
      (summary to Telegram), Copy for Gemini, CSV export, backup / restore. *(v0.28.0)*
-   - [ ] **4c. The full layout's picture at every entry and exit, with no page open** (asked 1 Nov: "does it take a
-     screenshot with all the indicators on the layout?"; Claude's proposal, **waiting for the owner's yes and order**):
-     today the indicator picture is taken only when a chart of that contract is on screen. A hidden browser on the server
-     would open the saved layout at each entry / exit and take the picture there. Needs about 300-400 MB of RAM per picture
-     on a 1 GB droplet that also guards live stops: so either the 2 GB droplet (about $12 a month instead of $6) or only
-     when the server isn't busy.
+   - [x] **4c. Trade replay on the chart instead of pictures** *(v0.29.0)* (asked 1 Nov, owner: "capture which indicators
+     were present with what settings and then show the trade on the chart for each completed trade ... we won't need the
+     pictures"; design agreed 1 Nov; built before item 10, and built to work with item 10). Replaces the earlier 4c
+     proposal (a hidden browser on the server taking the full layout's picture), which is dropped.
+     - **Recorded by the server at every entry and exit** (no page needed): contract, timeframe, chart type, Chart
+       settings; every indicator on that chart with its inputs, style, visibility and own timeframe; a copy of each Pine
+       script's code as it was then (later edits don't change old trades); the contract's drawings as they were then.
+       Entry: the chart the order was placed from (a grid's chart, the phone); with nothing open (a stop hit, a limit
+       that fills later): the saved layout's chart for that contract.
+     - **Every SL / TP move is recorded per position** from this release, so a replay shows the stop stepping. Older
+       trades (asked 1 Nov: "why can't we capture this too?"): their path is rebuilt from the account's own log, which
+       already notes every stop move with its time (BE, each trail step, SL / TP edits; the last 500 entries per
+       account); past that, first and last stop only, marked. Never rebuilt by re-running the trail on candles (an estimate).
+     - **▶ Play: the trade as it played out** (asked 1 Nov: "show it like a real trade as it played out"), like
+       TradingView's bar replay: candles appear one by one from before the entry (play / pause / step / speed, jump to
+       entry / exit); a forming candle builds from the 1-minute candles; indicators and Pine are worked out as each
+       candle closes, from what was known then (repainting scripts look as they did live); entry, adds, exit at their
+       real prices and times; stop, target and BE move when they moved; running net ₹ and R. Inside a minute: not finer
+       than Fyers' 1-minute candles until item 10 / 12's recording exists (the replay will use it then).
+     - **▶ On chart** on every finished trade (Journal and History): the chart opens as recorded, with entry / add and exit
+       markers, the first stop, the stop's path, the target and BE, scrolled to the trade with candles around it; a bar
+       "Viewing trade ..." with ← Back to my chart; switch entry / exit set-up and "my current Pine code"; your layout
+       isn't touched; works on the phone. Trades from before: your current set-up, marked "set-up not recorded".
+     - **Item 10:** the replay asks for its candles through the chart's normal history path, so once live candles exist,
+       a day Fyers rewrote shows the recorded live candles (marked) in the replay too.
+     - **Pictures:** automatic pictures (server drawing and the open chart's picture) off by default, one switch brings
+       them back; 📷, uploads, paste and drop stay; nothing deleted (owner, 1 Nov).
    - [ ] **4b. Prop-firm journals in the same journal** (Claude's suggestion 1 Nov; waiting for the owner's yes): prop
      accounts as their own accounts (own currency $ and broker clock, never mixed with ₹), the Octagon backup imported
      once, MT5 history import, manual entry with Gemini ticket reading, phases / payouts / account chains. Reps, pillars
@@ -190,10 +214,14 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Small follow-ups
 
-- [ ] The owner checks the phone layout on his own phone (tested on emulated Android and iPhone screens in Chromium, not on a real iPhone / Safari).
+- [x] The owner checks the phone layout and the order bubble on his own phone (owner, 1 Nov: "working").
 - [ ] Switch the order-flow recorder off after Monday's measurement (Log page): it writes tens of MB a day per busy
   contract on the 25 GB disk.
 - [ ] Partial closes.
+- [ ] **Copy for Gemini after midnight** (found in testing 2 Nov, v0.28.0's feature): "today" and "this week" pick trades by
+  the calendar date, but a trade between midnight and the account's day reset (an MCX night) belongs to the previous
+  trading day, so at 01:00 "today" is empty. Proposal: use the trading day, as the journal's sessions do. Waiting for the
+  owner's word (it changes which trades a copy includes).
 - [x] **Telegram alerts on the real server (owner, 1 Nov):** bot set up, test message received, "Watchdog: running".
 - [ ] Optional, with the first live trade: `systemctl stop fyers-helper` for under a minute -> the "isn't responding" message,
   then start it -> "answering again". Optional: the Healthchecks.io check.
@@ -204,6 +232,8 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 - [ ] Ask Fyers in writing whether a second user's app may fetch market data from this server's IP (support request drafted 30 Oct).
 
 ## Done
+
+- [x] **v0.29.0** (2 Nov): the trade replay (item 4c): each trade's chart set-up recorded at entry and exit (indicators with their settings, Pine code, drawings), ▶ On chart in the Journal and History with the trade and the stop's path drawn, ▶ Play to watch it as it played out; every stop / target move recorded (older trades from the account's log); automatic pictures off.
 
 - [x] **v0.28.1** (1 Nov): multi-chart grids work on the server (Caddy refused frames: `X-Frame-Options DENY` → SAMEORIGIN; reported 1 Nov).
 - [x] **v0.28.0** (1 Nov): the journal's last step (item 4): Insights, the weekly review with the outcome × process grid, walk-through and calendar, the summary to Telegram, Copy for Gemini, CSV, backup and restore.

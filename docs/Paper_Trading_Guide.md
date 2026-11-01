@@ -135,14 +135,49 @@ blocking" when its switch is off). Closing, BE, trailing and the stops of open t
 20 minutes, 3 wins, 2R, the 2.5R stretched-target flag, the 5% block, the rep milestone) are in Journal › Settings, with the
 text of each pillar and the Pillar 1 checks (Original puts your text back).
 
-**Pictures** (each trade's card, and the audit form):
-- **Drawn on the server at entry and exit**, from your own Fyers candles (5m and 120 candles unless you change it): the
+**▶ On chart: each finished trade on its own chart** (v0.29.0; each trade's card in the Journal, a History row's
+details, the phone's History tab). It opens over the page; **← Back** or Esc returns you to your page as it was.
+- **What's recorded** at every entry and exit, by the server (no page needs to be open): the contract, timeframe, chart type,
+  Chart settings, every indicator with its settings (inputs, style, visibility, its own timeframe), a copy of each Pine
+  script's code as it was then, and the contract's drawings as they were then. Editing a script or a drawing later doesn't
+  change an old trade.
+- **Which chart:** at the entry, the chart you placed the order from (in a grid, that chart; on the phone, the one on
+  screen), also for a limit order that fills hours later. With nothing to go by (a trade from before v0.29.0's set-up was
+  recorded, or no chart sent), your saved layout's chart for that contract, else your chart's set-up on that contract.
+  At the exit, the same layout chart as it was then. **Entry set-up / Exit set-up** switch between the two;
+  **Pine as recorded / My current Pine** shows the code as it was then or as it is now.
+- **The trade on the chart:** the entry and each add, and each exit, at their real prices and times (net ₹ and R after all
+  charges on the exit); the stop's path as it moved (a dot at each move, **BE** where it went to break-even), the target,
+  the break-even + costs line, the trade's stretch shaded. The price scale always takes in the trade's own prices. On
+  every chart type and timeframe. A stop on the underlying future isn't drawn on the option's chart (the bar says so).
+- **The stop's path:** every stop / target move is recorded with its time from v0.29.0. For older trades it's rebuilt from
+  the account's own log, which already noted each move (BE, each trail step, your edits); the log keeps the last 500
+  entries of an account, so trades past that show only the first and last stop. The bar says which. It's never rebuilt
+  by re-running the trail on candles.
+- **▶ Play** shows the trade as it played out, like TradingView's bar replay: the chart starts 30 candles before the entry
+  and the candles come one at a time. A candle that's still forming builds up from the 1-minute candles (5-minute ones on
+  2h-4h charts, 15-minute on daily). Indicators and Pine scripts are worked out as each candle closes, from what was known
+  then, as they would have been live (a script that repaints looks as it did at the time; other timeframes stop at the
+  replay's time). The stop, target and BE move when they moved, and the bar shows the time, the price and the open trade's
+  net ₹ and R after all charges. **⏮** to the start, **▶ / ⏸** (Space), **+1** one minute (→), **⏭** to the next candle
+  on this chart (Shift+→), the speed (candles a second), **Entry / Exit** to jump there, **■ Stop** for the whole chart.
+- Inside a minute the replay can't be finer than Fyers' 1-minute candles. Candles come from Fyers' history, so a day
+  Fyers rewrote afterwards (as GOLDPETAL's 30 Oct) shows the rewritten candles until the app keeps its own live candles
+  (roadmap item 10); the replay will use those then.
+- You can change the timeframe, chart type or indicators inside the replay to look around: nothing there is saved, and
+  your own chart, layout and drawings aren't touched. Trading is off in the replay.
+- On the phone the replay fills the screen; **⋯** shows the set-up and Pine switches and the notes.
+
+**Pictures** (each trade's card, and the audit form). **Since v0.29.0 the automatic pictures are off** (the replay shows
+each trade on its recorded chart instead): Journal › Settings › Pictures turns them back on. 📷, your own pictures,
+paste and drop work as before.
+- **Drawn on the server at entry and exit** (when switched on), from your own Fyers candles (5m and 120 candles unless you change it): the
   entry (and any adds), the first stop, the stop at the end, the target, the exit, the trade shaded green / red, and the net ₹,
   R and charges. No page needs to be open. It's one Fyers history request each, on the usual request budget. If Fyers doesn't
   answer (not logged in yet), the card says so and it tries twice more a few minutes apart; **Draw at entry / Draw at exit**
   does it by hand (also for trades from before v0.27.0). When the stop follows the underlying future, the option's picture
   leaves the stop and target lines out (they're on the future's prices) and says so.
-- **The open chart's own picture**, with your indicators and drawings, when a chart of that contract is on screen (any of your
+- **The open chart's own picture** (when switched on), with your indicators and drawings, when a chart of that contract is on screen (any of your
   devices) as the trade opens or closes: labelled **Chart 5m · entry** etc., one per timeframe (with two charts of different
   timeframes you get both). Charts in a grid each add theirs. A chart that isn't on screen (another page open) adds nothing.
 - **📷 on the chart bar** adds this chart's picture whenever you like, to the open trade on this contract (this account first),

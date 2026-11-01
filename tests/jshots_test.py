@@ -183,6 +183,7 @@ F = "MCX:CRUDEOIL26NOVFUT"
 J = journal.get("u1")
 J.sync(U, full=True)
 J.set_settings({"rules": {"block_dd": False, "block_afk": False, "block_end": False}})   # lockouts aren't what's tested here
+J.set_settings({"shots": {"auto": True, "chart": True}})        # automatic pictures are off by default since v0.29.0
 
 
 def tick(p):

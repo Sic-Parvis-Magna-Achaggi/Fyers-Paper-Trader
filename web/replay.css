@@ -1,0 +1,54 @@
+/* Trade replay (web/replay.js): the overlay on the main page, and the replay frame's bar over the chart. */
+#rpWrap{position:fixed;inset:0;z-index:5000;background:var(--bg)}
+#rpWrap iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;background:var(--bg)}
+body.rpOn{overflow:hidden}
+.rp-open{white-space:nowrap}
+.mrp{display:flex!important;justify-content:flex-end;margin-top:6px}
+.mrp button{min-height:36px}
+
+/* inside the replay frame (html.cell.replay: chart only) */
+html.replay section.chartwrap{grid-template-rows:auto auto minmax(0,1fr) auto}
+html.replay section.chartwrap > #rpBar{grid-column:1 / -1;grid-row:1}
+html.replay section.chartwrap > .charthead{grid-row:2}
+html.replay section.chartwrap > #chart{grid-row:3}
+html.replay section.chartwrap > #pineDock{grid-row:4}
+html.replay #ctools,html.replay #dtb,html.replay #bDraw,html.replay #bSnap,html.replay #bLay,html.replay #bGrid{display:none!important}
+#rpBar{border-bottom:1px solid var(--line);background:var(--panel);padding:6px 10px;display:flex;flex-direction:column;gap:5px;font-size:12.5px;min-width:0}
+#rpBar .rp1,#rpBar .rp2{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+#rpBar .sp{flex:1}
+#rpBar .rp-back{font-weight:600}
+#rpBar .rp-side{font:600 11px var(--mono);padding:1px 6px;border-radius:4px;border:1px solid currentColor}
+#rpBar .rp-sym{font-family:var(--mono)}
+#rpBar .rp-meta{color:var(--muted)}
+#rpBar .rp-net{font-family:var(--mono)}
+#rpBar .rp-seg{display:inline-flex}
+#rpBar .rp-seg button{border-radius:0;padding:3px 9px}
+#rpBar .rp-seg button:first-child{border-radius:6px 0 0 6px}
+#rpBar .rp-seg button:last-child{border-radius:0 6px 6px 0;margin-left:-1px}
+#rpBar .rp-seg button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+#rpBar .rp-seg button:disabled{opacity:.45}
+#rpBar .rp-play{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap}
+#rpBar .rp-play button{padding:3px 8px}
+#rpBar .rp-play select{padding:2px 4px;width:auto;min-width:0}
+#rpBar .rp-st{font-family:var(--mono);font-size:12px;color:var(--text);min-width:0}
+#rpBar .rp3{color:var(--muted);font-size:11.5px}
+#rpBar .rp-opts{display:flex;flex-direction:column;gap:5px}
+#rpBar .rp-segs{display:flex;gap:8px;flex-wrap:wrap}
+#rpBar .rp-more,#rpBar .rp-ph{display:none}
+@media (max-width:760px){
+  #rpBar{padding:5px 6px;font-size:12px;gap:4px}
+  #rpBar .rp1{flex-wrap:nowrap;gap:6px}
+  #rpBar .rp-wd{display:none}
+  #rpBar .rp-sym{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+  #rpBar .rp-net{white-space:nowrap;font-size:12px}
+  #rpBar .rp-more{display:inline-block;padding:4px 10px}
+  #rpBar .rp2{flex-wrap:nowrap;flex-direction:column;align-items:stretch;gap:3px}
+  #rpBar .rp-play{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  #rpBar .rp-play::-webkit-scrollbar{display:none}
+  #rpBar .rp-play > *{flex:0 0 auto}
+  #rpBar button{min-height:34px;padding:4px 9px}
+  #rpBar .rp-st{font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #rpBar .rp-opts{display:none}
+  #rpBar.open .rp-opts{display:flex}
+  #rpBar .rp-ph{display:block}
+}

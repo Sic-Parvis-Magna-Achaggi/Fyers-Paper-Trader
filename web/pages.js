@@ -283,8 +283,10 @@ function pgHistRender(){
         <div><span>Closed</span><span>${istTime(h.closed, {day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit"})}</span></div>
         <div><span>Product</span><span>${esc(h.product)}</span></div><div><span>First SL / risk</span><span>${h.first_sl ?? "–"} / ${rs(h.init_risk)}</span></div>
         <div><span>Last SL / TP</span><span>${h.sl ?? "–"} / ${h.tp ?? "–"}</span></div><div><span>Best / worst price</span><span>${fmt(h.best)} / ${fmt(h.worst)}</span></div>
-        ${(h.entries || []).length > 1 ? `<div><span>Entries</span><span>${h.entries.map(e => e.qty + " @ " + e.price).join(", ")}</span></div>` : ""}</div></div></td>`;
+        ${(h.entries || []).length > 1 ? `<div><span>Entries</span><span>${h.entries.map(e => e.qty + " @ " + e.price).join(", ")}</span></div>` : ""}</div>
+      ${typeof rpOpen === "function" ? `<div><button class="primary rp-open" title="The trade on its chart as recorded, the stop's path, ▶ Play">▶ On chart</button></div>` : ""}</div></td>`;
     tr.after(d);
+    const rb = d.querySelector(".rp-open"); if(rb) rb.onclick = e => { e.stopPropagation(); rpOpen(rpKeyOf(h)); };
   });
   pgCurves(rows);
 }
