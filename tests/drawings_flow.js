@@ -146,6 +146,32 @@ let br;
   await pg.keyboard.press("Control+z"); await pg.waitForTimeout(100);
   ok(JSON.stringify((await items()).find(d => d.id === trendId).pts) === JSON.stringify(cur0.pts), "Ctrl+Z undoes a coordinates change");
 
+  // ---- angles (v0.23.1): the Trend angle tool; ∠ on a line's bar; degrees as on screen (change with zoom), slope per bar (doesn't)
+  await pg.click('#dtb .dtb-more[data-g="lines"]'); await pg.waitForTimeout(100);
+  ok(/Trend angle/.test(await pg.textContent("#dtbFly")), "Lines › Trend angle is there");
+  await pg.click('#dtbFly [data-t="angle"]');
+  await drag(250, 520, 430, 420);
+  it = await items();
+  const ag = it[it.length - 1];
+  const agi = await pg.evaluate(id => { const d = drFind(id), V = drView(), a = drXY(V, d.pts[0]), b = drXY(V, d.pts[1]);
+    const exp = Math.atan2(-(b.y - a.y), Math.abs(b.x - a.x)) * 180 / Math.PI, slope = (d.pts[1].p - d.pts[0].p) / (b.L - a.L);
+    const lbl = DR.geo.get(id).X.map(t => t.lines.join(" ")).join(" | ");
+    return {lbl, exp: exp.toFixed(1), slope: fmt(Math.abs(slope), drTick())}; }, ag.id);
+  ok(ag.type === "angle" && agi.lbl.includes(agi.exp + "°") && agi.lbl.includes(agi.slope + " / bar"), `the angle and the slope per bar beside it ("${agi.lbl}")`);
+  const zoom = await pg.evaluate(async id => { const ts = chart.timeScale(), sp = ts.options().barSpacing, ps = series.priceScale();
+    ps.applyOptions({autoScale: false}); ts.applyOptions({barSpacing: sp * 2}); await new Promise(r => setTimeout(r, 300));   // (the price scale held still)
+    const d = drFind(id), V = drView(), a = drXY(V, d.pts[0]), b = drXY(V, d.pts[1]), inf = drAngleInfo(a, b, d.pts[0].p, d.pts[1].p);
+    ts.applyOptions({barSpacing: sp}); ps.applyOptions({autoScale: true}); return {...inf, fs: fmt(Math.abs(inf.slope), drTick())}; }, ag.id);
+  ok(Math.abs(zoom.deg - +agi.exp) > 1 && zoom.fs === agi.slope, `zoomed in, the angle on screen changes (${agi.exp}° → ${zoom.deg.toFixed(1)}°) and the slope per bar doesn't`);
+  await pg.evaluate(id => { DR.sel = id; drUiSel(); drRedraw(); }, trendId); await pg.waitForTimeout(150);
+  await pg.click('#dsel [data-a="ang"]'); await pg.waitForTimeout(250);
+  ok((await items()).find(d => d.id === trendId).st.ang === true && await pg.evaluate(id => DR.geo.get(id).X.some(t => /°/.test(t.lines[0])), trendId), "∠ on a trend line's bar shows its angle");
+  await pg.evaluate(id => drSettings(drFind(id), "style"), trendId);
+  ok(await pg.isChecked('#drSet [data-k="ang"]') && /Show angle/.test(await pg.textContent("#drSet")), "…and its settings have Show angle, ticked");
+  await pg.click("#drSet .pif [data-x]");
+  await pg.click('#dsel [data-a="ang"]'); await pg.waitForTimeout(150);
+  ok((await items()).find(d => d.id === trendId).st.ang === false, "∠ again hides it");
+
   // ---- lock: a locked line doesn't move (the chart scrolls instead); hide all
   await pg.evaluate(id => { DR.sel = id; drUiSel(); }, trendId);
   await pg.click('#dsel [data-a="lock"]'); await pg.waitForTimeout(100);
@@ -251,6 +277,10 @@ let br;
   await pg.evaluate(() => { const n = DISP.length; DR.meas = {pts: [{t: DISP[n - 8].time, p: DISP[n - 8].low}, {t: DISP[n - 2].time, p: DISP[n - 2].high}], phase: "done"}; drRedraw(); });
   await pg.waitForTimeout(300);
   ok(await pg.evaluate(() => /boxes/.test(drPriceInfo(DR.meas.pts[0].p, DR.meas.pts[1].p)) && /columns/.test(drTimeInfo(DR.meas.pts[0], DR.meas.pts[1], 0, 6))), "on P&F the measure counts boxes and columns");
+  // P&F: angles in boxes and columns (1 box per column = 45°)
+  const pfa = await pg.evaluate(() => { const n = DISP.length, d = {type: "angle", pts: [{t: DISP[n - 12].time, p: DISP[n - 12].low}, {t: DISP[n - 4].time, p: DISP[n - 12].low + 8 * CT_SIZE}]};
+    const V = drView(), a = drXY(V, d.pts[0]), b = drXY(V, d.pts[1]); return drAngleText(drAngleInfo(a, b, d.pts[0].p, d.pts[1].p)); });
+  ok(/^45\.0° \(boxes\) · \+[\d,.]+ \/ column$/.test(pfa), `on P&F a line rising 1 box per column reads 45° (${pfa})`);
   await pg.evaluate(() => { DR.meas = null; ctSave({type: "candles"}); });
   await pg.waitForTimeout(1200);
   await pg.evaluate(n => { drBefore(); DR.items = DR.items.slice(0, n); drChanged(); }, nAll - await pg.evaluate(() => Object.keys(DT).length));
@@ -329,7 +359,9 @@ let br;
   ok(both === "both", "a candle reaching both the stop and the target is marked (counted as the stop)");
 
   // ---- the trade manager's lines still win over a drawing on top of them
-  await pg.evaluate(() => arm(1)); await pg.waitForTimeout(900);
+  await pg.evaluate(() => arm(1));
+  await pg.waitForFunction(() => P.plan && slNow() != null && (P.drags || []).some(d => d.price && Math.abs(d.price() - slNow()) < 1e-6), null, { timeout: 15000 });   // (its SL line is on the chart)
+  await pg.waitForTimeout(300);
   const sl = await pg.evaluate(() => series.priceToCoordinate(slNow()));
   await pg.evaluate(p => { drBefore(); DR.items.push({id: "onsl", type: "hline", pts: [{t: DISP[DISP.length - 5].time, p}], st: drNewStyle("hline"), text: ""}); drChanged(); DR.sel = null; }, await pg.evaluate(() => slNow()));
   await pg.waitForTimeout(300);

@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.23.0)
+# Paper and live trading: how it works (v0.23.1)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -165,11 +165,16 @@ A layout is a named chart set-up: the contract, timeframe, chart type (with its 
 **Show or hide the toolbar:** the **✎** button on the chart's top bar, the **D** key, or Chart settings › Drawing toolbar. The choice is saved on the server. Hiding the toolbar never hides your drawings; that's the 👁 button on the toolbar ("Hide all drawings"). On a phone, ✎ opens the tools as a strip above the chart (it starts closed).
 
 **The tools** (each group button shows the tool you used last; **›** lists the whole group):
-- **Lines:** trend line (Alt+T), ray, extended line, horizontal line (Alt+H), horizontal ray (Alt+J), vertical line (Alt+V), cross line (Alt+C), parallel channel, regression trend (±2σ, settable), pitchfork, Schiff and modified Schiff pitchforks.
+- **Lines:** trend line (Alt+T), trend angle, ray, extended line, horizontal line (Alt+H), horizontal ray (Alt+J), vertical line (Alt+V), cross line (Alt+C), parallel channel, regression trend (±2σ, settable), pitchfork, Schiff and modified Schiff pitchforks.
 - **Fibonacci and Gann:** Fib retracement (Alt+F; 1 at the first point, 0 at the second, as on TradingView), trend-based Fib extension, Fib fan, Fib time zones, Gann fan, Gann box. Levels, their colours and the fills are editable in each drawing's settings.
 - **Shapes:** rectangle (Alt+Shift+R), ellipse, triangle, path (click points, double-click or Enter to finish), brush.
 - **Text and arrows:** text, note, callout, price label, arrow, arrow marks up / down.
 - **Positions and ranges:** long and short position (see below), price range, date range, date & price range.
+
+**Angles:** **∠** on a selected line's bar (or **Show angle** in its settings) on a trend line, ray, extended line, arrow, parallel channel or regression trend, and the **Trend angle** tool (Lines), which always shows it. An arc from the horizontal at the first point, with e.g. "29.2° · +0.73 / bar":
+- the **degrees** are the angle as you see it on screen, like TradingView, so they change when you zoom or stretch the price scale;
+- the **slope** (points per bar; per column on P&F, per brick on Renko) doesn't change with zoom, so it's the figure to compare lines with;
+- on **P&F** the angle is measured in boxes and columns (the P&F convention): a line rising 1 box per column is 45°, at any zoom.
 
 **Drawing:** pick a tool, then drag on the chart, or click, move, click (three clicks for channels, pitchforks, the Fib extension and the triangle). Points sit on bars and on the tick. The tool goes back to the cursor after each drawing unless **Stay in drawing mode** (pencil with a lock) is on. **Esc** cancels.
 

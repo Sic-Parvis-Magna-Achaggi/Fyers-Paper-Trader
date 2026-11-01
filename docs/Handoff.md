@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 1 Nov 2026, version **0.23.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 1 Nov 2026, version **0.23.1**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -127,6 +127,8 @@ Monday's order-flow check.
   until it answers. R: `drRefTrade()` (an open position on this contract with a stop on its own price, else the armed
   BUY / SELL tool). Position drawings: `drPosEval()` on `RAW` (real candles), from the candle after the entry to the box's
   end; a candle reaching both levels = "both" (counted as the stop); opened past a level = its open.
+- Angles (v0.23.1): style key `ang` on trend / ray / extl / arrow / channel / regr, tool `angle` (always on). `angleGeom()`
+  draws the arc and label; `drAngleInfo()` = screen degrees (P&F: boxes / columns) + slope per bar. ∠ on the selection bar.
 - Settings dialog (`drSettings(d, tab)`, drawui.js): tabs style / text / lv / xy. Coordinates come from `drCoordDefs(d)`
   (which points have a price, a time, or both); typed IST date + time -> chart time with `drPartsTime()`; `drBarNote()`
   says which bar it lands on. Everything is checked before anything changes.

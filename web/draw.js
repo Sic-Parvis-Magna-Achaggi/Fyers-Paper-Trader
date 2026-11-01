@@ -194,11 +194,36 @@ const LN = {c: "#2962ff", w: 2, ls: 0};
 const DT = {};
 const ext = (A, a, b, l, r) => { const dx = b.x - a.x, dy = b.y - a.y, k = (A.W + A.H) * 4 / (Math.hypot(dx, dy) || 1);
   return [l ? a.x - dx * k : a.x, l ? a.y - dy * k : a.y, r ? b.x + dx * k : b.x, r ? b.y + dy * k : b.y]; };
+/* angles (v0.23.1). On screen: degrees from the horizontal, up positive, as you see it (like TradingView: zooming or
+   stretching the price scale changes it). The slope in points per bar doesn't change with zoom. On P&F the angle is in
+   boxes and columns (1 box per column = 45°, the P&F convention), which doesn't change with zoom either. */
+function drAngleInfo(a, b, pa, pb){
+  const dL = b.L - a.L, pf = ctType() === "pf" && CT_SIZE;
+  const deg = pf ? Math.atan2((pb - pa) / CT_SIZE, Math.abs(dL)) * 180 / Math.PI : Math.atan2(-(b.y - a.y), Math.abs(b.x - a.x)) * 180 / Math.PI;
+  return {deg: Math.abs(dL) < 1e-9 && !pf ? (b.y < a.y ? 90 : -90) : deg, slope: Math.abs(dL) > 1e-9 ? (pb - pa) / dL : null, pf: !!pf};
+}
+function drAngleText(inf){
+  const [, bars] = drUnits(), unit = bars.replace(/s$/, "");
+  return `${inf.deg >= 0 ? "" : "−"}${Math.abs(inf.deg).toFixed(1)}°${inf.pf ? " (boxes)" : ""}` + (inf.slope != null ? ` · ${drSign(inf.slope)}${fmt(Math.abs(inf.slope), drTick())} / ${unit}` : "");
+}
+/* the arc from the horizontal at a, towards b, with the angle and the slope beside it */
+function angleGeom(A, a, b, pa, pb, c){
+  if([a.x, a.y, b.x, b.y].some(v => v == null || isNaN(v))) return;
+  const inf = drAngleInfo(a, b, pa, pb), dir = b.x >= a.x ? 1 : -1, r = 30;
+  A.line(a.x, a.y, a.x + dir * (r + 22), a.y, c, 1, 2);            // the horizontal it's measured from
+  const h = dir > 0 ? 0 : Math.PI, th = Math.atan2(b.y - a.y, b.x - a.x);
+  let dlt = th - h; while(dlt > Math.PI) dlt -= 2 * Math.PI; while(dlt < -Math.PI) dlt += 2 * Math.PI;
+  const pts = []; for(let k = 0; k <= 16; k++){ const t = h + dlt * k / 16; pts.push([a.x + r * Math.cos(t), a.y + r * Math.sin(t)]); }
+  A.poly(pts, null, c, 1, 0, false);
+  const m = h + dlt / 2, lx = a.x + (r + 8) * Math.cos(m), ly = a.y + (r + 8) * Math.sin(m);
+  A.label(lx, ly, [drAngleText(inf)], c, ly < a.y ? "bottom" : "top", dir > 0 ? "left" : "right", true, {bg: cssVar("--panel"), pad: 2});
+}
 function lineGeom(A){ const s = A.st; A.line(...ext(A, A.P[0], A.P[1], s.el, s.er), s.c, s.w, s.ls); if(A.d.type === "arrow") A.head(A.P[0], A.P[1], s.c, s.w);
+  if(s.ang && A.d.pts[1]) angleGeom(A, A.P[0], A.P[1], A.d.pts[0].p, A.d.pts[1].p, s.c);
   if(s.lbl && A.P[0].x != null){ const a = A.d.pts[0], b = A.d.pts[1]; A.label((A.P[0].x + A.P[1].x) / 2, Math.min(A.P[0].y, A.P[1].y) - 6, [drPriceInfo(a.p, b.p), drTimeInfo(a, b, A.P[0].L, A.P[1].L)], s.c, "bottom"); } }
-DT.trend = {name: "Trend line", g: "lines", n: 2, st: {...LN, el: false, er: false, lbl: false}, ext: true, lblOpt: "Show change", geom: lineGeom, key: "T"};
-DT.ray = {name: "Ray", g: "lines", n: 2, st: {...LN, el: false, er: true, lbl: false}, ext: true, lblOpt: "Show change", geom: lineGeom};
-DT.extl = {name: "Extended line", g: "lines", n: 2, st: {...LN, el: true, er: true, lbl: false}, ext: true, lblOpt: "Show change", geom: lineGeom};
+DT.trend = {name: "Trend line", g: "lines", n: 2, st: {...LN, el: false, er: false, lbl: false, ang: false}, ext: true, lblOpt: "Show change", geom: lineGeom, key: "T"};
+DT.ray = {name: "Ray", g: "lines", n: 2, st: {...LN, el: false, er: true, lbl: false, ang: false}, ext: true, lblOpt: "Show change", geom: lineGeom};
+DT.extl = {name: "Extended line", g: "lines", n: 2, st: {...LN, el: true, er: true, lbl: false, ang: false}, ext: true, lblOpt: "Show change", geom: lineGeom};
 DT.hline = {name: "Horizontal line", g: "lines", n: 1, st: {...LN, w: 1, lbl: true}, lblOpt: "Price on the line", key: "H",
   geom(A){ const s = A.st, y = A.P[0].y; A.line(0, y, A.W, y, s.c, s.w, s.ls); if(s.lbl) A.label(A.W - 6, y - 3, [fmt(A.d.pts[0].p, drTick()) + (A.d.text ? "  " + A.d.text : "")], s.c, "bottom", "right"); },
   axP: d => [d.pts[0].p]};
@@ -208,17 +233,18 @@ DT.hray = {name: "Horizontal ray", g: "lines", n: 1, st: {...LN, w: 1, lbl: true
 DT.vline = {name: "Vertical line", g: "lines", n: 1, st: {...LN, w: 1}, key: "V", geom(A){ const s = A.st, x = A.P[0].x; A.line(x, 0, x, A.H, s.c, s.w, s.ls); }, axT: d => [d.pts[0].t]};
 DT.cross = {name: "Cross line", g: "lines", n: 1, st: {...LN, w: 1}, key: "C",
   geom(A){ const s = A.st, a = A.P[0]; A.line(a.x, 0, a.x, A.H, s.c, s.w, s.ls); A.line(0, a.y, A.W, a.y, s.c, s.w, s.ls); }, axP: d => [d.pts[0].p], axT: d => [d.pts[0].t]};
-DT.channel = {name: "Parallel channel", g: "lines", n: 3, st: {...LN, el: false, er: false, fa: 12, mid: true}, ext: true, fill: true,
+DT.channel = {name: "Parallel channel", g: "lines", n: 3, st: {...LN, el: false, er: false, fa: 12, mid: true, ang: false}, ext: true, fill: true,
   geom(A){
     const s = A.st, [a, b, c] = A.P, dy = c && c.y != null ? c.y - (Math.abs(b.x - a.x) < 1e-6 ? a.y : a.y + (b.y - a.y) * (c.x - a.x) / (b.x - a.x)) : 0;
     const L1 = ext(A, a, b, s.el, s.er), L2 = [L1[0], L1[1] + dy, L1[2], L1[3] + dy];
     if(A.d.pts.length > 2) A.poly([[L1[0], L1[1]], [L1[2], L1[3]], [L2[2], L2[3]], [L2[0], L2[1]]], A.fill(s), null);
     A.line(...L1, s.c, s.w, s.ls);
+    if(s.ang) angleGeom(A, a, b, A.d.pts[0].p, A.d.pts[1].p, s.c);
     if(A.d.pts.length > 2){ A.line(...L2, s.c, s.w, s.ls); if(s.mid) A.line(L1[0], L1[1] + dy / 2, L1[2], L1[3] + dy / 2, s.c, 1, 2); }
     A.H_.push({x: a.x, y: a.y, id: 0}, {x: b.x, y: b.y, id: 1});
     if(A.d.pts.length > 2) A.H_.push({x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 + dy, id: 2});
   }, handles: false};
-DT.regr = {name: "Regression trend", g: "lines", n: 2, st: {...LN, w: 1, dev: 2, fa: 10}, fill: true,
+DT.regr = {name: "Regression trend", g: "lines", n: 2, st: {...LN, w: 1, dev: 2, fa: 10, ang: false}, fill: true,
   geom(A){
     const s = A.st, V = A.V, n = DISP.length;
     let i0 = Math.round(A.P[0].L), i1 = Math.round(A.P[1].L); if(i0 > i1) [i0, i1] = [i1, i0];
@@ -234,6 +260,7 @@ DT.regr = {name: "Regression trend", g: "lines", n: 2, st: {...LN, w: 1, dev: 2,
     if([up0, up1, dn0, dn1, c0, c1].some(v => v == null)) return;
     A.poly([[X0, up0], [X1, up1], [X1, dn1], [X0, dn0]], A.fill(s), null);
     A.line(X0, up0, X1, up1, s.c, s.w, s.ls); A.line(X0, dn0, X1, dn1, s.c, s.w, s.ls); A.line(X0, c0, X1, c1, s.c, s.w, 2);
+    if(s.ang) angleGeom(A, {x: X0, y: c0, L: i0}, {x: X1, y: c1, L: i1}, f(i0), f(i1), s.c);
     A.H_.push({x: X0, y: c0, id: A.P[0].L <= A.P[1].L ? 0 : 1}, {x: X1, y: c1, id: A.P[0].L <= A.P[1].L ? 1 : 0});
   }, handles: false};
 DT.pitch = {name: "Pitchfork", g: "lines", n: 3, st: {...LN, fa: 10}, fill: true, geom(A){ pitchGeom(A, 0); }, handles: false};
@@ -340,7 +367,8 @@ DT.plabel = {name: "Price label", g: "text", n: 1, st: {c: "#2962ff", fs: 12}, n
   geom(A){ const s = A.st, a = A.P[0], t = fmt(A.d.pts[0].p, drTick()) + (A.d.text ? "  " + A.d.text : "");
     A.poly([[a.x, a.y], [a.x + 8, a.y - 9], [a.x + 8, a.y + 9]], s.c, null);
     A.label(a.x + 8, a.y, [t], textOn(s.c), "middle", "left", false, {fs: s.fs, bg: s.c, bd: s.c, pad: 5}); }, text: true, axP: d => [d.pts[0].p]};
-DT.arrow = {name: "Arrow", g: "text", n: 2, st: {...LN}, ext: false, geom: lineGeom};
+DT.arrow = {name: "Arrow", g: "text", n: 2, st: {...LN, ang: false}, ext: false, geom: lineGeom};
+DT.angle = {name: "Trend angle", g: "lines", n: 2, st: {...LN, ang: true}, geom: lineGeom};
 const markGeom = up => function(A){ const s = A.st, a = A.P[0], z = 6 + 3 * (s.w || 2), d = up ? 1 : -1;
   A.poly([[a.x, a.y], [a.x + z, a.y + d * z], [a.x + z / 2.4, a.y + d * z], [a.x + z / 2.4, a.y + d * z * 2], [a.x - z / 2.4, a.y + d * z * 2], [a.x - z / 2.4, a.y + d * z], [a.x - z, a.y + d * z]], s.c, null, 0, 0, true);
   if(A.d.text) A.label(a.x, a.y + d * (z * 2 + 4), A.d.text.split("\n"), s.c, up ? "top" : "bottom", "center", false, {fs: 12, sans: true}); };
@@ -405,7 +433,7 @@ DT.long = {name: "Long position", g: "range", n: 1, st: {fa: 20}, pos: true, geo
 DT.short = {name: "Short position", g: "range", n: 1, st: {fa: 20}, pos: true, geom: posGeom, handles: false};
 
 const DR_GROUPS = [
-  ["lines", "Lines", ["trend", "ray", "extl", "hline", "hray", "vline", "cross", "channel", "regr", "pitch", "schiff", "mschiff"]],
+  ["lines", "Lines", ["trend", "angle", "ray", "extl", "hline", "hray", "vline", "cross", "channel", "regr", "pitch", "schiff", "mschiff"]],
   ["fib", "Fibonacci and Gann", ["fib", "fibext", "fibfan", "fibtime", "gannfan", "gannbox"]],
   ["shapes", "Shapes", ["rect", "ellipse", "tri", "path", "brush"]],
   ["text", "Text and arrows", ["text", "note", "callout", "plabel", "arrow", "arup", "ardn"]],

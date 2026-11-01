@@ -7,6 +7,7 @@ const DI = (k, extra = "") => `<svg viewBox="0 0 28 28" width="22" height="22" f
 const DR_ICONS = {
   cursor: '<path d="M8 4l12 10-5.5 1 3 6-2.5 1.2-3-6L8 20z"/>',
   trend: '<path d="M6 22L22 6"/><circle cx="6" cy="22" r="2"/><circle cx="22" cy="6" r="2"/>',
+  angle: '<path d="M5 22L22 7"/><path d="M5 22h18" stroke-dasharray="2 2"/><path d="M14 22a9 9 0 0 0-2.6-6.3"/>',
   ray: '<path d="M6 21L25 6"/><circle cx="6" cy="21" r="2"/><circle cx="14" cy="14.7" r="2"/>',
   extl: '<path d="M2 25L26 3"/><circle cx="9" cy="18.6" r="2"/><circle cx="19" cy="9.4" r="2"/>',
   hline: '<path d="M3 14h22"/><circle cx="14" cy="14" r="2"/>',
@@ -166,6 +167,7 @@ function drUiSel(){
     if(!T.noWidth && !T.pos && st.w != null) h += `<select data-s="w" title="Line width">${[1, 2, 3, 4].map(w => `<option value="${w}" ${+st.w === w ? "selected" : ""}>${w}px</option>`).join("")}</select>`;
     if(!T.noWidth && !T.pos && st.ls != null) h += `<select data-s="ls" title="Line style">${[[0, "Solid"], [2, "Dashed"], [1, "Dotted"]].map(([v, n]) => `<option value="${v}" ${+st.ls === v ? "selected" : ""}>${n}</option>`).join("")}</select>`;
     if(T.pos) h += `<label class="ds-lots" title="Lots, for the net ₹">Lots <input data-lots type="number" min="1" max="1000" value="${Math.max(1, Math.round(+d.lots || drLots()))}"></label>`;
+    if("ang" in st && d.type !== "angle") h += `<button data-a="ang" class="ds-ang${st.ang ? " on" : ""}" title="${st.ang ? "Hide" : "Show"} the angle (and slope per bar)">∠</button>`;
     if(T.text) h += `<button data-a="text" title="Text">T</button>`;
     h += `<button data-a="set" title="Settings">${DI("gear")}</button>`;
     h += `<button data-a="lock" class="${d.lock ? "on" : ""}" title="${d.lock ? "Unlock" : "Lock"}">${DI("lock")}</button>`;
@@ -181,6 +183,7 @@ function drUiSel(){
     const A = a => el.querySelector(`[data-a="${a}"]`);
     if(A("text")) A("text").onclick = () => { if(D()) drEditText(D()); };
     A("set").onclick = () => { if(D()) drSettings(D()); };
+    if(A("ang")) A("ang").onclick = () => { const x = D(); if(x) drSetStyle(x, {ang: !drStyleOf(x).ang}); };
     A("lock").onclick = () => { const x = D(); if(!x) return; drBefore(); x.lock = !x.lock; drChanged(); };
     A("clone").onclick = () => { if(D()) drClone(D()); };
     A("del").onclick = () => drRemove(id);
@@ -285,7 +288,7 @@ function drEditText(d, fresh){
 /* ---------------------------------------------------------------- settings dialog */
 const DR_LABELS = {c: "Colour", w: "Line width", ls: "Line style", fc: "Fill / background", fa: "Fill opacity %", el: "Extend left", er: "Extend right",
   lbl: "Labels", tl: "Trend line", rev: "Reverse", mid: "Middle line", dev: "Deviation (×σ)", bg: "Background", fs: "Font size", arr: "Arrow at the end",
-  money: "Net ₹ and R (your lots)", pc: "Profit colour", lc: "Loss colour", tc: "Text colour"};
+  money: "Net ₹ and R (your lots)", ang: "Show angle (and slope per bar)", pc: "Profit colour", lc: "Loss colour", tc: "Text colour"};
 /* which coordinates a point has: price, time, or both (a horizontal line has no time that matters, a vertical line no price) */
 function drCoordDefs(d){
   const T = DT[d.type];

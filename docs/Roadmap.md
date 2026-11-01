@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 1 Nov 2026 (v0.23.0). This is the one task list for the project.
+Updated 1 Nov 2026 (v0.23.1). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -74,6 +74,10 @@ Telegram (3) and the journal (4) after them.
      D key; saved on the server. Hiding it never hides the drawings. *(v0.22.0)*
    - [x] **Accurate coordinates in each drawing's settings** (asked 1 Nov 2026): a Coordinates tab like TradingView's, with
      every point's price (on the tick) and date / time (IST) editable, and the bar each time lands on shown. *(v0.22.0)*
+   - [x] **Angles** (asked 1 Nov 2026) *(v0.23.1)*: a **Show angle** option on trend line, ray, extended line, arrow, parallel
+     channel and regression trend, and a separate **Trend angle** tool. Shows the angle as on screen (degrees, like
+     TradingView; it changes as you zoom) and the slope in points per bar (doesn't change with zoom); on P&F the angle in
+     boxes and columns (1 box per column = 45°).
    - [ ] Still to add, if wanted: Inside pitchfork, Gann square / fixed square, Fib circles / spiral / arcs, Elliott and
      XABCD patterns, show-on-timeframes per drawing (TradingView's Visibility tab), and drawings shared across a future's
      expiries (today: per contract; copy with Ctrl+C / Ctrl+V).
@@ -141,6 +145,7 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Done
 
+- [x] **v0.23.1** (1 Nov): angles on drawings (Show angle on lines, channels, regression; the Trend angle tool; degrees on screen + slope per bar; P&F in boxes).
 - [x] **v0.23.0** (1 Nov): saved chart layouts (item 5, asked 31 Oct). Design (1 Nov; Claude's suggestions taken where the
   owner didn't choose, he can change them): a layout holds the contract, timeframe, chart type, indicators and Pine scripts
   with their settings, chart settings, toolbar on / off; **drawings stay per contract**; **auto-save** like TradingView, or by

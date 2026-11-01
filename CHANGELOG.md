@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.23.1 — 1 Nov 2026 — Angles on drawings
+
+Added
+- **Angles** (owner, 1 Nov). **Show angle** on trend line, ray, extended line, arrow, parallel channel and regression trend
+  (∠ on the selected line's bar, or its settings): an arc from the horizontal at the first point, with the angle and the
+  slope beside it, e.g. "29.2° · +0.73 / bar". A new **Trend angle** tool (Lines) always shows it.
+- The degrees are the angle as you see it on screen, like TradingView, so zooming or stretching the price scale changes
+  them; the slope in points per bar (per column on P&F, per brick on Renko) doesn't change with zoom. On P&F the angle
+  is in boxes and columns, the P&F convention: a line rising 1 box per column reads 45°.
+
+Tests
+- `tests/drawings_flow.js` (78 checks, was 71): the Trend angle tool, its angle against the line on screen and its slope,
+  zooming changes the degrees but not the slope, ∠ on a trend line and its settings, 45° on P&F.
+  The "SL line wins over a drawing" check now waits for the new trade's SL line to be on the chart (it failed once on
+  fresh test data, when the preview took longer than 0.9 s; 3 runs after: 78/78).
+
 ## v0.23.0 — 1 Nov 2026 — Saved chart layouts
 
 Added
