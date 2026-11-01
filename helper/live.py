@@ -1246,27 +1246,35 @@ class LiveEngine(Paper):
         self.changed("Re-reading Fyers")
 
     # ------------------------------------------------------------ for the page
-    def live_status(self) -> dict:
+    def live_problems(self) -> list:
+        """What the owner should know about this account now: (key, text, symbol or None). The page shows the texts
+        (live_status); Telegram alerts (alerts.py) use the keys to send each one once, and "sorted" when it clears."""
         logged = bool(self.link and self.link.token())
         stream = bool(self.stream and self.stream.up)
         w = []
         if not logged:
-            w.append("No Fyers login today: new orders are blocked; stops already at Fyers stay in force, but trailing "
-                     "can't move them and targets / square-off can't close. Log in to Fyers.")
+            w.append(("login", "No Fyers login today: new orders are blocked; stops already at Fyers stay in force, but trailing "
+                      "can't move them and targets / square-off can't close. Log in to Fyers.", None))
         elif not stream and (self.positions or self.orders):
-            w.append("Order updates from Fyers aren't connected: the app checks the order book every 5 s instead.")
+            w.append(("stream", "Order updates from Fyers aren't connected: the app checks the order book every 5 s instead.", None))
         for p in self.positions:
             st = p.get("stop_state")
             if not p.get("stop_oid") and not p.get("exiting") and self.desired_stop(p):
                 why = {"failed": f"Fyers refused it ({p.get('stop_err')})", "waiting for the market": "waiting for the market to open",
                        "expired": "yesterday's stop expired; a new one goes in when it trades", "no login": "log in to Fyers",
                        "mismatch": "Fyers' quantity differs - check Fyers, then Resync"}.get(st, "placing it")
-                w.append(f"{self.short(p['s'])}: no stop at Fyers yet - {why}.")
+                w.append((f"nostop:{p['id']}:{st or ''}", f"{self.short(p['s'])}: no stop at Fyers yet - {why}.", p["s"]))
             elif p.get("stop_err") and p.get("stop_oid"):
-                w.append(f"{self.short(p['s'])}: the last stop change was refused ({p['stop_err']}); the stop at {p.get('stop_px')} is in force.")
+                w.append((f"refused:{p['id']}", f"{self.short(p['s'])}: the last stop change was refused ({p['stop_err']}); the stop at {p.get('stop_px')} is in force.", p["s"]))
         if self.L.get("halted"):
-            w.append("Kill switch used: new orders are paused until you press Resume (Account page).")
-        w += self.L.get("alerts") or []
+            w.append(("halted", "Kill switch used: new orders are paused until you press Resume (Account page).", None))
+        w += [(f"alert:{a}", a, None) for a in (self.L.get("alerts") or [])]
+        return w
+
+    def live_status(self) -> dict:
+        logged = bool(self.link and self.link.token())
+        stream = bool(self.stream and self.stream.up)
+        w = [t for _, t, _ in self.live_problems()]
         return {"on": True, "logged_in": logged, "stream": stream, "halted": bool(self.L.get("halted")), "warnings": w,
                 "last_poll": self._last_poll or None}
 

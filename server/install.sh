@@ -25,13 +25,13 @@ main(){
 
   say "Services"
   local changed=0
-  for f in fyers-helper.service fyers-update.service fyers-update.timer; do
+  for f in fyers-helper.service fyers-watchdog.service fyers-update.service fyers-update.timer; do
     if ! cmp -s "$APP/server/systemd/$f" "/etc/systemd/system/$f"; then
       cp "$APP/server/systemd/$f" "/etc/systemd/system/$f"; changed=1
     fi
   done
   [ $changed = 1 ] && systemctl daemon-reload
-  systemctl enable -q fyers-helper.service fyers-update.timer
+  systemctl enable -q fyers-helper.service fyers-watchdog.service fyers-update.timer
   systemctl start fyers-update.timer
 
   say "Web server (Caddy)"
@@ -44,8 +44,9 @@ main(){
   rm -f /tmp/Caddyfile.new
   rm -rf /srv/pub
 
-  say "Starting the helper"
+  say "Starting the helper and its watchdog"
   systemctl restart fyers-helper.service
+  systemctl restart fyers-watchdog.service    # the watchdog (Telegram alerts if the helper stops answering)
 
   if [ "$QUIET" != "--quiet" ]; then
     for i in $(seq 1 30); do

@@ -744,6 +744,11 @@ body:not(.is-admin) .admin-only{display:none!important}
     <div class="ok-msg" id="appMsg"></div>
     <p class="help">Fyers ends the login every morning, so log in once a day before trading.</p>
 
+    <div id="tgSec" class="hide">
+      <h3>Telegram alerts</h3>
+      <div id="tgBox"></div>
+    </div>
+
     <h3>Paper trading rules</h3>
     <p class="help">Checked before every new order, the same way as LiveTrader: if every stop on the account were hit, equity must stay above each floor plus the buffer. Lots are cut to fit the caps.</p>
     <div id="rulesForm"></div>
@@ -788,6 +793,7 @@ if(window.FTM_CELL != null) document.documentElement.classList.add("cell");</scr
 <script src="/vendor/qrcode/qrcode.js?v=__V__"></script>
 <script src="/static/security.js?v=__V__"></script>
 <script src="/static/live.js?v=__V__"></script>
+<script src="/static/tgalerts.js?v=__V__"></script>
 <script>
 "use strict";
 const $ = s => document.querySelector(s);

@@ -6,6 +6,7 @@ Run: uvicorn helper.app:app --host 127.0.0.1 --port 8000   (Caddy serves it over
 import asyncio
 import json
 import logging
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -15,7 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from fastapi.staticfiles import StaticFiles
 
-from . import charges, charges_watch, fyers_link, logbuf, rt, store, symbols, users
+from . import alerts, charges, charges_watch, fyers_link, logbuf, rt, store, symbols, telegram, users
 from .feedcheck import FC
 from . import candles as candles_store
 from .paper import Refused
@@ -70,6 +71,7 @@ async def _engine_loop():
         await asyncio.sleep(5)
         for urt in list(rt.RT.values()):
             urt.housekeeping()
+        alerts.tick(VERSION, asyncio.get_running_loop())   # the watchdog's heartbeat, and Telegram alerts for live trades
         n += 1
         if FC.buf:                                         # the order-flow check's snapshots, written every few seconds
             asyncio.get_running_loop().run_in_executor(None, FC.flush)
@@ -1137,6 +1139,107 @@ async def charge_reviewed(request: Request):
     u = _admin(request)
     users.audit(u["uid"], "charges page reviewed", "", _ip(request))
     return {"ok": True, "check": charges_watch.mark_reviewed()}
+
+
+# ------------------------------------------------------------------ Telegram alerts (your own bot)
+@app.get("/api/ping")
+def ping():
+    """For the watchdog (and any outside monitor): answers while the helper's event loop runs. Says nothing else."""
+    return {"ok": True, "t": int(time.time())}
+
+
+@app.get("/api/telegram")
+def telegram_get(request: Request):
+    u = _admin(request)
+    w = alerts.watchdog_status()
+    w["hc"] = (w.get("hc") or {}).get(u["uid"])          # only this user's outside heartbeat
+    return {"ok": True, "tg": telegram.public(u["uid"]), "watchdog": w}
+
+
+@app.post("/api/telegram/settings")
+async def telegram_settings(request: Request):
+    """{token} (checked with Telegram, then saved encrypted), {chat, chat_title}, {alerts: {...}}, {hc_url, hc_key},
+    {remove: true}. The token, the chat and the outside check need a fresh 2FA code; the alert switches don't."""
+    _same_origin(request)
+    u = _admin(request)
+    b = await _body(request)
+    uid = u["uid"]
+    s = telegram.load(uid)
+    sensitive = any(k in b for k in ("token", "chat", "hc_url", "hc_key", "remove"))
+    if sensitive:
+        _stepped(request)
+    loop = asyncio.get_running_loop()
+    try:
+        if b.get("remove"):
+            telegram.save(uid, {"alerts": s["alerts"]})
+            users.audit(uid, "telegram removed", "", _ip(request))
+            return {"ok": True, "tg": telegram.public(uid)}
+        if "token" in b:
+            tok = str(b.get("token") or "").strip()
+            if not re.fullmatch(r"\d{5,12}:[A-Za-z0-9_-]{30,60}", tok):
+                raise ValueError("that doesn't look like a bot token (from @BotFather it looks like 123456789:AAH…)")
+            me = await loop.run_in_executor(None, telegram.call, tok, "getMe")
+            if tok != telegram.token(s):
+                s.pop("chat", None)
+                s.pop("chat_title", None)
+            s.update(token=users.seal(tok), bot="@" + str(me.get("username") or ""))
+            users.audit(uid, "telegram bot saved", s["bot"], _ip(request))
+        if "chat" in b:
+            chat = str(b.get("chat") or "").strip()
+            if not telegram.CHAT_RE.match(chat):
+                raise ValueError("chat: a number like 123456789 (or -100… for a channel / group), or @channelname")
+            if not s.get("token"):
+                raise ValueError("save the bot token first")
+            s.update(chat=chat, chat_title=str(b.get("chat_title") or "")[:80])
+            users.audit(uid, "telegram chat set", chat, _ip(request))
+        if isinstance(b.get("alerts"), dict):
+            s["alerts"] = telegram.clean_alerts(b["alerts"], s["alerts"])
+        if "hc_url" in b:
+            url = str(b.get("hc_url") or "").strip()
+            if url and not re.match(r"^https?://[^\s/]+/\S+$", url):
+                raise ValueError("the ping URL: like https://hc-ping.com/<your check's UUID>")
+            s["hc"] = {**(s.get("hc") or {}), "url": url}
+            if not url:
+                s["hc"] = {}
+            users.audit(uid, "outside heartbeat " + ("set" if url else "removed"), "", _ip(request))
+        if "hc_key" in b and s.get("hc", {}).get("url"):
+            key = str(b.get("hc_key") or "").strip()
+            s["hc"]["key"] = users.seal(key) if key else ""
+    except (ValueError, telegram.TgError) as e:
+        return _err(e)
+    s["link"] = f"https://{request.headers.get('host')}/"
+    telegram.save(uid, s)
+    return {"ok": True, "tg": telegram.public(uid)}
+
+
+@app.post("/api/telegram/chats")
+async def telegram_chats(request: Request):
+    """The chats that messaged the bot (or channels it posted in) recently, to pick from."""
+    _same_origin(request)
+    u = _admin(request)
+    s = telegram.load(u["uid"])
+    if not s.get("token"):
+        return _err("save the bot token first")
+    try:
+        chats = await asyncio.get_running_loop().run_in_executor(None, telegram.chats_seen, telegram.token(s))
+    except telegram.TgError as e:
+        return _err(e)
+    return {"ok": True, "chats": chats}
+
+
+@app.post("/api/telegram/test")
+async def telegram_test(request: Request):
+    _same_origin(request)
+    u = _admin(request)
+    s = telegram.load(u["uid"])
+    if not telegram.ready(s):
+        return _err("save the bot token and choose a chat first")
+    try:
+        await asyncio.get_running_loop().run_in_executor(None, telegram.send, telegram.token(s), s["chat"],
+                                                         "✅ <b>Test from Trade Manager</b>: live-trade alerts will come to this chat.")
+    except telegram.TgError as e:
+        return _err(e)
+    return {"ok": True}
 
 
 # ------------------------------------------------------------------ live prices (each user's own feed)

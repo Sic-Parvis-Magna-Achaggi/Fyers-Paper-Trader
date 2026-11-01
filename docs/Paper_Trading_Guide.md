@@ -62,6 +62,15 @@ An account can be **Paper** or **Live**. A Live account uses the same ticket, ch
 
 **Account page (Live):** whether you're logged in to Fyers, whether order updates are connected (if not, the app reads the order book every 5 seconds), your Fyers funds, **Resync with Fyers** (re-reads Fyers and puts every stop where it should be), Resume and the kill switch.
 
+**Telegram alerts** (Settings › Telegram alerts, the admin): a message on your phone when the server stops looking after a live trade. Only while a Live account has a position or an order at Fyers.
+
+- **Set-up, once:** in Telegram, open **@BotFather**, send `/newbot` and copy the token (the journal's bot works too). Paste it in Settings › Telegram alerts → Save (asks for a 2FA code; saved encrypted, never shown again). Send your bot any message (*hi*), press **Find my chat** and tap your name (or a channel / group the bot is in). **Send a test message** to check.
+- **The server isn't responding** (default 30 s): a separate watchdog on the server asks the helper every 5 seconds, so it still works when the helper has crashed or hung. The message lists each live trade and its stop at Fyers (or "no stop at Fyers: protect it in the Fyers app"), says what's paused (trailing, BE, targets, square-off, the server's own stop check) and comes again every 10 minutes while it stays down (settable, 0 = once). "Answering again" when it's back. Measured: about 33 s after a crash, 38 s after a hang, with the default 30 s. Outside market hours it arrives silently.
+- **A live warning lasting 30 s** (settable): no stop at Fyers, a refused stop change, no Fyers login, a "check Fyers" alert. Then "Sorted" when it clears. Only in that contract's market hours (a carried position's stop waiting for the open isn't sent).
+- **No prices for an open live trade for 60 s** (settable) in its market hours, after it had prices that day (so a holiday isn't an outage). "Sorted" when prices are back.
+- **If the whole server goes down** (droplet off, network cut), nothing on it can send. Optional: a free check at **healthchecks.io** (Period 1 minute, Grace 2 minutes, its Telegram integration). Paste its Ping URL in the same section: the watchdog pings it every minute while a live trade is open. With its API key (not read-only) the check is paused while you're flat, so it only alarms during live trades; without the key it's pinged all the time.
+- The Account page's Live card shows **Telegram alerts: on / not set up / watchdog not running**.
+
 **Limits:** live orders, changes and cancels share Fyers' 10 a second / 200 a minute (the helper queues at 4 a second, 120 a minute). Fyers' order-update socket doesn't count against them. The Standard plan is enough; nothing here needs Fyers Prime.
 
 ## Markets
@@ -429,7 +438,6 @@ When BE-T has already moved the stop to break-even, a Trail SL of N R behind the
 
 - Footprint / delta (order flow): waiting for the order-flow check (Monday 2 Nov).
 - Comparing the charges the app counts with what Fyers actually deducted (live).
-- Telegram alerts if the server stops responding during a live trade (next).
 - The journal inside the app, and Telegram screenshots.
 - Partial closes.
 - Agri MCX contracts use the non-agri rates.

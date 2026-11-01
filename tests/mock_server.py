@@ -8,6 +8,13 @@ import time
 
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Telegram (and Healthchecks.io) are faked too, on :8767 (tests/fake_telegram.py): /_sent lists what the app sent
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import fake_telegram  # noqa: E402
+TG_PORT = int(os.environ.get("FAKE_TELEGRAM_PORT", "8767"))
+os.environ["TELEGRAM_API"] = f"http://127.0.0.1:{TG_PORT}"
+os.environ.setdefault("HC_API", f"http://127.0.0.1:{TG_PORT}")
+fake_telegram.start(TG_PORT)
 from helper import fyers_link, feed as feedmod  # noqa: E402
 
 FL = fyers_link.FyersLink

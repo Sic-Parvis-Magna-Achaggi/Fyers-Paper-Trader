@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 1 Nov 2026 (v0.24.1). This is the one task list for the project.
+Updated 1 Nov 2026 (v0.25.0). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -36,13 +36,27 @@ ahead of 3-6.
      - [x] The recorder: the server records every feed snapshot for chosen contracts (default CRUDEOIL and NIFTY futures) and reports how much of the volume arrives as single, exact trades (Log page, admin). *(v0.16.0)*
      - [ ] Measure on Monday 2 Nov (needs the owner's Fyers login that morning), then read the report together.
      - [ ] Then decide with the owner: build the footprint (buy x sell volume at each price per bar, delta, cumulative delta, imbalances) only where the trades are exact; otherwise ask Fyers for a trade feed. Buyer / seller is classified by the bid / ask at the trade, as Fyers' own order flow does.
-3. [ ] **Telegram alerts:** a message if the server stops responding while a live trade is open (with the journal's Telegram set-up).
+3. [x] **Telegram alerts:** shipped in **v0.25.0**, see Done. Not yet tried on the real server and the owner's real bot (to do: set it up, send the test, check `systemctl status fyers-watchdog`).
+   Asked: a message if the server stops responding while a live trade is open (with the journal's Telegram set-up).
+   Design (1 Nov 2026, Claude's proposal on the owner's "let's finish the Telegram alert"; he can change any of it):
+   - Your own Telegram bot (the journal's bot can be reused): its token typed only in Settings › Telegram alerts (saved
+     encrypted, 2FA code to change); "Find my chat" lists the chats that messaged the bot; a test message button.
+   - **A separate watchdog on the server** (its own service, so it still works when the helper has crashed or hung) asks the
+     helper every 10 s; no answer for 30 s (settable) while a Live account has a position or an order at Fyers: a message
+     with each trade, its stop at Fyers (or "no stop at Fyers: protect it in the Fyers app"), what is paused; a reminder every
+     10 minutes (settable) while it stays down; "back" when it answers again. Silent (no sound) outside market hours.
+   - **While the helper runs, it reports what stops it looking after a live trade** (each a tick box): a live warning lasting
+     30 s (no stop at Fyers, a refused stop change, no Fyers login, a "check Fyers" alert), and no prices for an open live
+     trade for 60 s in its market hours (or the price socket down); "sorted" when it clears.
+   - **The whole server down** (droplet off, network): nothing on it can send, so an optional outside heartbeat
+     (Healthchecks.io, free): the watchdog pings it every minute while a live trade is open and pauses it when flat (with its
+     API key; without the key it pings all the time); Healthchecks.io sends its own Telegram message when the pings stop.
 4. [ ] **Journal: full Octagon port** (from `octagon_journal.html`)
    - Paper and live trades arrive automatically, per user and account.
    - 8 pillars audit; notes, tags, plan; insights; review calendar; filters and stats.
    - Screenshots on the server, with the chart captured automatically at entry and exit. Telegram as a backup copy.
 **Order change (owner, 1 Nov 2026, after v0.22.0):** item 5 (saved layouts, done in v0.23.0), then 6 (multi-charts, done in
-v0.24.0 / v0.24.1); Telegram (3) and the journal (4) next.
+v0.24.0 / v0.24.1); Telegram (3, done in v0.25.0) and the journal (4) next.
 
 5. [x] **Saved chart layouts, per user** (asked 31 Oct 2026): shipped in **v0.23.0**, see Done.
 6. [x] **Multi-charts in a layout** (asked 31 Oct 2026): shipped in **v0.24.0** and **v0.24.1** (sync), see Done.
@@ -146,6 +160,8 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 - [ ] Switch the order-flow recorder off after Monday's measurement (Log page): it writes tens of MB a day per busy
   contract on the 25 GB disk.
 - [ ] Partial closes.
+- [ ] **Telegram alerts on the real server (owner):** after v0.25.0 deploys, Settings › Telegram alerts should say "Watchdog:
+  running"; set up the bot and send the test. Optional: the Healthchecks.io check.
 - [ ] **Fyers support (owner, 1 Nov):** GOLDPETAL26NOVFUT's history for 29-30 Oct doesn't match Fyers' own live prices
   (emailed by the owner 1 Nov; waiting for Fyers). When Fyers fixes it, the app takes the corrected days on its own
   within a week (v0.20.7).
@@ -154,6 +170,7 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Done
 
+- [x] **v0.25.0** (1 Nov): Telegram alerts for live trades (item 3): the server not answering (a watchdog service of its own), a live warning lasting 30 s, no prices for 60 s; your own bot, Find my chat, test message; optional outside heartbeat (Healthchecks.io) for the whole server being down.
 - [x] **v0.24.1** (1 Nov): multi-charts, second step (item 6 complete): contract, timeframe and date-range sync.
 - [x] **v0.24.0** (1 Nov): multi-charts, first step (item 6): 1 / 2 / 2 / 3 / 2×2 grids, each chart its own, the active chart for the watchlist, BUY / SELL and Pine, crosshair sync, the phone's chart buttons.
 - [x] **v0.23.1** (1 Nov): angles on drawings (Show angle on lines, channels, regression; the Trend angle tool; degrees on screen + slope per bar; P&F in boxes).

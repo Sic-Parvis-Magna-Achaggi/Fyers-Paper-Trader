@@ -1,0 +1,20 @@
+[Unit]
+Description=Fyers trade manager watchdog (Telegram alert if the helper stops answering during a live trade)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=helper
+Group=helper
+WorkingDirectory=/home/helper/app
+Environment=FYERS_HELPER_DATA=/home/helper/data
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/helper/venv/bin/python -m helper.watchdog
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

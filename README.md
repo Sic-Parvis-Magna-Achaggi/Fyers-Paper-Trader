@@ -84,6 +84,8 @@ See `docs/Paper_Trading_Guide.md`.
 - Users with two-factor login (authenticator app + recovery codes), several paper accounts per user, the daily Fyers login, MCX search and option chain, watchlist, and live candlestick charts.
 - Auto-update from GitHub.
 
+- **Telegram alerts** (v0.25.0): a message if the server stops answering, a live warning stays or prices stop during a live trade; a watchdog service of its own; an optional outside heartbeat (Healthchecks.io) for the whole server being down.
+
 Next: the journal in the app, with Telegram screenshots.
 
 ## Repo layout

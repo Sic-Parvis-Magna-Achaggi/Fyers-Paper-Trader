@@ -39,6 +39,8 @@ Upload a new zip to GitHub and it's live within about a minute. The version show
 | Helper log | `journalctl -u fyers-helper -n 100 --no-pager` |
 | Update log | `journalctl -u fyers-update -n 50 --no-pager` |
 | Restart the helper | `systemctl restart fyers-helper` |
+| Is the watchdog running? (Telegram alerts when the helper stops answering) | `systemctl status fyers-watchdog` |
+| Watchdog log | `journalctl -u fyers-watchdog -n 50 --no-pager` |
 | Forgot the password, or lost the 2FA phone and recovery codes | `cd /home/helper/app && sudo -u helper /home/helper/venv/bin/python -m helper.users rescue admin` prints a temporary password; log in with it, choose a new one and set up 2FA again (everything else is kept). Other users: Settings → Users on the page |
 
 ## Where things live on the server

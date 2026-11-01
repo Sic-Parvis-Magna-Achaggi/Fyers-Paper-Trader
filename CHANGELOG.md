@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.25.0 — 1 Nov 2026 — Telegram alerts for live trades
+
+Added
+- **Telegram alerts** (roadmap item 3): a message on your phone when the server stops looking after a live trade. Only
+  while a Live account has a position or an order at Fyers. Settings › Telegram alerts (admin):
+  - **Your own bot** (from @BotFather; the journal's bot works too): the token is checked with Telegram, saved encrypted
+    and never shown again (2FA code to change it). **Find my chat** lists the chats that messaged the bot (or a channel /
+    group it's in); **Send a test message**.
+  - **The server isn't responding** for 30 s (settable): a **watchdog service of its own** (`fyers-watchdog`) asks the
+    helper every 5 s, so it works when the helper has crashed or hung. The message lists each live trade with its stop at
+    Fyers (or "no stop at Fyers: protect it in the Fyers app"), any entry order waiting at Fyers, and what's paused; a
+    reminder every 10 min (settable, 0 = once); "answering again" when it's back. Silent outside market hours.
+  - **A live warning lasting 30 s:** no stop at Fyers, a refused stop change, no Fyers login, a "check Fyers" alert; "Sorted"
+    when it clears. Only in that contract's market hours.
+  - **No prices for an open live trade for 60 s** in its market hours (after it had prices that day).
+  - **If the whole server goes down** (optional): a free Healthchecks.io check. The watchdog pings it every minute while a
+    live trade is open and pauses it when you're flat (with its API key), so its own Telegram alarm only fires during live
+    trades.
+  - The watchdog's state (running / not) in Settings, and **Telegram alerts: on / not set up** on the Account page's Live card.
+- `GET /api/ping` (no login; says only that the helper answers), `/api/telegram`, `/api/telegram/settings`,
+  `/api/telegram/chats`, `/api/telegram/test`.
+- Server: `server/systemd/fyers-watchdog.service`; `install.sh` installs, enables and restarts it with the helper (the
+  automatic update does this on its own).
+
+Changed
+- `LiveEngine.live_problems()` gives each live warning a key (the page's warnings are word for word the same).
+
+Tests
+- `tests/alerts_test.py` (57 checks, new): the helper's checks and heartbeat on a real Live engine against the fake Fyers;
+  the watchdog on a fake clock (30 s, reminders, back, a hung loop, no live trade, no stop at Fyers, silent hours,
+  switched off); the outside heartbeat (pings, pause, resume); the watchdog as its own process (a failing, then a closed,
+  helper); `/api/ping`.
+- `tests/telegram_flow.js` (33 checks, new): Settings › Telegram alerts end to end in a browser, the Live card, the phone,
+  and the real watchdog with the real helper frozen (SIGSTOP) during a live trade: the message came 21 s after the freeze
+  with 15 s set.
+- `tests/fake_telegram.py` (new): a fake Telegram Bot API and Healthchecks.io; `mock_server.py` starts it on :8767.
+- Timing with the defaults (30 s): the message came 33 s after a crash and 38 s after a hang.
+
 ## v0.24.1 — 1 Nov 2026 — Sync in multi-chart layouts
 
 Added

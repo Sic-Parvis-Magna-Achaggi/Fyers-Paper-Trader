@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 1 Nov 2026, version **0.24.1**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 1 Nov 2026, version **0.25.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -70,6 +70,29 @@ runs on 1 Nov, on v0.20.2 code too). Cause not found; it's a test-kit issue so f
 probably the history read before the kill switch's close was booked. Same advice.
 `indicator_settings_flow.js`'s "at the start of a contract's history it stops asking" failed once in 2 runs on 1 Nov
 (v0.22.0; passed on re-run, 37/37). Same advice.
+
+## Telegram alerts (v0.25.0)
+
+- `helper/telegram.py`: per-user bot settings `u/<user>/telegram.json` = {token (sealed), bot, chat, chat_title, alerts,
+  hc: {url, key (sealed)}, link}; `call()` / `send()` (stdlib urllib, `TELEGRAM_API` env for tests); `send_user(uid, text,
+  silent, who)` records its last send / error in `u/<user>/tg_<who>.json` (one file per process, so helper and watchdog
+  never rewrite each other's file); `trade_lines()`, `market_open(sym, t)` (weekdays; MCX 09:00-23:30 / 23:55 US summer,
+  currency 09:00-17:00, the rest 09:15-15:30; no holidays).
+- `helper/alerts.py` (in the helper, every 5 s from app.py's `_engine_loop` via `alerts.tick`): `heartbeat()` writes
+  `watch.json` (live accounts with positions / orders, per user); `check()` sends live warnings (`LiveEngine.live_problems()`
+  keys; "stream" and "halted" skipped; nostop states waiting for the market / expired / no login skipped) after `warn_sec`,
+  and "no prices" (`feed.last_at` older than `feed_sec`, in market hours, ticked earlier that day); "Sorted" when it clears.
+  State is in memory (`_state`): a helper restart re-sends a still-open problem after its wait.
+- `helper/watchdog.py` = `fyers-watchdog.service` (venv python, user helper). Every 5 s (5 s while down too): GET
+  `/api/ping` (5 s timeout) + `watch.json` age (> 30 s = "background work stopped"). Down `down_sec` with live trades in the
+  last heartbeat -> message per user, reminders every `repeat_min`, "answering again". Silent outside market hours.
+  Outside heartbeat (`_hc`): pings the URL every 60 s while that user has a live trade (always, without an API key or a
+  UUID URL); flat with a key -> `POST <api>/api/v3/checks/<uuid>/pause` once (a ping un-pauses). Writes `watchdog.json`
+  (the page shows running / not, and its hc state).
+- Page: `web/tgalerts.js` (Settings › Telegram alerts, `#tgSec`, admin only; wraps `secRender` and `liveCard`).
+- Not yet run on the real server or with a real bot: the first deploy installs the service through `install.sh`; Settings
+  should then say "Watchdog: running". Things to check there: Telegram reachable from the droplet; Healthchecks.io's real
+  pause API (written to its docs: `POST /api/v3/checks/<uuid>/pause`, `X-Api-Key`).
 
 ## Live candles, watchlists, seconds (agreed 1 Nov, roadmap 10-12)
 
@@ -292,10 +315,10 @@ indicator option to add (not built).
    Live, 1 lot on MCX. Fix whatever that shows.
 2. Compare the app's charges with what Fyers deducted (roadmap item 1, last part).
 3. Monday: read the order-flow check with the owner; the footprint only if it's exact (and decide roadmap item 12,
-   seconds / tick charts, from the same numbers). Then Telegram alerts, the journal, saved layouts, multi-charts
-   (the owner's order, 1 Nov: Telegram alerts (3) next, then the journal (4); item 8, CFD prices, is on hold). Shipped
-   and waiting for the owner's try: measurement and drawing tools (v0.22.0), layouts (v0.23.0), angles (v0.23.1),
-   multi-charts with sync (v0.24.0 / v0.24.1).
+   seconds / tick charts, from the same numbers). Next build: the journal (4) (the owner's order, 1 Nov; item 8, CFD
+   prices, is on hold). Shipped and waiting for the owner's try: measurement and drawing tools (v0.22.0), layouts
+   (v0.23.0), angles (v0.23.1), multi-charts with sync (v0.24.0 / v0.24.1), Telegram alerts (v0.25.0: set up the bot,
+   send the test, check the watchdog runs; the journal will reuse the same bot for screenshots).
 4. The owner tries the phone layout (v0.19.0) and the order bubble (v0.20.3) on his phone; fix what he reports.
 5. The owner checks v0.20.0 on real Fyers: Pivot Points and the Chandelier exit on GOLDPETAL 2m, scrolling back,
    and the Style / Visibility tabs on his own scripts.
