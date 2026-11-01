@@ -365,6 +365,15 @@ a.btnlink{border:1px solid var(--line);border-radius:6px;padding:6px 12px;color:
 #goPop .gph,#goPop .gpf{display:flex;align-items:center;gap:8px}
 #goPop label{display:flex;align-items:center;justify-content:space-between;gap:10px;color:var(--muted);margin:0}
 #goPop input{padding:4px 6px}
+#dcPill{position:absolute;left:50%;bottom:62px;transform:translateX(-50%);z-index:6;max-width:calc(100% - 16px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  background:color-mix(in srgb,var(--warn) 22%,var(--panel));border:1px solid var(--warn);color:var(--text);border-radius:12px;padding:3px 10px;font-size:12px;cursor:pointer}
+#dcBox{position:absolute;left:50%;bottom:92px;transform:translateX(-50%);z-index:7;width:min(380px,calc(100% - 16px));background:var(--panel);border:1px solid var(--warn);
+  border-radius:8px;padding:10px 12px;font-size:12px;box-shadow:0 6px 20px rgba(0,0,0,.3)}
+#dcBox table{width:100%;border-collapse:collapse;margin:6px 0}
+#dcBox td,#dcBox th{padding:3px 4px;text-align:right;font-family:var(--mono)}
+#dcBox td:first-child,#dcBox th:first-child{text-align:left;font-family:inherit}
+#dcBox th{color:var(--muted);font-weight:500;font-size:11px}
+#dcBox p{margin:6px 0 0;color:var(--muted)}
 #histPill{position:absolute;left:86px;bottom:36px;z-index:4;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:3px 10px;font-size:11.5px;color:var(--muted);pointer-events:none}
 #chartMsg{position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;color:var(--muted);text-align:center;padding:20px;pointer-events:none}
 
@@ -919,6 +928,7 @@ function onTick(t){
     $("#cMeta").textContent = (t.bid != null ? `Bid ${fmt(t.bid, cur.tick)} · Ask ${fmt(t.ask, cur.tick)} · ` : "") + (t.src === "poll" ? "polled" : "live");
     liveBar(t);
     bidAsk(t);
+    dataCheck();
     bookStats(t);
   }
 }
@@ -930,7 +940,7 @@ function cssVar(n){ return getComputedStyle(document.documentElement).getPropert
 const CHART_DEFAULTS = {up:"#22a06b", down:"#e2483d", bg:"", grid:true,
   bidC:"#a3abb8", bidS:0, bidOn:true, askC:"#e2483d", askS:0, askOn:true, lastC:"#e0b341", lastS:2, lastOn:true,
   entryC:"", entryS:2, slC:"#e2483d", slS:0, tpC:"#22a06b", tpS:0, beC:"#4f8cff", beS:1, orderC:"#4f8cff", orderS:2,
-  toolC:"#4f8cff", toolS:0, lossZ:"#e2483d", profitZ:"#22a06b", zoneA:20, volOn:true, timerOn:true, hideNoTrade:true,
+  toolC:"#4f8cff", toolS:0, lossZ:"#e2483d", profitZ:"#22a06b", zoneA:20, volOn:true, timerOn:true, hideNoTrade:true, dataCheck:true,
   btnCorner:"tl", btnX:8, btnY:8, lineC:"#4f8cff"};
 function chartCfg(){ return {...CHART_DEFAULTS, ...(prefGet("chart", {}) || {})}; }
 function cfgColor(k){ const c = chartCfg()[k]; return c || cssVar(k === "entryC" ? "--text" : "--bg"); }
@@ -1579,6 +1589,7 @@ function renderCfg(){
     <div class="cr"><span>Grid lines</span><span></span><span></span><input type="checkbox" data-k="grid" ${C.grid ? "checked" : ""}></div>
     <div class="cr"><span>Volume under candles</span><span></span><span></span><input type="checkbox" data-k="volOn" ${C.volOn ? "checked" : ""}></div>
     <div class="cr"><span>Candle timer</span><span></span><span></span><input type="checkbox" data-k="timerOn" ${C.timerOn ? "checked" : ""}></div>
+    <div class="cr"><span title="Warn when the chart's candles disagree with Fyers' live figures for the same day (open, high, low, volume, and after the close the last price)">Check candles against live prices</span><span></span><span></span><input type="checkbox" data-k="dataCheck" ${C.dataCheck ? "checked" : ""}></div>
     <div class="cr"><span title="Candles with no volume at a price away from the last trade, e.g. the exchange's closing price after MCX closes">Hide no-trade candles</span><span></span><span></span><input type="checkbox" data-k="hideNoTrade" ${C.hideNoTrade ? "checked" : ""}></div>
     <div class="sec">BUY / SELL buttons</div>
     <div class="cr" style="grid-template-columns:1fr 150px"><span>Corner</span><select data-k="btnCorner">
@@ -1592,6 +1603,7 @@ function renderCfg(){
     const k = el.dataset.k, cfg = {...(prefGet("chart", {}) || {})};
     cfg[k] = el.type === "checkbox" ? el.checked : el.dataset.num ? (+el.value || 0) : el.value;
     prefSet("chart", cfg); applyChartCfg();
+    if(k === "dataCheck") dataCheck(true);
     if(k === "hideNoTrade"){ for(const x in pineCache) delete pineCache[x]; if(HROWS.length && curPlan) renderCandles(HROWS, curPlan); }
   }));
 }
@@ -1753,6 +1765,70 @@ function noTradeDrop(rows){
   }
   return out;
 }
+/* the data check (owner, 1 Nov): Fyers rewrote GOLDPETAL NOV's 30 Oct after the close - its history ended at 14,201
+   on 319 lots while its live prices said 13,960 and the real day had been heavy. The chart's candles (Fyers' history)
+   are compared with Fyers' live figures for the same session: the day's open, high, low and volume, and once the
+   market is closed the last price. A warning shows on the chart when a price is off by more than 0.5% (at least 10
+   ticks) or the volume by more than 5x (a gap that is the contract's lot / multiplier is a unit difference, not an
+   error). Trading isn't affected (fills, stops and P&L use the live prices). Runs only when Fyers sends the day's
+   figures. Chart settings › "Check candles against live prices" (on by default). */
+function mktClosedNow(){
+  const ts = Date.now() / 1000 + IST, day = Math.floor(ts / 86400) * 86400, dow = new Date(day * 1000).getUTCDay(), [s0, s1] = sessRange();
+  return dow === 0 || dow === 6 || ts < day + s0 * 60 || ts >= day + s1 * 60;
+}
+// rows: Fyers' candles [t, o, h, l, c, v] (t in UTC seconds); t: Fyers' live figures (ltp, o, h, l, vol);
+// o: {tick, closed, today (IST day number), mult, lot, live (the chart's last bar, IST-shifted time)}. -> [[what, candles, live]]
+function dcIssues(rows, t, o){
+  const out = [];
+  if(!rows || !rows.length || !t || !(t.h > 0) || !(t.l > 0)) return out;
+  rows = noTradeDrop(rows); if(!rows.length) return out;
+  const dayOf = x => Math.floor((x + IST) / 86400), lastDay = dayOf(rows[rows.length - 1][0]);
+  if(!o.closed && lastDay !== o.today) return out;            // market open, today's candles not in yet: nothing to compare
+  const day = rows.filter(r => dayOf(r[0]) === lastDay);
+  let hi = Math.max(...day.map(r => r[2])), lo = Math.min(...day.map(r => r[3]));
+  if(o.live && Math.floor(o.live.time / 86400) === lastDay){ hi = Math.max(hi, o.live.high); lo = Math.min(lo, o.live.low); }   // ticks since the last fetch
+  const op = day[0][1], cl = day[day.length - 1][4], vol = day.reduce((s, r) => s + (+r[5] || 0), 0);
+  const tick = o.tick || 0.05, tol = Math.max(10 * tick, (t.ltp || cl) * 0.005), f = v => fmt(v, tick);
+  if(t.o > 0 && Math.abs(op - t.o) > tol) out.push(["Day open", f(op), f(t.o)]);
+  if(Math.abs(hi - t.h) > tol) out.push(["Day high", f(hi), f(t.h)]);
+  if(Math.abs(lo - t.l) > tol) out.push(["Day low", f(lo), f(t.l)]);
+  if(o.closed && t.ltp > 0 && Math.abs(cl - t.ltp) > tol) out.push(["Last price", f(cl), f(t.ltp)]);
+  if(t.vol > 0){
+    const r = vol / t.vol, units = [...new Set([1, o.mult || 1, o.lot || 1, (o.lot || 1) * (o.mult || 1)])];
+    const unit = units.some(u => u > 1 && (Math.abs(r * u - 1) < 0.25 || Math.abs(r / u - 1) < 0.25));
+    if((r < 0.2 || r > 5) && !unit) out.push(["Day volume", Math.round(vol).toLocaleString("en-IN"), Math.round(t.vol).toLocaleString("en-IN")]);
+  }
+  return out;
+}
+let dcAt = 0;
+function dataCheck(force, tk){
+  if(!cur || !curPlan || !$("#chart")) return;
+  if(!force && Date.now() - dcAt < 5000) return;
+  dcAt = Date.now();
+  const r = sym[cur.s] || {};
+  const iss = chartCfg().dataCheck === false || !HROWS.length ? [] : dcIssues(HROWS, tk || last[cur.s], {tick: cur.tick, closed: mktClosedNow(),
+    today: Math.floor((Date.now() / 1000 + IST) / 86400), mult: r.mult || cur.mult || 1, lot: r.lot || cur.lot || 1, live: RAW[RAW.length - 1]});
+  dcShow(iss);
+}
+function dcShow(iss){
+  let p = $("#dcPill"), b = $("#dcBox");
+  if(!iss.length){ if(p) p.remove(); if(b) b.remove(); return; }
+  if(!p){ p = document.createElement("div"); p.id = "dcPill"; $("#chart").append(p);
+    p.onclick = e => { e.stopPropagation(); const x = $("#dcBox"); if(x) x.classList.toggle("hide"); }; }
+  p.textContent = `⚠ Candles don't match Fyers' live figures (${iss.map(x => x[0].replace("Day ", "").toLowerCase()).join(", ")})`;
+  const html = `<b>These candles disagree with Fyers' live figures for the same day</b>
+    <table><tr><th></th><th>Candles</th><th>Fyers live</th></tr>${iss.map(x => `<tr><td>${esc(x[0])}</td><td>${esc(x[1])}</td><td>${esc(x[2])}</td></tr>`).join("")}</table>
+    <p>The candles are Fyers' history; the live figures come from its price feed. When they disagree, Fyers' history is
+    incomplete or was changed (as GOLDPETAL's 30 Oct was). Trading isn't affected: fills, stops and P&L use the live
+    prices. Indicators and Pine scripts read the candles, so treat them with care until this clears.</p>
+    <p><button class="sm" id="dcLoad">Load again</button> <button class="sm" id="dcHide">Close</button> <span>Off in Chart settings.</span></p>`;
+  const was = b && b.classList.contains("hide");
+  if(!b){ b = document.createElement("div"); b.id = "dcBox"; b.className = "hide"; $("#chart").append(b); }
+  if(b.dataset.h !== html){ b.dataset.h = html; b.innerHTML = html;
+    b.querySelector("#dcLoad").onclick = () => { b.classList.add("hide"); loadHistory(); };
+    b.querySelector("#dcHide").onclick = () => b.classList.add("hide"); }
+  if(was) b.classList.add("hide");
+}
 function aggBars(rows, plan){
   let bars = noTradeDrop(rows).map(c => ({time:c[0] + IST, open:c[1], high:c[2], low:c[3], close:c[4], vol:c[5] || 0}));
   if(plan.agg){
@@ -1772,6 +1848,7 @@ function renderCandles(rows, plan){
   RAW = aggBars(rows, plan);
   volCum = null;
   showRaw();
+  dataCheck(true);
 }
 /* draw RAW on the chart as the chart type says (also straight after the chart is rebuilt for a new chart type or
    theme, so there's no moment with an empty chart) */
@@ -1805,6 +1882,7 @@ function applyNewCandles(rows, plan){
   dispSet();
   indData(true);                                // built-in indicators (Volume) recompute; Pine scripts:
   if(INDS.length && dispLast()) indTick(dispLast());   // only the new part
+  dataCheck(true);
 }
 async function loadHistory(){
   if(!cur) return;

@@ -116,6 +116,47 @@ let br;
   ok(!bc.chart && !bc.copy, "a wrong candle 2 days back in this browser's copy is replaced by the server's when the chart opens");
   ok(!bc.dbs.includes("fyers-candles"), `the old browser store (continuous-series copies) is deleted (stores: ${bc.dbs.join(", ")})`);
 
+  // ---------------------------------------------------------------- the data check (owner, 1 Nov: "how can I trust this data?")
+  // the candles against Fyers' live figures for the same day: consistent figures say nothing; Friday-like ones warn
+  const dc = await pg.evaluate(() => {
+    const rows = noTradeDrop(HROWS), dayOf = x => Math.floor((x + IST) / 86400), ld = dayOf(rows[rows.length - 1][0]);
+    const day = rows.filter(r => dayOf(r[0]) === ld);
+    const D = {o: day[0][1], h: Math.max(...day.map(r => r[2])), l: Math.min(...day.map(r => r[3])), c: day[day.length - 1][4], v: day.reduce((s, r) => s + r[5], 0)};
+    const base = {tick: 1, closed: true, today: ld, mult: 100, lot: 1, live: null};
+    const good = {s: cur.s, ltp: D.c, o: D.o, h: D.h, l: D.l, vol: D.v};
+    const run = (t, o) => dcIssues(HROWS, t, {...base, ...o}).map(x => x[0]);
+    return {D,
+      good: run(good),
+      near: run({...good, ltp: D.c + 3, h: D.h + 4, l: D.l - 4, vol: D.v * 1.3}),
+      friday: run({...good, ltp: Math.round(D.c * 0.983), o: Math.round(D.o * 1.011), l: Math.round(D.l * 0.975), vol: D.v * 300}, {mult: 1}),
+      units: run({...good, vol: D.v * 100}),
+      openNoToday: run({...good, ltp: D.c * 0.9}, {closed: false, today: ld + 1}),
+      index: run({...good, vol: undefined}),
+      noFigures: run({s: cur.s, ltp: D.c * 0.9})};
+  });
+  ok(dc.good.length === 0 && dc.near.length === 0, `figures that match the candles (or within 0.5% / 10 ticks, volume within 5x) give no warning (${JSON.stringify(dc.near)})`);
+  ok(["Day open", "Day low", "Last price", "Day volume"].every(k => dc.friday.includes(k)), `a Friday-like day is flagged: ${dc.friday.join(", ")}`);
+  ok(dc.units.length === 0, "a volume 100x the candles' on a ×100 contract is a unit difference, not an error");
+  ok(dc.openNoToday.length === 0 && dc.noFigures.length === 0 && !dc.index.includes("Day volume"),
+     "nothing to compare while the market is open and today's candles aren't in, without Fyers' day figures, or volume on an index");
+  ok(!(await pg.isVisible("#dcPill")), "the test server sends no day figures, so no warning on its own charts");
+  await pg.evaluate(D => dataCheck(true, {s: cur.s, ltp: Math.round(D.c * 0.983), o: Math.round(D.o * 1.011), h: D.h, l: Math.round(D.l * 0.975), vol: D.v * 300}), dc.D);
+  // (dataCheck works out "market closed" from the clock: open hours give "Last price" only after the close)
+  const pill = await pg.evaluate(() => { const p = document.querySelector("#dcPill"); return p ? p.textContent : ""; });
+  ok(/don't match Fyers' live figures/.test(pill) && /open/.test(pill) && /low/.test(pill), `the chart shows the warning ("${pill}")`);
+  await pg.click("#dcPill"); await pg.waitForTimeout(200);
+  const box = await pg.evaluate(() => { const b = document.querySelector("#dcBox"); return b && !b.classList.contains("hide") ? b.textContent : ""; });
+  ok(/Candles\s*Fyers live/.test(box) && /Trading isn't affected/.test(box) && /Load again/.test(box), "tapping it shows candles vs Fyers live, side by side, and that trading isn't affected");
+  await pg.screenshot({ path: SHOT + "datacheck_warning.png" });
+  await pg.evaluate(() => { const c = {...(prefGet("chart", {}) || {}), dataCheck: false}; prefSet("chart", c); });
+  await pg.evaluate(D => dataCheck(true, {s: cur.s, ltp: Math.round(D.c * 0.983), o: D.o, h: D.h, l: Math.round(D.l * 0.975), vol: D.v * 300}), dc.D);
+  ok(!(await pg.isVisible("#dcPill")), "Chart settings › Check candles against live prices off: no warning");
+  await pg.evaluate(() => { const c = {...(prefGet("chart", {}) || {}), dataCheck: true}; prefSet("chart", c); });
+  // (the test server's random-walk ticks have built a live bar today; real ticks are the same prices as Fyers' day figures)
+  await pg.evaluate(D => { const L = RAW[RAW.length - 1], same = L && Math.floor(L.time / 86400) === Math.floor((HROWS[HROWS.length - 1][0] + IST) / 86400);
+    dataCheck(true, {s: cur.s, ltp: D.c, o: D.o, h: same ? Math.max(D.h, L.high) : D.h, l: same ? Math.min(D.l, L.low) : D.l, vol: D.v}); }, dc.D);
+  ok(!(await pg.isVisible("#dcPill")) && !(await pg.isVisible("#dcBox")), "figures that match again: the warning goes");
+
   // ---------------------------------------------------------------- Go to
   await pg.evaluate(() => ctSave({type: "candles"}));
   await pg.waitForFunction(() => DISP.length > 100 && curPlan.res === "2", null, { timeout: 30000 });

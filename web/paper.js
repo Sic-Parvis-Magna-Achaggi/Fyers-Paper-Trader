@@ -721,13 +721,13 @@ function wireDrag(){
     return best;
   };
   const down = e => {
-    if(!series || e.target.closest("#tool,#ctools")) return;
+    if(!series || e.target.closest("#tool,#ctools,#dcPill,#dcBox")) return;
     const d = near(yOf(e)); if(!d) return;
     e.preventDefault(); e.stopPropagation();
     P.dragging = d; chart.applyOptions({handleScroll: false, handleScale: false});
   };
   const move = e => {
-    if(!series || e.target.closest && e.target.closest("#tool,#ctools")) return;
+    if(!series || e.target.closest && e.target.closest("#tool,#ctools,#dcPill,#dcBox")) return;
     const y = yOf(e);
     if(!P.dragging){ el.style.cursor = near(y) ? "ns-resize" : ""; return; }
     e.preventDefault(); e.stopPropagation();

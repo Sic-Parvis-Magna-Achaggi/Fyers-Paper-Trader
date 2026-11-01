@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 1 Nov 2026 (v0.20.7). This is the one task list for the project.
+Updated 1 Nov 2026 (v0.20.8). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -88,12 +88,14 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 - [ ] The owner checks the phone layout on his own phone (tested on emulated Android and iPhone screens in Chromium, not on a real iPhone / Safari).
 - [ ] Partial closes.
 - [ ] **Fyers support (owner, 1 Nov):** GOLDPETAL26NOVFUT's history for 29-30 Oct doesn't match Fyers' own live prices
-  (drafted 1 Nov). When Fyers fixes it, the app takes the corrected days on its own within a week (v0.20.7).
+  (emailed by the owner 1 Nov; waiting for Fyers). When Fyers fixes it, the app takes the corrected days on its own
+  within a week (v0.20.7).
 - [ ] Agri MCX contracts use the non-agri rates (low priority: Fyers doesn't offer agri commodities at present).
 - [ ] Ask Fyers in writing whether a second user's app may fetch market data from this server's IP (support request drafted 30 Oct).
 
 ## Done
 
+- [x] **v0.20.8** (1 Nov): data check on every chart: a warning when the candles disagree with Fyers' live figures for the same day (open, high, low, volume, last price after the close) (asked 1 Nov).
 - [x] **v0.20.7** (1 Nov): a day Fyers corrects later reaches the saved candles (the week before is re-checked); v0.20.6's explanation corrected (Fyers rewrote GOLDPETAL's 30 Oct; its own chart shows the same).
 - [x] **v0.20.6** (1 Nov): charts show the contract you opened: history no longer asks for Fyers' continuous series (GOLDPETAL NOV's 30 Oct came back as the expiring OCT contract); saved futures / options candles reloaded once; the browser re-takes the last 3 days from the server (reported 1 Nov).
 - [x] **v0.20.5** (1 Nov): empty candles at the closing price after MCX closes (no volume, away from the last trade) left off the chart, P&F, indicators and Pine; Chart settings switch (reported 1 Nov).

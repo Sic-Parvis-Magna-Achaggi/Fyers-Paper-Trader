@@ -283,7 +283,9 @@ class Feed:
         for s, v in self.link.quotes(symbols).items():
             if v.get("lp") is not None:
                 out.append({"s": s, "ltp": v.get("lp"), "bid": v.get("bid"), "ask": v.get("ask"),
-                            "t": v.get("tt") or int(time.time()), "vol": v.get("volume"), "src": "poll"})
+                            "t": v.get("tt") or int(time.time()), "vol": v.get("volume"), "src": "poll",
+                            # the day's figures, as on the socket (the chart's data check and the Book tab use them)
+                            "o": v.get("open_price"), "h": v.get("high_price"), "l": v.get("low_price"), "pc": v.get("prev_close_price")})
         return out
 
     def status(self) -> dict:

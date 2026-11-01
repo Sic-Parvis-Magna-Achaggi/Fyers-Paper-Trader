@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.20.8 — 1 Nov 2026 — Data check: a warning when the candles disagree with Fyers' live figures
+
+Added
+- **Data check on every chart** (owner, 1 Nov: "how can I trust this data?"). The chart's candles (Fyers' history) are
+  compared with Fyers' live figures for the same session: the day's open, high, low and volume, and once the market is
+  closed (weekends too) the last price. When a price is off by more than 0.5% (at least 10 ticks), or the volume by
+  more than 5x, an amber note shows at the bottom of the chart; tap it for candles vs Fyers live side by side and
+  **Load again**. A volume gap equal to the contract's lot / multiplier is a unit difference and isn't flagged.
+  Friday's GOLDPETAL would have shown: open 14,163 vs ~14,319, low 14,057 vs ~13,700, last price 14,201 vs 13,960,
+  and 319 lots vs the real day's volume. Trading isn't affected (fills, stops and P&L use the live prices).
+  Chart settings › **Check candles against live prices** (on by default).
+- Polled quotes (when Fyers' socket isn't streaming, e.g. weekends) now carry the day's open, high, low and previous
+  close as the socket does, so the check and the Book tab have them then too.
+
+Tests
+- `tests/navigation_flow.js` (36 checks): matching figures (and small differences) give no warning; a Friday-like
+  day flags open, low, last price and volume; a 100x volume on a ×100 contract isn't flagged; nothing is compared while
+  the market is open before today's candles arrive, without day figures, or for volume on an index; the note, its
+  box, the setting, and the note clearing. The mock no longer sends a fixed day open / high / low.
+
 ## v0.20.7 — 1 Nov 2026 — A day Fyers corrects later reaches your charts; v0.20.6's explanation corrected
 
 Changed

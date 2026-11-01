@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 1 Nov 2026, version **0.20.7**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 1 Nov 2026, version **0.20.8**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -123,6 +123,13 @@ busy contract (gzip): turn recording off on the Log page once the question is se
   the view's left edge passes the script's first bar (`pineViewCheck()` on every visible-range change, 500 ms
   debounce). Keep the full re-run on each new bar: PineTS updateTail alone drifts on `var` / stateful values across
   bars that arrived tick by tick (checked: up to 12 points on a running total, 0 within a bar).
+- **v0.20.8 data check:** `dcIssues(rows, t, o)` (index.html, pure: Fyers' rows vs live figures {ltp, o, h, l, vol}) and
+  `dataCheck(force, tick)` (runs after each history load / refresh and on ticks, every 5 s at most) -> `dcShow()` (the
+  `#dcPill` note and `#dcBox` at the chart's bottom). Needs the day's high and low from Fyers (socket, or polled quotes:
+  `open_price` / `high_price` / `low_price` / `prev_close_price` in `feed._poll()`: those key names are Fyers' documented
+  quote fields but not yet seen on this server). `mktClosedNow()`: weekends and outside `sessRange()` (no holidays).
+  The mock sends no day open / high / low (its random walk doesn't follow its candles). To confirm on real Fyers: no false
+  warnings in a normal session (NSE's official close vs LTP after 15:30 is the likeliest; tolerance 0.5%).
 - **v0.20.6 / v0.20.7:** history is never asked with `cont_flag` (with it, GOLDPETAL NOV's 29 Oct had ~165,000 lots that
   Fyers' own chart doesn't show; without it the app matches Fyers' charts). `candles.py`: `_migrate()` (meta `fetch_v`
   = "2") dropped saved FUT / CE / PE candles once; `_replace()` deletes the whole days it re-fetched before saving

@@ -120,7 +120,9 @@ def tick_feed(feed):
             VOL[s] = VOL.get(s, 10000) + random.randint(0, 40)
             FB.set_price(s, p, round(p - t, 2), round(p + t, 2))
             feed.publish({"s": s, "ltp": p, "bid": round(p - t, 2), "ask": round(p + t, 2), "t": int(time.time()), "vol": VOL[s], "src": "ws",
-                          "tbq": 5200 + random.randint(0, 900), "tsq": 4800 + random.randint(0, 900), "o": 5590, "h": 5650, "l": 5560, "pc": 5580, "atp": 5602.4, "ltq": 3})
+                          "tbq": 5200 + random.randint(0, 900), "tsq": 4800 + random.randint(0, 900), "pc": 5580, "atp": 5602.4, "ltq": 3})
+            # (no day open / high / low: the mock's prices are a random walk that doesn't follow its own candles, so the
+            # chart's data check would always fire; tests/navigation_flow.js gives it figures of its own)
         for s in feed.wanted_depth():
             p = PX.get(s, 5600.0); t = 1.0
             feed.publish_depth({"s": s, "bids": [[p - t * (i + 1), random.randint(1, 60), random.randint(1, 9)] for i in range(5)],
