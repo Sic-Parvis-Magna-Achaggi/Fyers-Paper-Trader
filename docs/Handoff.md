@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 1 Nov 2026, version **0.27.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 1 Nov 2026, version **0.28.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -67,6 +67,7 @@ and roadmap updated too.
   and shows `#mBub` in its slot, so the chart's size never changes). A pointerdown on `#chart` while the sheet is up
   shrinks it; pref `mobTicket` ("full" / "bubble") is what SELL / BUY open.
 - `helper/jshots.py` + `web/jshots.js`: the journal's pictures and their Telegram copy (v0.27.0, section below).
+- `web/jinsights.js`: the journal's Insights, weekly review, walk-through, calendar, Copy for Gemini, export (v0.28.0).
 - `tests/`: the test kit (fake Fyers feed and order API, route check, engine tests incl. `live_test.py`, browser
   tests incl. `live_flow.js` and `mobile_flow.js`). See `tests/README.md`.
 
@@ -77,6 +78,23 @@ runs on 1 Nov, on v0.20.2 code too). Cause not found; it's a test-kit issue so f
 probably the history read before the kill switch's close was booked. Same advice.
 `indicator_settings_flow.js`'s "at the start of a contract's history it stops asking" failed once in 2 runs on 1 Nov
 (v0.22.0; passed on re-run, 37/37). Same advice.
+
+## Journal: Insights, review, Gemini, export (v0.28.0, roadmap item 4: last of three releases)
+
+- `web/jinsights.js` (after jshots.js), all computed in the page from `JN.d` (the server's trades with their audit and
+  sessions): `jiInsights()` (the Insights tab; `jFiltered({ignoreOct: true})`; `jiPerf()` = Octagon's advancedStats on net
+  ₹, daily returns over the account size(s) in view), `jiReview()` / `jiWeek()` / `jiCalendar()` (`JI.rv`; mode in prefs
+  `jn.rvMode`; weeks by close day IST, `jiWeekStart`), `jiWalk()` (`#jiWalk`, saves reflections through
+  `/api/journal/trade` {rvRight, rvWrong, review}), `jiAiOpen()` / `jiAiText()` (Copy for Gemini, by trading day `t.day`
+  and session `t.skey`), `jiDataCard()` (Settings: CSV, backup, restore). Hooks: wraps `jnSettings`, `jnToday` (the focus).
+  journal.js: tabs trades / insights / review / settings; `jnTrades()` hands the insights tab to `jiInsights`; `jnRender()`
+  the review tab to `jiReview`; list action `ai`.
+- Server: `Journal.set_review(week, b)` (Monday only; well / broke / focus / focusKept), `set_review_msg`; `jshots.tg_review()`
+  posts the summary (text made by the page) to the journal's chat and edits it in place (`reviews[week].msg`); `csv_text()`,
+  `backup_zip(path)` (journal.json + pictures/), `restore(path)` (adds only what's missing; picture files only with a
+  matching id / type; logged in the security log). Routes `/api/journal/review`, `/export.csv`, `/backup.zip`, `/restore`
+  (streamed to `data/tmp/`, 500 MB at most).
+- Proposed, not built (roadmap 4c): the full layout's picture at every entry / exit with a hidden browser on the server.
 
 ## Journal pictures (v0.27.0, roadmap item 4: second of three releases)
 
@@ -135,8 +153,8 @@ probably the history read before the kill switch's close was booked. Same advice
   (`jnReps`, `jnToday`, `jnGoal`, strip, `jCard`), the audit form (`jnForm`, a modal), Settings (`jnSettings`). Filters in
   prefs `jn`. Never rebuild under a held button (`JN.holding`: a rebuild cancelled holds in testing). The phone: a row
   added to More (wraps `mMore`).
-- v0.27.0 (pictures + Telegram backup) shipped, see above. Next: v0.28.0: Insights, Review + calendar + walk-through,
-  Copy for Gemini, CSV / backup. 4b (prop-firm journals) waits for the owner's yes.
+- v0.27.0 (pictures + Telegram backup) and v0.28.0 (Insights, review, Gemini, export) shipped, see above: the Octagon port
+  is complete. 4b (prop-firm journals) and 4c (full-layout pictures from a hidden browser) wait for the owner's yes.
 
 ## Telegram alerts (v0.25.0)
 
@@ -386,7 +404,8 @@ indicator option to add (not built).
 2. Compare the app's charges with what Fyers deducted (roadmap item 1, last part).
 3. Monday: read the order-flow check with the owner; the footprint only if it's exact (and decide roadmap item 12,
    seconds / tick charts, from the same numbers). Next build: the journal (4) (the owner's order, 1 Nov; item 8, CFD
-   prices, is on hold): v0.26.0 and v0.27.0 (pictures + Telegram backup) shipped, v0.28.0 (Insights, review, export) next. Shipped and waiting for the owner's try: measurement and drawing tools (v0.22.0), layouts
+   prices, is on hold): v0.26.0, v0.27.0 (pictures + Telegram backup) and v0.28.0 (Insights, review, export) shipped: the
+   journal is complete. Next in the roadmap's order: 4b / 4c if the owner says yes, else item 10 (live candles). Shipped and waiting for the owner's try: measurement and drawing tools (v0.22.0), layouts
    (v0.23.0), angles (v0.23.1), multi-charts with sync (v0.24.0 / v0.24.1), Telegram alerts (v0.25.0: set up and tested
    by the owner 1 Nov), the journal (v0.26.0), journal pictures + Telegram backup (v0.27.0: the owner turns on the backup
    in Journal › Settings › Pictures with a new private channel).

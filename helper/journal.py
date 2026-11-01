@@ -627,9 +627,12 @@ class Journal:
                 t[k] = bool(b[k])
         if "setup" in b:
             t["setup"] = split_tags(b["setup"])
+        rv_before = (t.get("review"), t.get("rvRight"), t.get("rvWrong"))
         for k in ("notes", "review", "rvRight", "rvWrong"):
             if k in b:
                 t[k] = str(b[k] or "")[:TEXT_MAX]
+        if (t.get("review"), t.get("rvRight"), t.get("rvWrong")) != rv_before:
+            t["reviewedAt"] = iso()                       # a reflection (the walk-through, the review)
         # a Zen Temple breach makes Execution wrong (Octagon's form rule, kept on the server too)
         if t.get("zen") == "Compromised":
             t["execution"] = "Wrong"
@@ -688,6 +691,178 @@ class Journal:
             if not self.d["ended"].get(k):
                 self.d["ended"][k] = now()
                 self._changed()
+
+    # -------------------------------------------------------- the weekly review (v0.28.0)
+    def set_review(self, week: str, b: dict) -> dict:
+        """{well, broke, focus, focusKept} for the week starting Monday `week` (YYYY-MM-DD, IST)."""
+        try:
+            d = dt.date.fromisoformat(week or "")
+        except ValueError:
+            raise ValueError("week: the Monday it starts, YYYY-MM-DD")
+        if d.weekday() != 0:
+            raise ValueError("week: must be a Monday")
+        with self.lock:
+            rv = dict(self.d["reviews"].get(week) or {})
+            for k, n in (("well", TEXT_MAX), ("broke", TEXT_MAX), ("focus", 300)):
+                if k in b:
+                    rv[k] = str(b[k] or "").strip()[:n]
+            if "focusKept" in b:
+                v = b["focusKept"] or ""
+                if v not in ("", "held", "partly", "missed"):
+                    raise ValueError("focusKept: held, partly or missed")
+                rv["focusKept"] = v
+            rv["updatedAt"] = iso()
+            self.d["reviews"][week] = rv
+            self._changed()
+            return rv
+
+    def set_review_msg(self, week: str, msg) -> None:
+        with self.lock:
+            rv = self.d["reviews"].get(week)
+            if rv is not None:
+                rv["msg"] = msg
+                self._changed()
+
+    # -------------------------------------------------------- export and backup (v0.28.0)
+    def csv_text(self, urt) -> str:
+        """Every trade in the journal (removed ones flagged), with its audit: for a spreadsheet."""
+        import csv
+        import io
+        by_id, _ = self.computed()
+        reps = self.reps(by_id)
+        names = {a["id"]: a.get("name", "") for a in urt.accounts()}
+        pil = self.pillars()
+        p1 = dict((k, l) for k, l in self.p1())
+        faults = dict(EXEC_FAULTS)
+        word = {"pass": "Held", "fail": "Broken", "warn": "Check", "na": "", "off": "n/a"}
+
+        def when(ts):
+            return ist(ts).strftime("%Y-%m-%d %H:%M:%S") if ts else ""
+        head = ["Rep", "Account", "Mode", "Contract", "Side", "Lots", "Qty", "Product", "Opened (IST)", "Closed (IST)",
+                "Entry (avg)", "Exit (avg)", "First stop", "Last stop", "Target", "Gross ₹", "Charges ₹", "Net ₹",
+                "Risk at first stop ₹ (net)", "R (net)", "Planned R", "Held (s)", "Time of day", "Exit reason", "Status",
+                "Removed from journal"] + [f"P{p['n']} {p['title']}" for p in pil] + [
+                "Clean octagon", "Breaches", "Direction", "Pillar 1 checks", "Wait state", "Execution", "Execution faults",
+                "Zen Temple", "Target", "Mind running numbers", "Payout pressure", "Market regime", "Bias", "KE", "Setup",
+                "Plan", "Review / lesson", "Did right", "Did wrong", "Claimed", "Pictures", "Trade id"]
+        out = io.StringIO()
+        w = csv.writer(out, lineterminator="\r\n")
+        w.writerow(head)
+        hid = set(self.d["hidden"])
+        with self.lock:
+            rows = sorted((t for t in self.d["trades"].values() if t["status"] != "removed"), key=lambda t: (t.get("opened") or 0, t["id"]))
+            for t in rows:
+                a = by_id.get(t["id"]) or audit_trade(t, None, self.rules(), EXEC_FAULTS)
+                closed = t["status"] == "closed"
+                w.writerow([
+                    reps["num"].get(t["id"], ""), names.get(t["acct"]) or t.get("acct_name", ""), t.get("mode", ""),
+                    t["s"], "BUY" if t["side"] > 0 else "SELL", t.get("lots") or "", t.get("qty") or "", t.get("product", ""),
+                    when(t.get("opened")), when(t.get("closed")) if closed else "", t.get("avg") or "", t.get("exit") if closed else "",
+                    t.get("first_sl") if t.get("first_sl") is not None else "", t.get("sl") if t.get("sl") is not None else "",
+                    t.get("tp") if t.get("tp") is not None else "", t.get("gross") if closed else "",
+                    t.get("charges") if closed else "", t.get("net") if closed else "", t.get("init_risk") or "",
+                    t.get("r") if closed and t.get("r") is not None else "", t.get("planned_r") if t.get("planned_r") is not None else "",
+                    int(t["closed"] - t["opened"]) if closed and t.get("closed") and t.get("opened") else "",
+                    metrics(t)["session"], t.get("reason", ""), t["status"], "Yes" if t["id"] in hid else ""
+                ] + [word.get(a["P"][f"p{p['n']}"]["state"], "") for p in pil] + [
+                    "Yes" if a["clean"] else "No", " | ".join(f"P{x['p'][1:]}: {x['note']}" for x in a["breaches"]),
+                    t.get("direction", ""), ", ".join(p1.get(k, k) for k in t.get("p1Checks") or []), t.get("wait", ""),
+                    t.get("execution", ""), ", ".join(faults.get(k, k) for k in t.get("execFaults") or []), t.get("zen", ""),
+                    t.get("target", ""), "Yes" if t.get("numberRunning") else "", "Yes" if t.get("payoutPressure") else "",
+                    t.get("regime", ""), "" if t.get("bias") is None else t["bias"], "" if t.get("ke") is None else t["ke"],
+                    ", ".join(t.get("setup") or []), t.get("notes", ""), t.get("review", ""), t.get("rvRight", ""),
+                    t.get("rvWrong", ""), "Yes" if t.get("claimedAt") else "", len(t.get("shots") or []), t["id"]])
+        return "\ufeff" + out.getvalue()
+
+    def backup_zip(self, path: str) -> dict:
+        """The whole journal (journal.json) and its pictures, in one zip file at `path`."""
+        import json as _json
+        import zipfile
+        with self.lock:
+            data = _json.dumps({"app": "Fyers Trade Manager journal", "v": 1, "uid": self.uid, "at": now(),
+                                "journal": self.d}, indent=1)
+            shots = [(k, dict(s)) for k, t in self.d["trades"].items() for s in t.get("shots") or []]
+        n = 0
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("journal.json", data)
+            for k, sh in shots:
+                f = jshots.file_of(self.uid, k, sh)
+                if os.path.exists(f):
+                    z.write(f, f"pictures/{jshots._safe(k)}/{os.path.basename(f)}", compress_type=zipfile.ZIP_STORED)
+                    n += 1
+        return {"trades": len(self.d["trades"]), "pictures": n}
+
+    def restore(self, path: str) -> dict:
+        """Add back from a backup (a .zip from backup_zip, or its journal.json): trades, reviews, practice days and
+        session ends the journal doesn't have, and the pictures of those trades (or any picture whose file is missing).
+        Nothing already here is changed or removed."""
+        import json as _json
+        import zipfile
+        pics = {}
+        if zipfile.is_zipfile(path):
+            z = zipfile.ZipFile(path)
+            try:
+                raw = z.read("journal.json")
+            except KeyError:
+                raise ValueError("that zip isn't a journal backup (no journal.json in it)")
+            for n in z.namelist():
+                if n.startswith("pictures/") and not n.endswith("/"):
+                    pics[n] = z
+        else:
+            z = None
+            with open(path, "rb") as f:
+                raw = f.read()
+        try:
+            d = _json.loads(raw.decode("utf-8-sig"))
+        except Exception:
+            raise ValueError("that file isn't a journal backup (not JSON)")
+        d = d.get("journal") if isinstance(d, dict) and "journal" in d else d
+        if not isinstance(d, dict) or not isinstance(d.get("trades"), dict):
+            raise ValueError("that file isn't a journal backup (no trades in it)")
+        got = {"trades": 0, "reviews": 0, "practice": 0, "pictures": 0, "skipped": 0}
+        added = set()
+        with self.lock:
+            for k, t in d["trades"].items():
+                if not isinstance(t, dict) or "s" not in t or "side" not in t:
+                    continue
+                mine = self.d["trades"].get(k)
+                if mine is None:
+                    t = dict(t)
+                    t["shots"] = []                  # added back below, each one only with its picture file
+                    self.d["trades"][k] = t
+                    got["trades"] += 1
+                    added.add(k)
+                    mine = t
+                else:
+                    got["skipped"] += 1
+                have = {s["id"] for s in mine.get("shots") or []}
+                for sh in (d["trades"][k].get("shots") or []):
+                    if not re.fullmatch(r"p[0-9a-f]{12}", str(sh.get("id", ""))) or sh.get("ext") not in jshots.MIME:
+                        continue
+                    name = f"pictures/{jshots._safe(k)}/{sh['id']}.{sh['ext']}"
+                    dest = jshots.file_of(self.uid, k, sh)
+                    if name in pics and not os.path.exists(dest):
+                        data = pics[name].read(name)
+                        if jshots.sniff(data) == sh["ext"]:
+                            jshots.write(self.uid, k, sh, data)
+                            got["pictures"] += 1
+                    if sh["id"] not in have and os.path.exists(dest):
+                        mine.setdefault("shots", []).append(sh)
+                if mine.get("shots"):
+                    mine["shots"] = sorted(mine["shots"], key=jshots.order_key)
+            for key in ("reviews", "practice", "ended"):
+                for k, v in (d.get(key) or {}).items():
+                    if k not in self.d[key]:
+                        self.d[key][k] = v
+                        if key != "ended":
+                            got[key] += 1
+            for x in d.get("hidden") or []:
+                if x in added and x not in self.d["hidden"]:
+                    self.d["hidden"].append(x)
+            self._changed()
+        if z:
+            z.close()
+        return got
 
     # -------------------------------------------------------- pictures (helper/jshots.py)
     def shots_cfg(self) -> dict:

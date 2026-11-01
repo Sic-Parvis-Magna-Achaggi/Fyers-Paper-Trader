@@ -95,7 +95,7 @@ function jnMerge(j){
   const ids = new Set(j.trades.map(t => t.id)), keys = new Set(Object.keys(j.sessions || {}));
   JN.d.trades = JN.d.trades.filter(t => !ids.has(t.id) && !keys.has(t.skey)).concat(j.trades);
   Object.assign(JN.d.sessions, j.sessions || {});
-  for(const k of ["today", "reps", "practice", "rules", "accounts", "hidden_n", "now"]) if(k in j) JN.d[k] = j[k];
+  for(const k of ["today", "reps", "practice", "reviews", "rules", "accounts", "hidden_n", "now"]) if(k in j) JN.d[k] = j[k];
 }
 let jnPushT = 0;
 function jnPush(){                         // the server says the journal changed (a trade arrived or closed)
@@ -110,19 +110,22 @@ function jnShow(){
   if(!box.dataset.built){
     box.dataset.built = "1";
     box.innerHTML = `<div class="pg-head jn-head"><h2>Journal</h2>
-        <div class="seg jn-sub" id="jnSub"><button data-v="trades" class="on">Trades</button><button data-v="settings">Settings</button></div>
-        <span class="sp"></span><span class="muted jn-note" id="jnNote"></span></div>
+        <div class="seg jn-sub" id="jnSub"><button data-v="trades" class="on">Trades</button><button data-v="insights">Insights</button><button data-v="review">Review</button><button data-v="settings">Settings</button></div>
+        <span class="sp"></span><span class="muted jn-note" id="jnNote"></span><button class="ghost jn-aibtn" id="jnAiBtn" title="Copy today's trades, with all 8 pillars, to paste into Gemini">Copy for Gemini</button></div>
       <div class="jn-filters" id="jnFilters"></div>
       <div id="jnBody"><div class="empty">Loading the journal…</div></div>`;
     jqa("#jnSub button").forEach(b => b.onclick = () => { JN.sub = b.dataset.v; jqa("#jnSub button").forEach(x => x.classList.toggle("on", x === b)); jnRender(); });
+    jq("#jnAiBtn").onclick = () => { if(JN.d && typeof jiAiOpen === "function") jiAiOpen("today"); };
   }
+  jqa("#jnSub button").forEach(x => x.classList.toggle("on", x.dataset.v === JN.sub));
   if(!JN.d || JN.stale || Date.now() - JN.loadedAt > 15000){ JN.stale = false; jnLoad(); } else jnRender();
 }
 function jnRender(){
   if(!JN.d || !jq("#jnBody")) return;
   if(JN.holding){ clearTimeout(JN.rT); JN.rT = setTimeout(jnRender, 400); return; }
-  jq("#jnFilters").classList.toggle("hide", JN.sub !== "trades");
+  jq("#jnFilters").classList.toggle("hide", JN.sub !== "trades" && JN.sub !== "insights");
   if(JN.sub === "settings"){ jnSettings(); return; }
+  if(JN.sub === "review"){ if(typeof jiReview === "function") jiReview(); return; }
   jnFilters();
   jnTrades();
 }
@@ -225,8 +228,9 @@ function jnFilterSum(){
   const s = jq("#jnFsum"); if(s) s.textContent = bits.join(" · ");
   const n = jq("#jnNote"); if(n) n.textContent = "Dated by close time, IST. Money and R are net of all charges.";
 }
-function jFiltered(){
+function jFiltered(o = {}){
   const f = jF(), r = jPeriodRange(f.period, f), q = (f.q || "").toLowerCase().trim();
+  if(o.ignoreOct && f.oct !== "removed") f.oct = "";
   const hasTag = (t, v) => v === "__none" ? !(t.setup || []).length : (t.setup || []).some(g => g.toLowerCase() === v);
   return JN.d.trades.filter(t => {
     if(f.oct === "removed") return t.hidden;
@@ -285,7 +289,9 @@ function jCurveSvg(v){
 
 /* ------------------------------------------------------------------ Trades tab */
 function jnTrades(){
-  const body = jq("#jnBody"); if(!body || JN.sub !== "trades") return;
+  const body = jq("#jnBody"); if(!body) return;
+  if(JN.sub === "insights"){ if(typeof jiInsights === "function") jiInsights(); return; }
+  if(JN.sub !== "trades") return;
   if(!body.querySelector(".jn-grid")){
     body.innerHTML = `<div class="jn-grid">
       <aside class="jn-side"><section class="jn-card jn-reps" id="jnReps"></section><section class="jn-card jn-today" id="jnToday"></section></aside>
@@ -365,6 +371,7 @@ function jCard(t){
         <span class="jt-acts">
           <button class="primary" data-act="audit" data-id="${jEsc(t.id)}">${a.recorded ? "Edit audit" : "Audit this trade"}</button>
           <button data-act="chart" data-id="${jEsc(t.id)}">Chart</button>
+          <button data-act="ai" data-id="${jEsc(t.id)}" title="This trade with all 8 pillars, as text to paste into Gemini">Copy for Gemini</button>
           ${t.hidden ? `<button data-act="restore" data-id="${jEsc(t.id)}">Bring back</button>` : `<button class="ghost" data-act="hide" data-id="${jEsc(t.id)}" title="Leaves the stats, reps and sessions (the trade stays in History)">Remove from journal</button>`}
         </span></div>
     </div>` : ""}
@@ -389,6 +396,7 @@ async function jnListClick(e){
   if(act === "toggle"){ JN.exp.has(id) ? JN.exp.delete(id) : JN.exp.add(id); if(JN.exp.has(id) && typeof JS !== "undefined") JS.last = id; const node = el.closest(".jn-trade"), tmp = document.createElement("div");
     tmp.innerHTML = jCard(t); node.replaceWith(tmp.firstElementChild); return; }
   if(act === "audit") jnForm(id);
+  if(act === "ai" && typeof jiAiOpen === "function") jiAiOpen("trade", id);
   if(act === "chart") jnChart(t);
   if(act === "hide" || act === "restore"){
     const j = await japi("/api/journal/hide", {id, hidden: act === "hide"});

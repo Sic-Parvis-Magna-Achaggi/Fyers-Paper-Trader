@@ -1,6 +1,6 @@
 """A fake Telegram Bot API (and a fake Healthchecks.io) for the tests. Nothing leaves the machine.
 
-Bot API:  POST /bot<token>/<method>   getMe, sendMessage, getUpdates, sendDocument (multipart), deleteMessage
+Bot API:  POST /bot<token>/<method>   getMe, sendMessage, getUpdates, sendDocument (multipart), editMessageText, deleteMessage
           tokens starting "1234567:" are good, anything else is Unauthorized; chat "400" answers "chat not found"
 Pings:    GET /ping/<uuid>, POST /api/v3/checks/<uuid>/pause (needs X-Api-Key)
 For tests: GET /_sent (messages), GET /_docs (documents: chat, caption, file name / size / first bytes), GET /_deleted,
@@ -97,7 +97,7 @@ class H(BaseHTTPRequestHandler):
             if str(p.get("chat_id")) == "400":
                 return self._out(400, {"ok": False, "error_code": 400, "description": "Bad Request: chat not found"})
             SENT.append({"t": time.time(), "chat": str(p.get("chat_id")), "text": p.get("text", ""),
-                         "silent": bool(p.get("disable_notification")), "mode": p.get("parse_mode")})
+                         "silent": bool(p.get("disable_notification")), "mode": p.get("parse_mode"), "id": len(SENT) + 1})
             return self._out(200, {"ok": True, "result": {"message_id": len(SENT)}})
         if method == "sendDocument":
             if str(p.get("chat_id")) == "400":
@@ -108,6 +108,16 @@ class H(BaseHTTPRequestHandler):
                          "filename": doc.get("filename"), "size": doc.get("size"), "head": doc.get("head")})
             mid = 1000 + len(DOCS)
             return self._out(200, {"ok": True, "result": {"message_id": mid, "document": {"file_id": f"F{mid}", "file_size": doc.get("size")}}})
+        if method == "editMessageText":
+            mid = p.get("message_id")
+            hit = next((m for m in SENT if m.get("id") == mid), None)
+            if not hit:
+                return self._out(400, {"ok": False, "error_code": 400, "description": "Bad Request: message to edit not found"})
+            if hit["text"] == p.get("text", ""):
+                return self._out(400, {"ok": False, "error_code": 400, "description": "Bad Request: message is not modified"})
+            hit["text"] = p.get("text", "")
+            hit["edited"] = hit.get("edited", 0) + 1
+            return self._out(200, {"ok": True, "result": {"message_id": mid}})
         if method == "deleteMessage":
             DELETED.append({"chat": str(p.get("chat_id")), "msg": p.get("message_id")})
             return self._out(200, {"ok": True, "result": True})

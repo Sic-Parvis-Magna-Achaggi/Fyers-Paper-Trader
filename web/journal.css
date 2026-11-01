@@ -299,3 +299,92 @@ body.mob #pages .jn-filters{margin-top:4px}
   .js-setcols{grid-template-columns:minmax(0,1fr)}
   .js-vfoot{font-size:12px}
 }
+
+/* ------------------------------------------------------------------ Insights, Review, calendar, walk-through, Copy for Gemini (v0.28.0, web/jinsights.js) */
+.jn-aibtn{font-size:12.5px}
+.ji-kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:8px}
+.ji-kpi{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.jn-card .ji-kpi{background:var(--panel2)}
+.ji-kpi span{font-size:11.5px;color:var(--muted)} .ji-kpi b{font-size:16px;font-weight:600} .ji-kpi small{font-size:11px;color:var(--muted)}
+.ji-scope{margin:0 0 10px}
+.ji-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:12px;margin-top:12px;align-items:start}
+.ji-grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px;align-items:start}
+.ji-wide{grid-column:1/-1}
+.ji-chead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+.ji-chead h3{margin:0}
+.ji-tscroll{overflow-x:auto}
+.ji-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.ji-table th{text-align:right;font-weight:500;color:var(--muted);padding:4px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+.ji-table th:first-child{text-align:left}
+.ji-table td{padding:6px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--mono);white-space:nowrap;vertical-align:top}
+.ji-table td:first-child{text-align:left;font-family:var(--sans);white-space:normal;min-width:120px}
+.ji-table tr.dim td{opacity:.6}
+.ji-bar{height:3px;background:var(--line);border-radius:2px;margin-top:4px;overflow:hidden;max-width:180px}
+.ji-bar i{display:block;height:100%;background:var(--jpass)} .ji-bar.bad i{background:var(--jfail)}
+.ji-perf .ji-sgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.ji-sgroup h4{margin:4px 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.ji-stat{display:grid;grid-template-columns:1fr auto;gap:0 8px;padding:6px 0;border-top:1px solid var(--line)}
+.ji-stat span{font-size:12.5px} .ji-stat b{font-size:13px;text-align:right} .ji-stat small{grid-column:1/-1;font-size:11px;color:var(--muted);line-height:1.35}
+.ji-eq .ji-eqstats{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;margin-bottom:6px}
+.ji-eqstats div{display:flex;flex-direction:column} .ji-eqstats span{color:var(--muted);font-size:11px} .ji-eqstats b{font-family:var(--mono)} .ji-eqstats small{color:var(--muted);font-size:10.5px}
+.ji-eqsvg{width:100%;height:170px;display:block} .ji-ddsvg{width:100%;height:56px;display:block;border-top:1px solid var(--line)}
+.ji-ddfill{fill:color-mix(in srgb,var(--jfail) 25%,transparent)} .ji-ddline{fill:none;stroke:var(--jfail);stroke-width:1.2}
+.ji-gold{color:var(--jgold)}
+.ji-rvhead{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px}
+.ji-rvhead .sp{flex:1} .ji-rvhead b{font-size:15px;min-width:0} .ji-rvhead select{width:auto}
+.ji-leak{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:8px;background:color-mix(in srgb,var(--jfail) 10%,transparent);margin-bottom:8px;font-size:13px}
+.ji-leak.clear{background:color-mix(in srgb,var(--jpass) 10%,transparent)}
+.ji-pil td:first-child{min-width:200px}
+.ji-callout{border:1px solid var(--jgold);border-radius:8px;padding:10px;margin-bottom:10px;display:flex;flex-direction:column;gap:6px}
+.ji-callout q{font-size:14px;font-style:italic}
+.ji-callout .seg button.on-held{background:var(--jpass);color:#fff} .ji-callout .seg button.on-partly{background:var(--jwarn);color:#fff} .ji-callout .seg button.on-missed{background:var(--jfail);color:#fff}
+.ji-rvform input[type=text]{width:100%;box-sizing:border-box}
+.ji-rvacts{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.ji-quads{display:grid;grid-template-columns:auto 1fr 1fr;gap:6px;align-items:stretch;margin:6px 0}
+.ji-quads .qh{font-size:11.5px;color:var(--muted);text-align:center;align-self:end} .ji-quads .qh.row{text-align:right;align-self:center;padding-right:4px}
+.ji-quad{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:8px 10px;text-align:left;border-radius:8px}
+.ji-quad span{font-size:12px} .ji-quad b{font-size:18px} .ji-quad small{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.ji-quad.q-good{border-color:var(--jpass)} .ji-quad.q-warn{border-color:var(--jwarn)} .ji-quad.q-calm{border-color:var(--jcalm)} .ji-quad.q-bad{border-color:var(--jfail)}
+.ji-quad.on{outline:2px solid var(--accent)} .ji-quad:disabled{opacity:.45;cursor:default}
+.ji-rvtabs{margin:12px 0 6px}
+.ji-walkbar{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:6px 0;font-size:12.5px}
+.ji-rvt{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;padding:10px 0;border-top:1px solid var(--line);font-size:13px}
+.ji-rvt p{grid-column:1/-1;margin:2px 0;font-size:12.5px} .ji-rvtr{text-align:right} .ji-rvtr button{margin-top:6px;font-size:12px;padding:4px 10px}
+.ji-calsum{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;margin-bottom:10px} .ji-calsum b{font-family:var(--mono)}
+.ji-cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr)) minmax(0,1.1fr);gap:4px}
+.ji-calh{font-size:11px;color:var(--muted);text-align:center;padding:2px}
+.ji-day,.ji-calwk{display:flex;flex-direction:column;align-items:flex-start;gap:1px;min-height:74px;padding:5px 6px;text-align:left;border-radius:6px;background:var(--tint,var(--panel2));min-width:0;overflow:hidden}
+.ji-day .d{font-size:11px;color:var(--muted)} .ji-day .d i{color:var(--jgold);font-style:normal;margin-left:3px}
+.ji-day b,.ji-calwk b{font-family:var(--mono);font-size:12.5px} .ji-day small,.ji-calwk small{font-size:10.5px;color:var(--muted);white-space:nowrap}
+.ji-day.out{opacity:.45} .ji-day.today{outline:2px solid var(--accent)} .ji-day.empty{cursor:default}
+.ji-calwk{background:var(--panel)} .ji-calwk span{font-size:10.5px} .ji-todo{color:var(--accent)!important}
+.ji-wbox{width:min(1300px,100%)}
+.ji-wgrid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(320px,1fr);gap:0}
+.ji-wpic{padding:12px;border-right:1px solid var(--line);min-width:0}
+.ji-wpic img{width:100%;border-radius:8px;cursor:zoom-in;display:block;background:#05070a}
+.ji-wchips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px} .ji-wchips button{font:12px var(--mono);padding:3px 9px} .ji-wchips button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.ji-wacts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.ji-wside{padding:6px 14px 14px;overflow:auto;max-height:calc(100vh - 120px)}
+.ji-wblock{padding:10px 0;border-bottom:1px solid var(--line)} .ji-wblock:last-child{border-bottom:0}
+.ji-wblock h4{margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.ji-wfacts{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.ji-verdict{font-size:13px;padding:3px 10px}
+.ji-aibox{width:min(980px,100%)}
+.ji-aiopts{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;padding:10px 14px}
+.ji-aiopts select{width:auto}
+#jiAiText{display:block;width:calc(100% - 28px);margin:0 14px;font-size:12px;line-height:1.5;min-height:300px}
+.ji-tfocus{margin:8px 0;padding:8px 10px;border:1px solid var(--jgold);border-radius:8px;display:flex;flex-direction:column;gap:2px}
+.ji-tfocus span{font-size:11px;color:var(--muted)} .ji-tfocus q{font-style:italic;font-size:13px}
+@media (max-width: 1100px){ .ji-perf .ji-sgrid{grid-template-columns:repeat(2,minmax(0,1fr))} .ji-wgrid{grid-template-columns:minmax(0,1fr)} .ji-wpic{border-right:0;border-bottom:1px solid var(--line)} .ji-wside{max-height:none} }
+@media (max-width: 760px){
+  .ji-grid,.ji-grid2{grid-template-columns:minmax(0,1fr)}
+  .ji-perf .ji-sgrid{grid-template-columns:minmax(0,1fr)}
+  .ji-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ji-cal{gap:2px;grid-template-columns:repeat(7,minmax(0,1fr))}
+  .ji-calh.wk,.ji-calwk{display:none}
+  .ji-day{min-height:54px;padding:3px}
+  .ji-day small{display:none}
+  .ji-day b{font-size:10.5px}
+  .jn-aibtn{display:none}
+  .jn-sub button{padding:5px 8px}
+}

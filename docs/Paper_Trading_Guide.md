@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.27.0)
+# Paper and live trading: how it works (v0.28.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -159,6 +159,32 @@ text of each pillar and the Pillar 1 checks (Original puts your text back).
   retries 4 times over an hour). **Send the pictures not in Telegram yet** sends the older ones. **Send a test** checks the
   chat. Pictures stay on the server either way; Telegram is only a copy.
 - Settings › Pictures also shows how many pictures there are and the space they take.
+
+**Insights** (Journal › Insights) use the same filters as the trade list (except Octagon, so held and broken trades can be
+compared): KPIs; the equity curve with its drawdown underneath (Balance / P&L); performance (expectancy in ₹ and R, payoff,
+profit factor, SQN, Kelly, Sharpe / Sortino / Calmar on daily returns over the account size, drawdowns, green days, runs,
+how long winners and losers are held, charges as a share of gross profit); rep blocks and reps by account; Octagon
+discipline (clean vs each broken pillar); lockouts (hit and ignored); wait state; time of day; weekday; regime; bias / KE;
+contract; side; setup; exit reason; account. Everything net of charges. Sharpe and the like mean little before a few weeks.
+
+**The weekly Review** (Journal › Review): Monday to Sunday by close time (IST), one account or all.
+- The week against last week, the Octagon scorecard and the biggest leak, day by day (a day opens its trades).
+- The outcome × process grid: **earned win** (held, paid), **lucky win** (a pillar broke, it paid: the dangerous one),
+  **good loss** (held, didn't work: nothing to fix), **earned loss** (broke and lost: fix these).
+- **Walk through** a group one trade at a time: its pictures beside the facts, pillars and plan, and three boxes (what I did
+  right, what I did wrong, lesson). ← / → move on and save.
+- The reflection: what went well, what broke the octagon and why, one focus for next week. Next week the Today card shows
+  that focus, and the review asks whether you held it. **Save review** keeps it on the server and, with the Telegram backup
+  on, posts a summary to the journal's chat (saving again updates the same message). **Copy summary**.
+- **Calendar:** net per day, practice ticks, each week's net and whether it's reviewed.
+
+**Copy for Gemini** (top of the Journal, on each trade, and in the review): the trades of today / yesterday / this week /
+last week / a review's week / one trade, as text for your Gemini notebook: each session's equity and lockouts, then every
+trade with all 8 pillars and why each held or broke, your plan and reflections; optionally starting with your Octagon rules.
+
+**Settings › Export and backup:** **Download CSV** (every trade with its pillars, for a spreadsheet); **Download backup**
+(a zip with the whole journal and all its pictures); **Restore from a backup** adds whatever the journal doesn't have and
+never changes or removes anything already there.
 
 ## On a phone
 
@@ -501,6 +527,6 @@ When BE-T has already moved the stop to break-even, a Trail SL of N R behind the
 
 - Footprint / delta (order flow): waiting for the order-flow check (Monday 2 Nov).
 - Comparing the charges the app counts with what Fyers actually deducted (live).
-- The journal's Insights, the weekly review and calendar, Copy for Gemini, CSV / backup: v0.28.0.
+- Prop-firm journals in the same journal (waiting for the owner's yes).
 - Partial closes.
 - Agri MCX contracts use the non-agri rates.

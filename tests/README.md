@@ -14,6 +14,7 @@ python3 tests/alerts_test.py                          # Telegram alerts: the hel
 node tests/github_upload_flow.js                      # tools/github_upload.html against a fake GitHub API (fake_github.py on :8768); no helper needed
 python3 tests/journal_test.py                         # the journal: the server's Octagon port vs Octagon's own JS (fixtures/octagon_core.js), then on paper engines: lockouts, switches, audit
 python3 tests/jshots_test.py                          # journal pictures: the server's drawing, entry / exit on paper engines, labels, the Telegram copy (fake Telegram on :8771)
+python3 tests/jreview_test.py                         # journal v0.28.0: weekly review + its Telegram summary, CSV, backup and restore (fake Telegram on :8772)
 python3 tests/candles_test.py                         # saved candles: exact contract (no cont_flag), clean-out, a day fetched again replaces it
 
 python3 tests/make_old_data.py /tmp/fyers_test        # fresh v0.12-style data, admin password OldPass12345
@@ -31,6 +32,7 @@ FYERS_HELPER_DATA=/tmp/fyers_test node tests/multichart_flow.js    # multi-chart
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/telegram_flow.js     # Settings › Telegram alerts, the Live card, then the real watchdog with the helper frozen (SIGSTOP) -> the message; ~1.5 min
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/journal_flow.js       # the Journal page: trades arriving, the audit form, claim, filters, lockouts (on a fresh account each run, archived after), phone
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/jshots_flow.js        # journal pictures: server + chart pictures of a trade, card, viewer, add / paste / drop, 📷, Settings › Pictures, Telegram copy, phone
+FYERS_HELPER_DATA=/tmp/fyers_test node tests/jinsights_flow.js     # journal v0.28.0: Insights, the weekly review, walk-through, calendar, Copy for Gemini, export / backup / restore, phone
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/mobile_flow.js        # the phone layout on an emulated Pixel 7: order sheet and its bubble, positions, tabs, full screen (resets the admin's paper account)
 ```
 

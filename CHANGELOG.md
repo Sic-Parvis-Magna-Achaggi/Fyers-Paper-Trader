@@ -1,5 +1,51 @@
 # Changelog
 
+## v0.28.0 — 1 Nov 2026 — Journal: Insights, the weekly review, Copy for Gemini, export and backup
+
+Added
+- **Insights** (Journal › Insights; roadmap item 4, the last of its three releases), following the journal's filters (all
+  but the Octagon one, so held and broken trades can be compared): KPIs (net, win rate, expectancy, average and total R,
+  clean octagon); the **equity curve with its drawdown** (balance or P&L); **performance** (expectancy in ₹ and R, payoff,
+  profit factor, SQN, Kelly, Sharpe, Sortino, Calmar, recovery, return, maximum / current / longest drawdown, worst day,
+  green days, runs, largest win / loss, average hold of winners vs losers, charges as a share of gross profit); **rep
+  blocks** and reps by account; **Octagon discipline** (clean vs each broken pillar); **lockouts** (2% hits, 99 Club breaks,
+  number-running stops, how many were ignored, trades after a lockout, practice days); wait state; time of day (Indian
+  buckets); weekday; market regime; bias / KE; contract; side; setup tags; exit reason; account. All net of charges.
+- **The weekly Review** (Journal › Review), Monday to Sunday by close time (IST), per account or all: the week at a glance
+  against last week, the **Octagon scorecard** with the biggest leak, day by day, the **outcome × process grid** (earned
+  win, lucky win, good loss, earned loss) with winners / losers / broke a pillar / all, and the reflection (what went well,
+  what broke the octagon, one focus for next week; last week's focus marked held / partly / missed). Saving posts a summary
+  to the journal's Telegram chat when the backup is on, and edits that same message after. **Copy summary.**
+- **The walk-through:** one trade at a time with its server picture (and the others) beside the facts, pillars, plan and
+  the reflection (what I did right / wrong, lesson); ← / → move on and save; Open on the chart; Edit audit.
+- **The calendar:** net per day (tinted), trades and W–L, pillars broken, practice days; each week's net and whether it's
+  reviewed; a day opens its trades, a week its review. On the phone: the 7 days only.
+- **Copy for Gemini** (the Journal's top bar, each trade, the review): today, yesterday, this week, last week, a review's
+  week, or one trade; per account; optionally starting with your Octagon rules. Each session's equity, 2% line, 99 Club
+  breaks, number-running stop, practice and the week's focus, then every trade with all 8 pillars and why each held or
+  broke, the plan and reflections. IST, net of charges.
+- **Today card:** this week's focus (set in last week's review).
+- **Settings › Export and backup:** Download CSV (every trade with its 8 pillars, net ₹, R, reflections; Excel-friendly);
+  Download backup (.zip: the whole journal and every picture); Restore from a backup (adds only what's missing: trades,
+  reviews, practice days, pictures; nothing already there changes; logged in the security log).
+- Routes: `POST /api/journal/review`, `GET /api/journal/export.csv`, `GET /api/journal/backup.zip`, `POST /api/journal/restore`.
+
+Changed
+- A reflection (did right / wrong / lesson) on a trade stamps `reviewedAt`.
+- The Journal's tabs: Trades · Insights · Review · Settings.
+
+Tests
+- `tests/jreview_test.py` (25 checks, new): review rules, the Telegram summary posted then edited (and re-posted when the
+  message is gone), reflections, the CSV, backup and restore (into an empty journal; again into the same one: nothing
+  twice, nothing changed), a bare journal.json.
+- `tests/jinsights_flow.js` (40 checks, new): Insights and its filters, the review saved and posted / edited in Telegram,
+  the walk-through, the calendar, Copy for Gemini (day, rules, week, one trade, clipboard), the Today focus, CSV, the backup
+  zip and restoring it, the phone.
+- `tests/fake_telegram.py`: editMessageText.
+- Run on this version: routes, ctype 47, journal 58, jshots 43, jreview 25; browser: journal 43, jshots 45, jinsights 40
+  (twice), mobile 61, live 22. The other suites passed on v0.27.0 an hour earlier; this release changes only the Journal
+  page, its routes and one script tag in index.html.
+
 ## v0.27.0 — 1 Nov 2026 — Journal pictures and the Telegram backup; P&F trend lines fixed
 
 Added

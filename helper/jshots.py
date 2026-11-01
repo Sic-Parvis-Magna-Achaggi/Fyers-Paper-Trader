@@ -880,3 +880,31 @@ def pillow() -> bool:
         return True
     except ImportError:
         return False
+
+
+def tg_review(uid: str, week: str, text: str) -> str:
+    """The weekly review's summary in the journal's Telegram chat: posted once, edited in place after that.
+    Returns "posted" / "edited" / "off" (backup off or no chat); raises TgError."""
+    from . import telegram as tgm
+    j = _journal(uid)
+    c = cfg(j.d["settings"])
+    if not (c["tg"] and c["tg_chat"]):
+        return "off"
+    tok = tgm.token(tgm.load(uid))
+    rv = j.d["reviews"].get(week) or {}
+    msg = rv.get("msg") or {}
+    text = text[:4000]
+    if msg.get("id") and msg.get("chat") == c["tg_chat"]:
+        try:
+            tgm.call(tok, "editMessageText", {"chat_id": c["tg_chat"], "message_id": msg["id"], "text": text,
+                                              "disable_web_page_preview": True})
+            return "edited"
+        except tgm.TgError as e:
+            if "not modified" in str(e).lower():
+                return "edited"
+            if not re.search(r"not found|can't be edited|MESSAGE_ID_INVALID", str(e), re.I):
+                raise
+    res = tgm.call(tok, "sendMessage", {"chat_id": c["tg_chat"], "text": text, "disable_web_page_preview": True,
+                                        "disable_notification": True})
+    j.set_review_msg(week, {"id": (res or {}).get("message_id"), "chat": c["tg_chat"]})
+    return "posted"

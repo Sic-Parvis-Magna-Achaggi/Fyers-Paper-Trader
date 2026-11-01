@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 1 Nov 2026 (v0.27.0). This is the one task list for the project.
+Updated 1 Nov 2026 (v0.28.0). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -52,7 +52,7 @@ ahead of 3-6.
    - **The whole server down** (droplet off, network): nothing on it can send, so an optional outside heartbeat
      (Healthchecks.io, free): the watchdog pings it every minute while a live trade is open and pauses it when flat (with its
      API key; without the key it pings all the time); Healthchecks.io sends its own Telegram message when the pings stop.
-4. [ ] **Journal: full Octagon port** (from `octagon_journal.html`; started 1 Nov 2026, owner: "Let's start the journal").
+4. [x] **Journal: full Octagon port** (three releases done: v0.26.0, v0.27.0, v0.28.0; 4b and 4c wait for the owner's yes) (from `octagon_journal.html`; started 1 Nov 2026, owner: "Let's start the journal").
    It stays on the server (per user); the Cloudflare relay isn't needed (Telegram is only a backup copy, prices come from
    the app's own Fyers candles). The Telegram bot is the one saved in Settings › Telegram alerts.
    Agreed 1 Nov 2026 (owner's answers):
@@ -76,9 +76,15 @@ ahead of 3-6.
    - [x] **v0.27.0:** pictures on the server (automatic at entry and exit, server-drawn + the open chart's picture, 📷 on the
      chart bar; your own uploads / paste / drop, labelled by timeframe), the viewer, Telegram backup copy to the journal's
      channel (the bot from Settings › Telegram alerts). *(v0.27.0)*
-   - [ ] **v0.28.0:** Insights (performance, by symbol / time of day / regime / tag / pillar / weekday, lockout stats,
-     rep blocks, the equity chart with drawdown), the weekly Review and calendar with the walk-through and weekly focus,
-     Copy for Gemini, CSV export, backup / restore.
+   - [x] **v0.28.0:** Insights (performance, by symbol / time of day / regime / tag / pillar / weekday, lockout stats,
+     rep blocks, the equity chart with drawdown), the weekly Review and calendar with the walk-through and weekly focus
+     (summary to Telegram), Copy for Gemini, CSV export, backup / restore. *(v0.28.0)*
+   - [ ] **4c. The full layout's picture at every entry and exit, with no page open** (asked 1 Nov: "does it take a
+     screenshot with all the indicators on the layout?"; Claude's proposal, **waiting for the owner's yes and order**):
+     today the indicator picture is taken only when a chart of that contract is on screen. A hidden browser on the server
+     would open the saved layout at each entry / exit and take the picture there. Needs about 300-400 MB of RAM per picture
+     on a 1 GB droplet that also guards live stops: so either the 2 GB droplet (about $12 a month instead of $6) or only
+     when the server isn't busy.
    - [ ] **4b. Prop-firm journals in the same journal** (Claude's suggestion 1 Nov; waiting for the owner's yes): prop
      accounts as their own accounts (own currency $ and broker clock, never mixed with ₹), the Octagon backup imported
      once, MT5 history import, manual entry with Gemini ticket reading, phases / payouts / account chains. Reps, pillars
@@ -199,6 +205,7 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Done
 
+- [x] **v0.28.0** (1 Nov): the journal's last step (item 4): Insights, the weekly review with the outcome × process grid, walk-through and calendar, the summary to Telegram, Copy for Gemini, CSV, backup and restore.
 - [x] **v0.27.0** (1 Nov): journal pictures (item 4, second step): the server draws each trade at entry and exit, the open chart adds its own picture, 📷 on the chart bar, your own uploads / paste / drop labelled by timeframe, the viewer, the Telegram backup copy; P&F trend lines no longer run on after price crossed them (reported 1 Nov).
 - [x] **v0.26.3** (1 Nov): Release to GitHub puts this version's whole changelog entry into the commit message.
 - [x] **v0.26.2** (1 Nov): release instructions for the organization's token (README, the tool's hints, project instructions).

@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from fastapi.staticfiles import StaticFiles
 
@@ -1382,6 +1382,99 @@ async def journal_end(request: Request):
     journal.check_lock(r, aid, before)
     _engine_changed(r, aid, "Journal: session ended for today")
     return {"ok": True, "j": j.view(r)}
+
+
+# ------------------------------------------------------------------ journal: weekly review, export, backup (v0.28.0)
+@app.post("/api/journal/review")
+async def journal_review(request: Request):
+    """The weekly review: {week (its Monday), well, broke, focus, focusKept}. With {post: true, summary} the summary also
+    goes to the journal's Telegram chat (when the backup is on), posted once and edited in place after that."""
+    _same_origin(request)
+    u, r = _urt(request)
+    b = await _body(request)
+    j = journal.get(u["uid"])
+    week = str(b.get("week") or "")
+    try:
+        rv = j.set_review(week, b)
+    except ValueError as e:
+        return _err(e)
+    tg = None
+    if b.get("post") and str(b.get("summary") or "").strip():
+        try:
+            tg = await asyncio.get_running_loop().run_in_executor(None, jshots.tg_review, u["uid"], week, str(b["summary"]))
+        except telegram.TgError as e:
+            tg = "error: " + str(e)
+    _journal_changed(u["uid"])
+    return {"ok": True, "review": j.d["reviews"].get(week, rv), "reviews": j.d["reviews"], "tg": tg}
+
+
+@app.get("/api/journal/export.csv")
+async def journal_export_csv(request: Request):
+    """Every trade in the journal with its 8 pillars, for a spreadsheet (UTF-8, Excel-friendly)."""
+    u, r = _urt(request)
+    j = journal.get(u["uid"])
+    text = await asyncio.get_running_loop().run_in_executor(None, j.csv_text, r)
+    day = time.strftime("%Y-%m-%d", time.gmtime(time.time() + 19800))
+    return Response(text.encode("utf-8"), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="journal_{day}.csv"', "Cache-Control": "no-store"})
+
+
+@app.get("/api/journal/backup.zip")
+async def journal_backup(request: Request):
+    """The whole journal and its pictures in one zip (restore it with /api/journal/restore)."""
+    import tempfile
+    from starlette.background import BackgroundTask
+    u, r = _urt(request)
+    j = journal.get(u["uid"])
+    fd, path = tempfile.mkstemp(suffix=".zip", dir=str(store.path("tmp/x").parent))
+    os.close(fd)
+    try:
+        await asyncio.get_running_loop().run_in_executor(None, j.backup_zip, path)
+    except Exception as e:
+        os.remove(path)
+        return _err(f"couldn't make the backup: {e}", 500)
+    day = time.strftime("%Y-%m-%d", time.gmtime(time.time() + 19800))
+    return FileResponse(path, media_type="application/zip", filename=f"journal_backup_{day}.zip",
+                        headers={"Cache-Control": "no-store"}, background=BackgroundTask(os.remove, path))
+
+
+RESTORE_MAX = 500 * 1024 * 1024
+
+
+@app.post("/api/journal/restore")
+async def journal_restore(request: Request):
+    """Add back from a backup: the body is the backup .zip (or its journal.json). Only what's missing is added: trades,
+    reviews, practice days and pictures; nothing already in the journal changes."""
+    import tempfile
+    _same_origin(request)
+    u, r = _urt(request)
+    if int(request.headers.get("content-length") or 0) > RESTORE_MAX:
+        return _err("a backup can be up to 500 MB", 413)
+    fd, path = tempfile.mkstemp(suffix=".bak", dir=str(store.path("tmp/x").parent))
+    n = 0
+    try:
+        with os.fdopen(fd, "wb") as f:
+            async for chunk in request.stream():
+                n += len(chunk)
+                if n > RESTORE_MAX:
+                    return _err("a backup can be up to 500 MB", 413)
+                f.write(chunk)
+        if not n:
+            return _err("no file came with the request")
+        j = journal.get(u["uid"])
+        try:
+            got = await asyncio.get_running_loop().run_in_executor(None, j.restore, path)
+        except ValueError as e:
+            return _err(e)
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+    j.sync(r)
+    _journal_changed(u["uid"])
+    users.audit(u["uid"], "journal restore", f"{got['trades']} trades, {got['pictures']} pictures added")
+    return {"ok": True, "got": got, "j": j.view(r)}
 
 
 # ------------------------------------------------------------------ journal pictures (helper/jshots.py, v0.27.0)
