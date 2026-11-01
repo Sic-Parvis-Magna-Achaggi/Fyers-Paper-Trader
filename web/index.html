@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#11151c">
 <title>Fyers Trade Manager</title>
+<script>if(/[?&]cell=\d/.test(location.search)) document.documentElement.classList.add("cell");   // a chart in a multi-chart grid: no flash of the full page</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="/vendor/lightweight-charts.standalone.production.js"></script>
@@ -546,6 +547,7 @@ button.place.live,#tool .tp.live{outline:2px solid var(--down);outline-offset:2p
 body:not(.is-admin) .admin-only{display:none!important}
 </style>
 <link rel="stylesheet" href="/static/draw.css?v=__V__">
+<link rel="stylesheet" href="/static/multichart.css?v=__V__">
 <link rel="stylesheet" href="/static/mobile.css?v=__V__">
 </head>
 <body data-page="chart">
@@ -776,7 +778,8 @@ body:not(.is-admin) .admin-only{display:none!important}
   </div>
 </div>
 
-<script>window.APP_V = "__V__";</script>
+<script>window.APP_V = "__V__"; window.FTM_CELL = (/[?&]cell=(\d)/.exec(location.search) || [])[1];   // a chart inside a multi-chart grid (multichart.js)
+if(window.FTM_CELL != null) document.documentElement.classList.add("cell");</script>
 <script src="/static/ctype.js?v=__V__"></script>
 <script src="/static/paper.js?v=__V__"></script>
 <script src="/static/pine.js?v=__V__"></script>
@@ -2377,6 +2380,8 @@ function clock(){ $("#pClock").textContent = new Date().toLocaleTimeString("en-G
 async function boot(){
   applyTheme();
   if(!await refreshState()) return;
+  // every script of the page loaded first (drawings, layouts, the multi-chart frames hook into what follows)
+  if(document.readyState === "loading") await new Promise(r => document.addEventListener("DOMContentLoaded", r, {once: true}));
   await loadPrefs();
   if(typeof layBoot === "function") await layBoot();   // the open layout's chart, before the chart is built (layouts.js)
   wlLoad(); cur = prefGet("cur", null); tf = prefGet("tf2", "5m"); tfFav = prefGet("tfs", tfFav);
@@ -2403,6 +2408,7 @@ boot();
 <script src="/static/draw.js?v=__V__"></script>
 <script src="/static/drawui.js?v=__V__"></script>
 <script src="/static/layouts.js?v=__V__"></script>
+<script src="/static/multichart.js?v=__V__"></script>
 <script src="/static/mobile.js?v=__V__"></script>
 </body>
 </html>

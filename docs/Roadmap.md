@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 1 Nov 2026 (v0.23.1). This is the one task list for the project.
+Updated 1 Nov 2026 (v0.24.0). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -45,9 +45,16 @@ ahead of 3-6.
 Telegram (3) and the journal (4) after them.
 
 5. [x] **Saved chart layouts, per user** (asked 31 Oct 2026): shipped in **v0.23.0**, see Done.
-6. [ ] **Multi-charts in a layout** (asked 31 Oct 2026)
+6. [ ] **Multi-charts in a layout** (asked 31 Oct 2026). First step shipped in **v0.24.0**; sync of contract / timeframe / date range next (v0.24.1).
    - Several charts side by side and stacked (vertical and horizontal splits) inside one layout, each with its own contract, timeframe and indicators. Saved with the layout.
-   - Suggested 1 Nov 2026 (to agree with the owner before building): grids 1, 2 side by side, 2 stacked, 3 (one big + two),
+   - **Agreed 1 Nov 2026 (owner: "Ok"), in two steps.** v0.24.0: grids 1 / 2 side by side / 2 stacked / 3 (one big + two) /
+     2×2, each chart fully its own (contract, timeframe, type, indicators, Pine, its contract's drawings), saved in the
+     layout; the active chart (last clicked, highlighted) is what the watchlist, Find, BUY / SELL and the Pine Editor act on;
+     trades show on every chart of their contract; crosshair sync (on by default); the phone shows one chart at a time
+     with buttons to switch. v0.24.1: contract, timeframe and date-range sync.
+   - [x] v0.24.0: grids, each chart its own, the active chart, saved in the layout, crosshair sync, the phone. *(v0.24.0)*
+   - [ ] v0.24.1: contract, timeframe and date-range sync.
+   - Earlier suggestion, 1 Nov 2026: grids 1, 2 side by side, 2 stacked, 3 (one big + two),
      2×2; sync options per layout like TradingView (crosshair, contract, timeframe, date range); the trade panel and the
      BUY / SELL tool act on the chart last clicked (highlighted); the phone shows one chart at a time and swipes between
      them. Each chart's history comes out of the same Fyers data budget (queued), so switching all four timeframes at
@@ -145,6 +152,7 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Done
 
+- [x] **v0.24.0** (1 Nov): multi-charts, first step (item 6): 1 / 2 / 2 / 3 / 2×2 grids, each chart its own, the active chart for the watchlist, BUY / SELL and Pine, crosshair sync, the phone's chart buttons.
 - [x] **v0.23.1** (1 Nov): angles on drawings (Show angle on lines, channels, regression; the Trend angle tool; degrees on screen + slope per bar; P&F in boxes).
 - [x] **v0.23.0** (1 Nov): saved chart layouts (item 5, asked 31 Oct). Design (1 Nov; Claude's suggestions taken where the
   owner didn't choose, he can change them): a layout holds the contract, timeframe, chart type, indicators and Pine scripts

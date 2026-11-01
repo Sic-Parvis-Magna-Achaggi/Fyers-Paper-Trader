@@ -12,6 +12,7 @@ const prodName = p => ({INTRADAY: "Intraday", MARGIN: "Carry", CNC: "Delivery"})
 const mqa = s => [...document.querySelectorAll(s)];
 const mPref = () => { try{ return localStorage.getItem("ftm.layout") || ""; }catch(e){ return ""; } };
 function mWant(){
+  if(window.FTM_CELL != null) return false;                 // a chart inside the desktop multi-chart grid
   const p = mPref(); if(p === "desk") return false; if(p === "mob") return true;
   const coarse = matchMedia("(pointer:coarse)").matches;
   return innerWidth <= 760 || (coarse && Math.min(innerWidth, innerHeight) <= 500);

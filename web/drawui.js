@@ -396,7 +396,7 @@ function drSettingsRe(d, draft, tab){ const keep = d.st; d.st = draft; drSetting
 
 /* ---------------------------------------------------------------- keyboard */
 function drTyping(e){ return e.target && e.target.closest && e.target.closest("input,select,textarea,[contenteditable]"); }
-function drChartPage(){ return document.body.dataset.page === "chart" && !$("#app").classList.contains("hide"); }
+function drChartPage(){ return document.body.dataset.page === "chart" && !$("#app").classList.contains("hide") && !document.body.classList.contains("multi"); }   // (a grid: each chart has its own keys)
 window.addEventListener("keydown", e => {
   if(!drChartPage() || drTyping(e) || !series) return;
   const eat = () => { e.preventDefault(); e.stopImmediatePropagation(); };

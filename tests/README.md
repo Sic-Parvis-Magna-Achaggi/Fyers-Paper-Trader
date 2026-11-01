@@ -23,6 +23,7 @@ FYERS_HELPER_DATA=/tmp/fyers_test node tests/navigation_flow.js         # Go to 
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/watchlists_flow.js    # several watchlists: new / rename / move / delete, + in Find, streaming, saved, phone
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/drawings_flow.js       # drawing tools and the measure: toolbar, drawing, editing, undo, saved per contract, every chart type, net ₹ / R, position drawings, phone
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/layouts_flow.js       # saved layouts: Layout 1, new / copy / rename / delete, switching brings each back, auto-save and by hand (Ctrl+S), page closed mid-switch, second device, phone
+FYERS_HELPER_DATA=/tmp/fyers_test node tests/multichart_flow.js    # multi-charts: grids, each chart its own, the active chart (watchlist, BUY, Pine), crosshair sync, drawings per contract, ⛶, reload, phone buttons
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/mobile_flow.js        # the phone layout on an emulated Pixel 7: order sheet and its bubble, positions, tabs, full screen (resets the admin's paper account)
 ```
 

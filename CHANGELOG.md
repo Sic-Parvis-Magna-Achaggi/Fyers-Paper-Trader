@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.24.0 — 1 Nov 2026 — Multi-charts in a layout
+
+Added
+- **Several charts in a layout** (owner, 31 Oct; roadmap item 6, design agreed 1 Nov). The Grid button on the chart bar
+  (next to ▦): 1 chart, 2 side by side, 2 stacked, 3 (one big on the left, two on the right), 2×2.
+- **Each chart is fully its own**: contract, timeframe, chart type, indicators and Pine scripts, its own bar (timeframes,
+  chart type, ƒx, ⚙, ✎ for its drawing toolbar, ⛶), its contract's drawings, the on-chart BUY / SELL tool and your
+  positions' lines. Saved in the layout, chart by chart; your single-chart settings are left alone.
+- **The active chart** (click it; blue border, its number highlighted) is what the watchlist, Find, the option chain,
+  the trade panel's BUY / SELL and the Pine Editor's Add to chart act on. The trade panel shows its contract.
+- **Crosshair sync** (on by default, Grid menu): moving over one chart moves the crosshair on the others to the same
+  time (on the same contract with the price too; past the last bar, by the bar count).
+- A drawing made on one chart shows on every chart of that contract.
+- **⛶ (or F) in a chart** shows it big in the grid; again to go back.
+- A new chart starts as a copy of the active one (its drawing toolbar closed). Charts left out of a smaller grid stay in
+  the layout and come back when you widen it again. Back to 1 chart: chart 1, on the page's own chart.
+- **Phone:** one chart at a time; buttons 1-4 above the chart pick which, and changes save into that chart.
+- Contract, timeframe and date-range sync come next (v0.24.1).
+
+Changed
+- The page waits for all its scripts before it starts (layouts and the grid hook into the start-up).
+
+Tests
+- `tests/multichart_flow.js` (33 checks, new): the Grid menu; 2×2 with four charts loading; the active chart taking the
+  watchlist, BUY and the Pine Editor; timeframe / chart type / indicators per chart, saved per chart; single-chart
+  settings untouched; crosshair sync on and off; a drawing on two charts of a contract; ⛶; a reload; 3 and 2 stacked;
+  charts kept in a smaller grid; back to 1 chart; the phone's chart buttons.
+
 ## v0.23.1 — 1 Nov 2026 — Angles on drawings
 
 Added

@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.23.1)
+# Paper and live trading: how it works (v0.24.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -150,6 +150,19 @@ Phones get their own layout, like MT5's app (a desktop browser never does). **Mo
 - **Go to a date: the calendar button** at the chart's bottom left (or **Alt+G**, as on TradingView). Pick a date (and a time, on intraday charts; Indian time) and press Go to or Enter: older candles load first if the chart doesn't reach that far back, and the chart centres on that candle (or the one just before, if the market was shut), marked by the crosshair. A date before Fyers' first candle for the contract goes to the oldest one and says so. **Latest** in the same box, or **»** (bottom right, shown whenever the latest candle is off screen), brings you back to now, keeping your zoom.
 - Daily, weekly and monthly charts show dates only on the time axis.
 - **⛶ or F** maximises the chart inside the browser window, so your tabs stay one click away. **Shift+F** gives real full screen. When maximised, **P** (or Panel) slides the trade panel in, its **✕** hides it, and **Esc** goes back to the normal view.
+
+## Several charts (the Grid button, next to ▦)
+
+A layout can hold several charts: **1**, **2 side by side**, **2 stacked**, **3** (one big on the left, two on the right) or **2×2**.
+- **Each chart is fully its own:** contract, timeframe, chart type, indicators and Pine scripts, and its own bar (timeframes, chart type, ƒx, ⚙, ✎ for its drawing toolbar, ⛶). It shows its contract's drawings, the BUY / SELL buttons and your positions' lines. Everything is saved in the layout, chart by chart.
+- **The active chart** has a blue border and its number highlighted at the bottom right; click a chart to make it active. The watchlist, Find, the option chain, the trade panel's BUY / SELL and the Pine Editor's **Add to chart** all work on it, and the trade panel shows its contract. With a grid, the trade is set up on the chart itself: drag its lines and press PLACE there.
+- **Crosshair sync** (Grid menu, on by default): moving over one chart moves the crosshair on the others to the same time. On a chart of the same contract it shows the price too.
+- A drawing made on one chart shows on every chart of that contract.
+- **⛶ (or F) in a chart** shows it big; press it again to go back to the grid.
+- A new chart starts as a copy of the active one. A smaller grid keeps the charts it doesn't show, so widening it again brings them back. Back to **1 chart** shows chart 1.
+- **On the phone** one chart shows at a time: the numbers above the chart pick which, and changes save into that chart.
+- Contract, timeframe and date-range sync are coming next.
+- Each chart loads its own history, out of the same Fyers data budget (queued). Opening a 2×2 the first time takes a moment; after that the browser's saved candles make it quick.
 
 ## Layouts (▦ on the chart's top bar)
 

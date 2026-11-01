@@ -4,9 +4,11 @@
    the open layout; its menu opens, makes, copies, renames and deletes layouts. The open layout saves itself as you
    change the chart (as on TradingView). Saved on the server per user (/api/layouts), so every device has them.
    Drawings belong to the contract, not the layout: every layout on GOLDPETAL shows GOLDPETAL's drawings.
-   A layout holds a list of charts (charts[0] today) so multi-charts (item 6) slot in. Loaded after drawui.js. */
+   A layout holds a list of charts and a grid (v0.24.0, multichart.js): one chart ('1') is the page's own chart; on a desktop
+   grid each chart runs in its own frame and reports its set-up itself; on the phone the page's chart shows one of them at
+   a time (LAY.cell). Loaded after drawui.js; inert inside a grid's chart frame. */
 "use strict";
-const LAY = {list: [], active: "", ready: false, saveT: null, applying: false, del: null, edit: null, tb: null, dirty: false, ask: null};
+const LAY = {list: [], active: "", ready: false, saveT: null, applying: false, del: null, edit: null, tb: null, dirty: false, ask: null, cell: 0};
 const LAY_KEYS = ["cur", "tf2", "ctype", "chart", "indicators", "lgdMin0"];
 function layCopy(v){ return v == null ? v : JSON.parse(JSON.stringify(v)); }
 /* the chart on screen, as a layout's chart */
@@ -18,6 +20,9 @@ function layNow(){
   return c;
 }
 function layCur(){ return LAY.list.find(l => l.id === LAY.active); }
+/* which of the layout's charts the page's own chart is (0, or the one picked on the phone) */
+function layIdx(L){ const n = ((L || layCur() || {}).charts || [0]).length; return Math.max(0, Math.min(LAY.cell || 0, n - 1)); }
+function layGridOn(){ return typeof mcOn === "function" && mcOn(); }
 /* auto-save (default) or by hand (Save / Ctrl+S): your choice, for every layout */
 function layAuto(){ return prefGet("layAuto", true) !== false; }
 /* the same chart set-up? (key order and missing / default values don't count) */
@@ -34,9 +39,11 @@ async function layPost(body){
 /* a chart change: into the open layout (saved a moment later, once) */
 function layTouch(){
   const L = layCur(); if(!L || LAY.applying) return;
-  if(!layAuto()){ const was = LAY.dirty; LAY.dirty = !layEq(layNow(), (L.charts || [])[0]); if(was !== LAY.dirty) layUi(); return; }   // by hand: just marked unsaved
+  if(layGridOn()) return;                                // a desktop grid: each chart reports itself (multichart.js)
+  const i = layIdx(L);
+  if(!layAuto()){ const was = LAY.dirty; LAY.dirty = !layEq(layNow(), (L.charts || [])[i]); if(was !== LAY.dirty) layUi(); return; }   // by hand: just marked unsaved
   L.charts = L.charts && L.charts.length ? L.charts : [{}];
-  L.charts[0] = layNow();
+  L.charts[i] = layNow();
   clearTimeout(LAY.saveT);
   LAY.saveT = setTimeout(layFlush, 900);
   layUi();
@@ -45,7 +52,8 @@ function layTouch(){
 async function laySave(){
   const L = layCur(); if(!L) return;
   L.charts = L.charts && L.charts.length ? L.charts : [{}];
-  L.charts[0] = layNow(); LAY.dirty = false;
+  if(!layGridOn()) L.charts[layIdx(L)] = layNow();       // (a grid's charts are already in it)
+  LAY.dirty = false;
   await layFlush(); toast(`Layout "${L.name}" saved`);
 }
 async function layFlush(){
@@ -56,7 +64,7 @@ async function layFlush(){
    disagrees with the open layout takes the layout's set-up straight into the preferences, so the chart opens as the
    layout with nothing to redo. The saved layout is what counts, never the other way round (a layout switched on
    another device, or a page closed before a switch reached the server). layInit is the late fallback. */
-async function layBoot(){ try{ await layLoad(true); }catch(e){} }
+async function layBoot(){ if(window.FTM_CELL != null) return; try{ await layLoad(true); }catch(e){} }
 async function layInit(){ await layLoad(false); }
 async function layLoad(boot){
   if(LAY.ready || LAY.loading) return;
@@ -70,6 +78,7 @@ async function layLoad(boot){
     } else if(!layCur()){ LAY.active = LAY.list[0].id; }
     const L = layCur();
     let applied = false;
+    LAY.cell = 0;
     if(layAuto() && L && !layEq(layNow(), (L.charts || [])[0])){
       if(boot) layToPrefs((L.charts || [])[0] || {}); else await layApply(L);
       layPrefsNow(); applied = true;
@@ -78,6 +87,7 @@ async function layLoad(boot){
     LAY.dirty = !layAuto() && !!L && !layEq(layNow(), (L.charts || [])[0]);   // by hand: changes not saved last time
     LAY.ready = true; layUi();
     if(applied && !boot) layTouch();
+    if(typeof mcRender === "function") mcRender();
   } finally { LAY.loading = false; }
 }
 /* a layout's chart into the preferences (start-up, before the chart exists) */
@@ -113,18 +123,19 @@ function layBeacon(url, body){
 async function layOpen(id){
   const L = LAY.list.find(x => x.id === id); if(!L) return;
   if(LAY.saveT) await layFlush();
-  LAY.active = id; layUi();
+  LAY.active = id; LAY.cell = 0; layUi();
   await layApply(L);
   LAY.dirty = false;
   layPrefsNow();                                         // the new chart set-up reaches the server now, not in 0.6 s
   await layPost({op: "active", id});
   if(layAuto()) layTouch();                              // (a contract that's gone: the layout takes the chart as shown)
+  if(typeof mcRender === "function") mcRender(true);     // a grid: its charts, as saved
 }
 /* put a layout's chart on screen (nothing is saved into any layout meanwhile) */
-async function layApply(L){
+async function layApply(L){ return layApplyChart((L.charts || [])[layIdx(L)] || {}); }
+async function layApplyChart(c){
   LAY.applying = true;
   try{
-    const c = (L.charts && L.charts[0]) || {};
     prefSet("ctype", layCopy(c.ctype) || {type: "candles"});
     prefSet("chart", layCopy(c.chart) || {});
     prefSet("indicators", layCopy(c.indicators) || []);
@@ -152,7 +163,7 @@ async function layCopyOf(id){
   const L = LAY.list.find(x => x.id === id); if(!L) return;
   if(LAY.saveT) await layFlush();
   const nid = layId();
-  const src = layCopy(L); if(id === LAY.active) src.charts = [layNow()];   // the open one: as on screen (unsaved changes too)
+  const src = layCopy(L); if(id === LAY.active && !layGridOn()) src.charts[layIdx(L)] = layNow();   // the open one: as on screen (unsaved changes too)
   LAY.dirty = false;
   const j = await layPost({op: "put", layout: {...src, id: nid, name: layName(L.name.replace(/ copy( \d+)?$/, "") + " copy" + " #").replace(/ copy 1$/, " copy")}});
   if(j.ok){ await layOpen(nid); layRender("rename", nid); }
@@ -173,6 +184,8 @@ async function layDelete(id){
 /* ---------------------------------------------------------------- the button and its menu */
 function laySub(L){
   const c = (L.charts && L.charts[0]) || {}, n = (c.indicators || []).length, t = (c.ctype || {}).type || "candles";
+  const g = typeof MC_GRIDS !== "undefined" && L.grid && L.grid !== "1" ? MC_GRIDS[L.grid] : null;
+  if(g) return `${g.name} · ` + (L.charts || []).slice(0, g.n).map(x => (x.cur ? symLabel(x.cur.s) : "–") + " " + (x.tf2 || "")).join(" / ");
   return [c.cur ? symLabel(c.cur.s) : "no contract", c.tf2 || "", CT.name(t), n ? `${n} indicator${n === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ");
 }
 function layUi(){
@@ -204,7 +217,8 @@ function layRender(mode, id){
   if(ask) ask.querySelectorAll("[data-k]").forEach(b => b.onclick = async e => {
     e.stopPropagation(); const fn = LAY.ask, k = b.dataset.k; LAY.ask = null;
     if(k === "cancel"){ layRender(); return; }
-    if(k === "save") await laySave(); else LAY.dirty = false;
+    if(k === "save") await laySave();
+    else { LAY.dirty = false; const j = await api("/api/layouts"); if(j.ok) LAY.list = j.layouts || LAY.list; }   // (the saved copies back)
     if(fn) await fn();
     layRender();
   });
@@ -247,6 +261,7 @@ function layBuild(){
 }
 /* every chart setting goes through prefSet: the open layout follows it */
 (function layHooks(){
+  if(window.FTM_CELL != null) return;                   // a grid's chart frame: the page around it keeps the layouts
   const ps = prefSet;
   prefSet = function(k, v){
     ps.apply(this, arguments);

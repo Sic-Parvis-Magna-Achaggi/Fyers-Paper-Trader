@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 1 Nov 2026, version **0.23.1**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 1 Nov 2026, version **0.24.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -80,6 +80,29 @@ plus the order-flow check's contracts for the admin); browsers add theirs throug
 Standard: **100 contracts** on the data socket (5,000 on Prime); seconds history (5S-45S) is Prime-only, 30 trading
 days. Item 11 (multiple watchlists) comes right after item 10; item 12 (seconds / tick charts) is decided after
 Monday's order-flow check.
+
+## Multi-charts (v0.24.0)
+
+- `web/multichart.js` + `web/multichart.css`, loaded after layouts.js. A layout has `grid` ("1", "2v", "2h", "3", "4" =
+  `MC_GRIDS`), `charts[]` and `sync` ({cross}). **Desktop grid = frames:** each chart is this same page loaded as
+  `/?cell=N` (`window.FTM_CELL`, `html.cell`: chart and its bar only), so all the single-chart code runs unchanged per
+  chart. Why: everything (index.html, paper.js, pine.js, draw.js, indset.js) lives on one set of globals - one chart per
+  page; a real multi-instance refactor would touch nearly every line.
+- **A frame** (`cellMode()`): its set-up lives in `charts[N]`, not the shared prefs - `prefGet` / `prefSet` overridden for
+  `MC_CELL_KEYS` (cur, tf2, ctype, chart, indicators, lgdMin0) and the drawing toolbar's `tb`; changes go to the page
+  around with `mcCellSet(N, state)` (150 ms). It streams only its contract (`sendWant`), sends toasts up (deduped), marks
+  itself active on pointerdown (`mcActive`), sends its crosshair (`mcCross`), tells the others when it saved drawings
+  (`mcDrawn` -> `cellDrawReload`), and exposes `cellAddPine`, `cellScripts`, `cellCrossShow/Clear`, `cellInfo()` (tests:
+  let-variables like `cur` / `DISP` aren't window properties, so the page around reads them through it).
+- **The page around** (`mcRender`): `body.multi`, its own chart hidden (still loaded with charts[0]), `#mcGrid` of
+  `.mc-cell > iframe`. Wrapped while a grid is on: `openSymbol` (-> active frame), `arm` (BUY / SELL -> active frame),
+  `peAdd` / `peSave` (Pine -> active frame / all frames), `acctSwitch`, `applyTheme`, `toast` (dedupe 3 s). layouts.js:
+  `layTouch` does nothing on a desktop grid (the frames report), `LAY.cell` = the active chart; `layApplyChart(c)`.
+- **Phone:** no frames. The page's own chart shows `charts[LAY.cell]` (`mcPhoneCell(k)` applies it); `layTouch` saves into
+  that index. The body class `mob` switching on / off re-renders (MutationObserver).
+- boot() now waits for DOMContentLoaded before `loadPrefs()` (so a frame never starts with the shared prefs: its
+  overrides are in place first).
+- Next: v0.24.1 contract / timeframe / date-range sync (the page around relays like the crosshair: `mcEach`).
 
 ## Layouts (v0.23.0)
 
@@ -263,9 +286,9 @@ indicator option to add (not built).
 2. Compare the app's charges with what Fyers deducted (roadmap item 1, last part).
 3. Monday: read the order-flow check with the owner; the footprint only if it's exact (and decide roadmap item 12,
    seconds / tick charts, from the same numbers). Then Telegram alerts, the journal, saved layouts, multi-charts
-   (the owner's order, 1 Nov: multi-charts (item 6) next - agree its design first (roadmap item 6 has the suggestions),
-   then Telegram (3) and the journal (4); item 8, CFD prices, is on hold). Shipped and waiting for the owner's try:
-   measurement and drawing tools (v0.22.0), layouts (v0.23.0).
+   (the owner's order, 1 Nov: multi-charts (item 6) - v0.24.0 shipped, v0.24.1 sync next - then Telegram (3) and the
+   journal (4); item 8, CFD prices, is on hold). Shipped and waiting for the owner's try: measurement and drawing tools
+   (v0.22.0), layouts (v0.23.0), angles (v0.23.1), multi-charts (v0.24.0).
 4. The owner tries the phone layout (v0.19.0) and the order bubble (v0.20.3) on his phone; fix what he reports.
 5. The owner checks v0.20.0 on real Fyers: Pivot Points and the Chandelier exit on GOLDPETAL 2m, scrolling back,
    and the Style / Visibility tabs on his own scripts.
