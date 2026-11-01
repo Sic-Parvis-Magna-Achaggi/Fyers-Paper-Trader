@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 1 Nov 2026, version **0.20.9**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 1 Nov 2026, version **0.21.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -78,6 +78,15 @@ plus the order-flow check's contracts for the admin); browsers add theirs throug
 Standard: **100 contracts** on the data socket (5,000 on Prime); seconds history (5S-45S) is Prime-only, 30 trading
 days. Item 11 (multiple watchlists) comes right after item 10; item 12 (seconds / tick charts) is decided after
 Monday's order-flow check.
+
+## Watchlists (v0.21.0)
+
+index.html: prefs `wlists` = [{id, name, items: [symbol rows]}] and `wl` (the list on screen); `watch` is that list's
+items (other code - sendWant, pages.js - reads `watch`, so it still means "the list on screen"); `wlLoad()` (boot; the
+old pref `watch` becomes "Watchlist"), `wlSave()` (also mirrors `watch`), `wlSwitch()`, `renderWlBar()` (switcher,
+＋, ⋯ menu, inline name editor). 10 lists x 30. Feed: `want()` 40 a page; `wanted()` puts `extra()` (trades / orders,
+order-flow check) first, then the rest, cut at 95; `_poll()` batches quotes by 50. Item 10 will record the union of all
+lists' items from prefs `wlists` server-side.
 
 ## Users on the server
 

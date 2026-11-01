@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.21.0 — 1 Nov 2026 — Multiple watchlists
+
+Added
+- **Several named watchlists** (owner, 1 Nov). A switcher at the top of the Watchlist tab (on the phone: Quotes ›
+  Watchlist): pick a list; **＋** makes a new one; **⋯** renames it, moves it up or down, or deletes it (tap twice; the
+  last list stays). Up to 10 lists of 30 contracts (a list held 15 before). **+** in Find (and right-click in the option
+  chain) adds to the list on screen. Saved on the server: every device opens the same lists, on the list you last had.
+  Your watchlist from before is the first list, "Watchlist".
+- Only the list on screen is streamed (with the chart and your trades). A page now streams up to 40 contracts (was 20);
+  the server stays inside Fyers' Standard limit of 100 on the price socket, and the contracts of open trades and orders
+  always come first (before, the cut was alphabetical).
+- When Fyers' socket is down, quotes are polled 50 symbols a request (Fyers' maximum), so more than 50 contracts poll
+  too.
+
+Tests
+- `tests/watchlists_flow.js` (16 checks, new): the old watchlist becomes "Watchlist"; new, rename, a taken name,
+  move, delete (two taps, not the last); + in Find adds to the list on screen; only that list is streamed; 30 a list;
+  a reload brings the lists back; the phone's Quotes tab.
+- `tests/feed_test.py` (6 checks, new): 40 a page, at most 95 on the socket with trades first, polls of 50.
+
 ## v0.20.9 — 1 Nov 2026 — Roadmap: live candles, multiple watchlists, seconds / tick charts (docs only)
 
 Docs

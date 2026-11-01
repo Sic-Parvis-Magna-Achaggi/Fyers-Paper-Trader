@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 1 Nov 2026 (v0.20.9). This is the one task list for the project.
+Updated 1 Nov 2026 (v0.21.0). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -74,13 +74,14 @@ Updated 1 Nov 2026 (v0.20.9). This is the one task list for the project.
     - **Keep:** settable on the Account page, default **1 year** (about 150 MB for 10 contracts on the 25 GB disk); older
       ones are deleted on their own; the Account page shows the space used.
     - Caveat: built from snapshots, so a spike between two snapshots can be missing from a live candle's high / low.
-11. [ ] **Multiple watchlists** (asked 1 Nov 2026; right after item 10)
-    - Named lists (e.g. MCX, Index F&O, Stocks): new, rename, delete, reorder; a switcher on the Watchlist tab and the
-      phone's Quotes tab; saved on the server.
-    - The server records the contracts of **all** lists (not just the one on screen). Deleting a list stops recording its
-      contracts unless they're in another list or a trade; what's recorded is kept until it expires. A new list records
-      from when its contracts are added.
-    - More than 20 prices per page (the cap today), inside the 100-contract socket limit.
+11. [ ] **Multiple watchlists** (asked 1 Nov 2026; built ahead of item 10 on the owner's word, 1 Nov). The lists are done; recording them waits for item 10.
+    - [x] Named lists (e.g. MCX, Index F&O, Stocks), up to 10 of 30: new, rename, delete (two taps, never the last),
+      move up / down; a switcher on the Watchlist tab and the phone's Quotes tab; saved on the server. *(v0.21.0)*
+    - [ ] The server records the contracts of **all** lists (not just the one on screen) - built with item 10. Deleting a
+      list stops recording its contracts unless they're in another list or a trade; what's recorded is kept until it
+      expires. A new list records from when its contracts are added.
+    - [x] 40 prices per page (was 20); the socket stays inside the 100-contract limit with open trades and orders always
+      first; polled quotes in requests of 50. *(v0.21.0)*
 12. [ ] **Seconds and tick charts** (asked 1 Nov 2026; **decide after Monday's order-flow check**)
     - Fyers' own seconds candles (5s-45s) need **Prime** and reach back 30 trading days only. On Standard: the live
       recording (item 10) also keeps one-second detail (kept 30 days, settable; about 1.5-2 MB a day per busy contract),
@@ -120,6 +121,7 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Done
 
+- [x] **v0.21.0** (1 Nov): multiple watchlists (item 11, the lists; recording them comes with item 10).
 - [x] **v0.20.8** (1 Nov): data check on every chart: a warning when the candles disagree with Fyers' live figures for the same day (open, high, low, volume, last price after the close) (asked 1 Nov).
 - [x] **v0.20.7** (1 Nov): a day Fyers corrects later reaches the saved candles (the week before is re-checked); v0.20.6's explanation corrected (Fyers rewrote GOLDPETAL's 30 Oct; its own chart shows the same).
 - [x] **v0.20.6** (1 Nov): charts show the contract you opened: history no longer asks for Fyers' continuous series (GOLDPETAL NOV's 30 Oct came back as the expiring OCT contract); saved futures / options candles reloaded once; the browser re-takes the last 3 days from the server (reported 1 Nov).

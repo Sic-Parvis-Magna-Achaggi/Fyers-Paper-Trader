@@ -60,6 +60,12 @@ aside{border-right:1px solid var(--line);background:var(--panel);display:flex;fl
 .seg{display:flex;gap:4px;margin-top:8px}
 .seg button{flex:1;padding:4px 0;font-size:12px}
 .seg button.on{border-color:var(--accent);color:var(--accent)}
+.wlbar,.wledit{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+.wlbar select,.wledit input{flex:1;min-width:0}
+.wlbar button{padding:4px 10px}
+.wlmenu{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.wlmenu button{flex:1 1 45%}
+body.mob .wlbar button,body.mob .wlmenu button,body.mob .wledit button{min-height:40px}
 .row{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:6px;cursor:pointer}
 .row:hover{background:var(--panel2)}
 .row .name{flex:1;min-width:0}
@@ -589,7 +595,7 @@ body:not(.is-admin) .admin-only{display:none!important}
   <main>
     <aside>
       <div class="tabs"><button data-tab="watch" class="on">Watchlist</button><button data-tab="find">Find</button><button data-tab="chain">Options</button></div>
-      <div class="pane" id="tWatch"><div id="watchList"></div></div>
+      <div class="pane" id="tWatch"><div id="wlBar"></div><div id="watchList"></div></div>
       <div class="pane hide" id="tFind">
         <input id="q" placeholder="nifty, reliance, sensex 80000 ce, crudeoil, usdinr" autocomplete="off">
         <div class="seg" id="exf"><button data-x="" class="on">All</button><button data-x="NSE">NSE</button><button data-x="BSE">BSE</button><button data-x="MCX">MCX</button></div>
@@ -817,7 +823,7 @@ function bucket(ts, plan){                // ts: seconds already shifted to IST
   const d = new Date(ts * 1000); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) / 1000;
 }
 let S = {};                              // last /api/state
-let watch = prefGet("watch", []);        // [{s, d}]
+let watch = prefGet("watch", []);        // the watchlist on screen: [{s, d, ...}] (the items of wlCur())
 let cur = prefGet("cur", null);          // {s, d, tick}
 let tf = prefGet("tf2", "5m");
 let tfFav = prefGet("tfs", ["1m","5m","15m","1h","4h","1D"]);
@@ -909,7 +915,7 @@ function connectWS(){
 }
 function sendWant(){
   if(!ws || ws.readyState !== 1) return;
-  const want = [...new Set([...(cur ? [cur.s] : []), ...wantSymbols(), ...pagesWant(), ...watch.map(w => w.s)])].slice(0, 20);
+  const want = [...new Set([...(cur ? [cur.s] : []), ...wantSymbols(), ...pagesWant(), ...watch.map(w => w.s)])].slice(0, 40);
   ws.send(JSON.stringify({want, depth: pagesDepthWant() || bookSymbol()}));
 }
 function onTick(t){
@@ -2097,8 +2103,8 @@ function rowEl(r, {inWatch} = {}){
   if(last[r.s]) px.textContent = fmt(last[r.s].ltp, r.tick);
   el.onclick = () => openSymbol(r);
   const x = document.createElement("button"); x.className = "x";
-  if(inWatch){ x.textContent = "×"; x.title = "Remove"; x.onclick = e => { e.stopPropagation(); watch = watch.filter(w => w.s !== r.s); prefSet("watch", watch); renderWatch(); sendWant(); }; }
-  else { x.textContent = "+"; x.title = "Add to watchlist"; x.onclick = e => { e.stopPropagation(); addWatch(r); }; }
+  if(inWatch){ x.textContent = "×"; x.title = "Remove from this list"; x.onclick = e => { e.stopPropagation(); watch = watch.filter(w => w.s !== r.s); wlSave(); renderWatch(); sendWant(); }; }
+  else { x.textContent = "+"; x.title = "Add to the watchlist on screen"; x.onclick = e => { e.stopPropagation(); addWatch(r); }; }
   el.append(x);
   if((r.f === "FUT" || r.f === "IDX" || r.f === "EQ") && !inWatch){
     const o = document.createElement("button"); o.className = "x"; o.textContent = "Opt"; o.title = "Option chain";
@@ -2107,15 +2113,75 @@ function rowEl(r, {inWatch} = {}){
   return el;
 }
 function addWatch(r){
-  if(watch.some(w => w.s === r.s)) return toast("Already in the watchlist");
-  if(watch.length >= 15) return toast("Watchlist is full (15)");
-  watch.push(r); prefSet("watch", watch); renderWatch(); sendWant(); toast("Added " + symLabel(r.s));
+  const L = wlCur();
+  if(watch.some(w => w.s === r.s)) return toast(`Already in ${L.name}`);
+  if(watch.length >= WL_ITEMS) return toast(`${L.name} is full (${WL_ITEMS})`);
+  watch.push(r); wlSave(); renderWatch(); sendWant(); toast(`Added ${symLabel(r.s)} to ${L.name}`);
+}
+/* watchlists (owner, 1 Nov): several named lists, saved on the server - prefs "wlists" [{id, name, items}] and "wl" (the
+   list on screen). `watch` is the list on screen; only it is streamed (with the chart and your trades). Up to 10 lists
+   of 30. The watchlist from before becomes the first list, "Watchlist". + in Find adds to the list on screen. */
+const WL_MAX = 10, WL_ITEMS = 30;
+let WL = [], wlId = "", wlDel = null;
+function wlCur(){ return WL.find(l => l.id === wlId) || WL[0]; }
+function wlLoad(){
+  const saved = prefGet("wlists", null);
+  WL = Array.isArray(saved) && saved.length ? saved.filter(l => l && l.id && Array.isArray(l.items)) : [];
+  if(!WL.length) WL = [{id: "w1", name: "Watchlist", items: prefGet("watch", []) || []}];
+  wlId = prefGet("wl", WL[0].id);
+  if(!WL.some(l => l.id === wlId)) wlId = WL[0].id;
+  watch = wlCur().items;
+}
+function wlSave(){ wlCur().items = watch; prefSet("wlists", WL); prefSet("wl", wlId); prefSet("watch", watch); }
+function wlSwitch(id){
+  if(!WL.some(l => l.id === id)) return;
+  wlCur().items = watch; wlId = id; watch = wlCur().items; wlDel = null;
+  prefSet("wl", wlId); prefSet("watch", watch); renderWatch(); sendWant();
+}
+function renderWlBar(mode){
+  const box = $("#wlBar"); if(!box) return;
+  const L = wlCur();
+  if(mode === "new" || mode === "rename"){
+    box.innerHTML = `<div class="wledit"><input id="wlName" maxlength="30" placeholder="List name" autocomplete="off"><button class="primary" id="wlOk">Save</button><button id="wlCancel">Cancel</button></div>`;
+    const inp = $("#wlName"); inp.value = mode === "rename" ? L.name : ""; inp.focus();
+    const ok = () => {
+      const name = inp.value.trim().replace(/\s+/g, " ");
+      if(!name) return toast("Give the list a name");
+      if(WL.some(l => l.name.toLowerCase() === name.toLowerCase() && !(mode === "rename" && l.id === L.id))) return toast(`There's already a list called ${name}`);
+      if(mode === "new"){ const id = "w" + Date.now().toString(36); wlCur().items = watch; WL.push({id, name, items: []}); wlId = id; watch = wlCur().items; sendWant(); }
+      else L.name = name;
+      wlSave(); renderWatch();
+    };
+    $("#wlOk").onclick = ok; $("#wlCancel").onclick = () => renderWlBar();
+    inp.onkeydown = e => { if(e.key === "Enter") ok(); if(e.key === "Escape") renderWlBar(); };
+    return;
+  }
+  box.innerHTML = `<div class="wlbar"><select id="wlSel" title="Watchlists">${WL.map(l => `<option value="${esc(l.id)}" ${l.id === L.id ? "selected" : ""}>${esc(l.name)} (${l.id === L.id ? watch.length : l.items.length})</option>`).join("")}</select>
+      <button id="wlNew" title="New list">＋</button><button id="wlMore" title="Rename, move or delete this list">⋯</button></div>
+    ${mode === "menu" ? `<div class="wlmenu"><button data-a="rename">Rename</button><button data-a="up" ${WL[0].id === L.id ? "disabled" : ""}>Move up</button><button data-a="down" ${WL[WL.length - 1].id === L.id ? "disabled" : ""}>Move down</button>
+      <button data-a="del" class="danger">${wlDel === L.id ? `Tap again to delete ${esc(L.name)}${watch.length ? ` (${watch.length})` : ""}` : "Delete list"}</button></div>` : ""}`;
+  $("#wlSel").onchange = e => wlSwitch(e.target.value);
+  $("#wlNew").onclick = () => { if(WL.length >= WL_MAX) return toast(`At most ${WL_MAX} lists`); renderWlBar("new"); };
+  $("#wlMore").onclick = () => { wlDel = null; renderWlBar(mode === "menu" ? "" : "menu"); };
+  box.querySelectorAll(".wlmenu [data-a]").forEach(b => b.onclick = () => {
+    const a = b.dataset.a, i = WL.findIndex(l => l.id === L.id);
+    if(a === "rename") return renderWlBar("rename");
+    if(a === "up" || a === "down"){ const j = a === "up" ? i - 1 : i + 1; if(j < 0 || j >= WL.length) return; [WL[i], WL[j]] = [WL[j], WL[i]]; wlSave(); return renderWlBar("menu"); }
+    if(a === "del"){
+      if(WL.length === 1) return toast("Keep at least one list");
+      if(wlDel !== L.id){ wlDel = L.id; setTimeout(() => { if(wlDel === L.id){ wlDel = null; if($(".wlmenu")) renderWlBar("menu"); } }, 3000); return renderWlBar("menu"); }
+      wlDel = null; WL.splice(i, 1); wlId = WL[Math.min(i, WL.length - 1)].id; watch = wlCur().items;
+      wlSave(); renderWatch(); sendWant(); toast(`Deleted ${L.name}`);
+    }
+  });
 }
 function renderWatch(){
+  renderWlBar();
   const box = $("#watchList"); box.innerHTML = "";
   const now = Date.now()/1000;
   watch = watch.filter(w => !w.exp || w.exp > now - 86400);
-  if(!watch.length){ box.innerHTML = `<div class="empty">Nothing here yet. Use Find, then + to add contracts.</div>`; return; }
+  if(WL.length) wlCur().items = watch;
+  if(!watch.length){ box.innerHTML = `<div class="empty">Nothing in ${esc(wlCur() ? wlCur().name : "this list")} yet. Use Find, then + to add contracts.</div>`; return; }
   for(const w of watch) box.append(rowEl(w, {inWatch:true}));
 }
 let kind = "", exf = "", qTimer = null;
@@ -2299,7 +2365,7 @@ async function boot(){
   applyTheme();
   if(!await refreshState()) return;
   await loadPrefs();
-  watch = prefGet("watch", []); cur = prefGet("cur", null); tf = prefGet("tf2", "5m"); tfFav = prefGet("tfs", tfFav);
+  wlLoad(); cur = prefGet("cur", null); tf = prefGet("tf2", "5m"); tfFav = prefGet("tfs", tfFav);
   document.body.classList.toggle("nopanel", !!prefGet("nopanel", false));
   applyTheme();
   if(prefGet("pineOpen", false)) setTimeout(() => peOpen(null), 300);   // the Pine Editor was open last time

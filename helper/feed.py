@@ -57,7 +57,7 @@ class Feed:
         self._resync()
 
     def want(self, c: Client, symbols: list):
-        c.symbols = set([s for s in symbols if isinstance(s, str) and ":" in s][:20])
+        c.symbols = set([s for s in symbols if isinstance(s, str) and ":" in s][:40])   # a page: its chart + the list on screen (30)
         self._resync()
         for s in c.symbols:                       # send the last known price straight away
             if s in self.last:
@@ -83,15 +83,15 @@ class Feed:
         return sorted(u)[:5]
 
     def wanted(self) -> list:
-        u = set()
+        u, first = set(), set()
         for c in self.clients:
             u |= c.symbols
         if self.extra:
             try:
-                u |= set(self.extra())
+                first = set(self.extra())          # open trades and orders (and the order-flow check): never cut
             except Exception as e:
                 log.warning(self._tag() + "engine symbols: %s", e)
-        return sorted(u)[:95]                     # Standard plan: 100 symbols on the data socket
+        return (sorted(first) + sorted(u - first))[:95]   # Standard plan: 100 symbols on the data socket
 
     def _offer(self, c: Client, msg: dict):
         try:
@@ -279,8 +279,10 @@ class Feed:
                 log.debug("quote poll failed: %s", e)
 
     def _poll(self, symbols: list) -> list:
-        out = []
-        for s, v in self.link.quotes(symbols).items():
+        out, got = [], {}
+        for i in range(0, len(symbols), 50):           # Fyers' quotes take 50 symbols a request
+            got.update(self.link.quotes(symbols[i:i + 50]))
+        for s, v in got.items():
             if v.get("lp") is not None:
                 out.append({"s": s, "ltp": v.get("lp"), "bid": v.get("bid"), "ask": v.get("ask"),
                             "t": v.get("tt") or int(time.time()), "vol": v.get("volume"), "src": "poll",

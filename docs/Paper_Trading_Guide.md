@@ -10,7 +10,8 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
 - **A fresh code is asked again** (valid 5 minutes) for sensitive actions: adding or changing users, new recovery codes, moving 2FA, editing charge rates, turning an account Live, Resume after the kill switch.
 - **Lockout:** 5 wrong passwords or codes lock that user for 15 minutes. Sessions end after 48 hours without use and after 7 days at most.
 - **Users (admin only, Settings → Users):** add a user with a temporary password. They choose their own password and set up 2FA at first login, then enter their own Fyers app in their Settings for prices. You can disable / enable a user, reset their 2FA (lost phone) or give them a new temporary password. Other users are paper-only; live trading is the admin's only.
-- **Everything is per user:** Fyers app and login, watchlist, chart set-up, Pine scripts, paper accounts. Charge rates are shared; only the admin edits them.
+- **Watchlists:** several named lists. At the top of the Watchlist tab (phone: Quotes › Watchlist) pick a list; **＋** makes a new one; **⋯** renames, moves up / down or deletes it (tap Delete twice; the last list can't be deleted). Up to 10 lists of 30 contracts. **+** in Find adds to the list on screen. Only the list on screen streams prices (with your chart and your trades). Saved on the server, so every device has the same lists.
+- **Everything is per user:** Fyers app and login, watchlists, chart set-up, Pine scripts, paper accounts. Charge rates are shared; only the admin edits them.
 - **Lost phone and recovery codes (admin):** on the server console, in `/home/helper/app`, run `sudo -u helper /home/helper/venv/bin/python -m helper.users rescue admin`. It prints a temporary password; log in with it and set up 2FA again.
 
 ## Paper accounts
