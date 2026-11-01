@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 1 Nov 2026 (v0.24.0). This is the one task list for the project.
+Updated 1 Nov 2026 (v0.24.1). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -41,11 +41,11 @@ ahead of 3-6.
    - Paper and live trades arrive automatically, per user and account.
    - 8 pillars audit; notes, tags, plan; insights; review calendar; filters and stats.
    - Screenshots on the server, with the chart captured automatically at entry and exit. Telegram as a backup copy.
-**Order change (owner, 1 Nov 2026, after v0.22.0):** item 5 (saved layouts, done in v0.23.0), then 6 (multi-charts, next);
-Telegram (3) and the journal (4) after them.
+**Order change (owner, 1 Nov 2026, after v0.22.0):** item 5 (saved layouts, done in v0.23.0), then 6 (multi-charts, done in
+v0.24.0 / v0.24.1); Telegram (3) and the journal (4) next.
 
 5. [x] **Saved chart layouts, per user** (asked 31 Oct 2026): shipped in **v0.23.0**, see Done.
-6. [ ] **Multi-charts in a layout** (asked 31 Oct 2026). First step shipped in **v0.24.0**; sync of contract / timeframe / date range next (v0.24.1).
+6. [x] **Multi-charts in a layout** (asked 31 Oct 2026): shipped in **v0.24.0** and **v0.24.1** (sync), see Done.
    - Several charts side by side and stacked (vertical and horizontal splits) inside one layout, each with its own contract, timeframe and indicators. Saved with the layout.
    - **Agreed 1 Nov 2026 (owner: "Ok"), in two steps.** v0.24.0: grids 1 / 2 side by side / 2 stacked / 3 (one big + two) /
      2×2, each chart fully its own (contract, timeframe, type, indicators, Pine, its contract's drawings), saved in the
@@ -53,7 +53,9 @@ Telegram (3) and the journal (4) after them.
      trades show on every chart of their contract; crosshair sync (on by default); the phone shows one chart at a time
      with buttons to switch. v0.24.1: contract, timeframe and date-range sync.
    - [x] v0.24.0: grids, each chart its own, the active chart, saved in the layout, crosshair sync, the phone. *(v0.24.0)*
-   - [ ] v0.24.1: contract, timeframe and date-range sync.
+   - [x] v0.24.1: contract, timeframe and date-range sync, each a tick box in the Grid menu (saved
+     with the layout). Ticking one lines every chart up with the active chart at once. Date range is matched by time
+     (works across timeframes). Phone: contract and timeframe sync apply to all the layout's charts. *(v0.24.1)*
    - Earlier suggestion, 1 Nov 2026: grids 1, 2 side by side, 2 stacked, 3 (one big + two),
      2×2; sync options per layout like TradingView (crosshair, contract, timeframe, date range); the trade panel and the
      BUY / SELL tool act on the chart last clicked (highlighted); the phone shows one chart at a time and swipes between
@@ -152,6 +154,7 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Done
 
+- [x] **v0.24.1** (1 Nov): multi-charts, second step (item 6 complete): contract, timeframe and date-range sync.
 - [x] **v0.24.0** (1 Nov): multi-charts, first step (item 6): 1 / 2 / 2 / 3 / 2×2 grids, each chart its own, the active chart for the watchlist, BUY / SELL and Pine, crosshair sync, the phone's chart buttons.
 - [x] **v0.23.1** (1 Nov): angles on drawings (Show angle on lines, channels, regression; the Trend angle tool; degrees on screen + slope per bar; P&F in boxes).
 - [x] **v0.23.0** (1 Nov): saved chart layouts (item 5, asked 31 Oct). Design (1 Nov; Claude's suggestions taken where the

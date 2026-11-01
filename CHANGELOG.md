@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.24.1 — 1 Nov 2026 — Sync in multi-chart layouts
+
+Added
+- **Sync the charts of a grid** (roadmap item 6, second step), each a tick box in the Grid menu, saved with the layout:
+  - **Contract:** a contract opened from the watchlist / Find opens on every chart (each keeps its timeframe and type).
+  - **Timeframe:** a timeframe picked on any chart goes to all of them.
+  - **Date range:** scroll or zoom one chart and the others show the same stretch of time (matched by time, so it works
+    across timeframes).
+  - **Crosshair** (from v0.24.0).
+  Ticking contract, timeframe or date range lines every chart up with the active one at once.
+- Phone: contract and timeframe sync apply to all the layout's charts (the one shown and the others, for when you switch).
+
+Fixed
+- A click in a chart of the grid now closes the menus of the page around it (Grid, Layouts...); before, the click never
+  reached them.
+- **A layout change could be lost** (since v0.23.0): a change made while the layout's previous save was on its way to the
+  server (e.g. a chart reporting its new timeframe, a sync option) was dropped when the server's answer came back. The
+  open layout now keeps the page's own copy. Found by the full test run (3 multi-chart checks); a new check holds each
+  save for a second to make it happen every time (it fails on the old code).
+
+Tests
+- `tests/layouts_flow.js` (31 checks, was 30): a change made while a save is on its way reaches the saved layout.
+- `tests/mobile_flow.js`: the SL-drag check waits up to 3 s for the order sheet to catch up with the last tick (it failed once
+  in the full run when the fake feed moved 4 points between the sheet's redraw and the read; 61/61 on re-runs).
+- `tests/multichart_flow.js` (43 checks, was 33): the sync options; contract sync (ticking it, then the watchlist); timeframe
+  sync (ticking it, then a timeframe picked on another chart); date-range sync (zoom and drag one chart, the others follow);
+  sync off; a chart click closing the Grid menu; timeframe sync on the phone.
+
 ## v0.24.0 — 1 Nov 2026 — Multi-charts in a layout
 
 Added

@@ -31,7 +31,13 @@ function layEq(a, b){ return JSON.stringify(layNorm(a || {})) === JSON.stringify
 function layId(){ return Math.random().toString(36).slice(2, 10); }
 async function layPost(body){
   const j = await api("/api/layouts", {body});
-  if(j.ok){ LAY.list = j.layouts || []; if(body.op !== "put" || body.activate) LAY.active = j.active || LAY.active; }
+  if(j.ok){
+    // the server's list, but the open layout keeps the page's own copy: a change made while this save was on its way
+    // (a chart reporting a new timeframe, a sync option) would otherwise be lost when the answer replaces it
+    const mine = layCur();
+    LAY.list = (j.layouts || []).map(l => mine && l.id === mine.id ? Object.assign(mine, {name: l.name, updated: l.updated}) : l);
+    if(body.op !== "put" || body.activate) LAY.active = j.active || LAY.active;
+  }
   else toast("Layouts: " + (j.error || "not saved"));
   layUi();
   return j;
@@ -44,6 +50,7 @@ function layTouch(){
   if(!layAuto()){ const was = LAY.dirty; LAY.dirty = !layEq(layNow(), (L.charts || [])[i]); if(was !== LAY.dirty) layUi(); return; }   // by hand: just marked unsaved
   L.charts = L.charts && L.charts.length ? L.charts : [{}];
   L.charts[i] = layNow();
+  if(typeof mcAfterTouch === "function") mcAfterTouch(L, i);   // (the phone with a grid: contract / timeframe sync)
   clearTimeout(LAY.saveT);
   LAY.saveT = setTimeout(layFlush, 900);
   layUi();
@@ -52,7 +59,7 @@ function layTouch(){
 async function laySave(){
   const L = layCur(); if(!L) return;
   L.charts = L.charts && L.charts.length ? L.charts : [{}];
-  if(!layGridOn()) L.charts[layIdx(L)] = layNow();       // (a grid's charts are already in it)
+  if(!layGridOn()){ L.charts[layIdx(L)] = layNow(); if(typeof mcAfterTouch === "function") mcAfterTouch(L, layIdx(L)); }   // (a grid's charts are already in it)
   LAY.dirty = false;
   await layFlush(); toast(`Layout "${L.name}" saved`);
 }

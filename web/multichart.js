@@ -28,7 +28,7 @@ function mcMob(){ return document.body.classList.contains("mob"); }
 function mcOn(){ return LAY.ready && mcGrid() !== "1" && !mcMob(); }
 function mcN(){ return MC_GRIDS[mcGrid()].n; }
 function mcWin(i = LAY.cell){ const f = MC.cells[i]; try{ const w = f && f.contentWindow; return w && w.FTM_CELL_READY ? w : null; }catch(e){ return null; } }
-function mcSync(){ const L = layCur(); return {cross: true, ...((L && L.sync) || {})}; }
+function mcSync(){ const L = layCur(); return {cross: true, sym: false, tf: false, range: false, ...((L && L.sync) || {})}; }
 /* a frame's set-up, and its changes (into the open layout, saved as the layout saves) */
 function mcCellState(i){
   const L = layCur(); if(!L) return null;
@@ -49,6 +49,7 @@ function mcCellSet(i, c){
 }
 /* the active chart: what the watchlist, Find, BUY / SELL and the Pine Editor act on */
 function mcActive(i){
+  for(const id of ["#gridPick", "#layPick", "#ctPick", "#cfgPick", "#tfPick", "#indPick", "#dtbFly", "#drLst", "#drMenu", "#dcol"]){ const x = $(id); if(x) x.classList.add("hide"); }   // (a click in a chart's frame never reaches this page's own "click outside" handlers)
   if(i === LAY.cell || i >= mcN()) return;
   LAY.cell = i; mcMark(); mcTicket();
 }
@@ -122,11 +123,20 @@ function mcMenu(){
   p.innerHTML = `<div class="cfgh"><b>Charts in this layout</b><button class="ghost" id="gridClose">✕</button></div>
     <div class="mc-opts">${Object.entries(MC_GRIDS).map(([k, v]) => `<button data-g="${k}" class="${k === g ? "on" : ""}" title="${v.name}">${mcSvg(k)}<span>${v.name}</span></button>`).join("")}</div>
     <div class="sec">Sync</div>
-    <label class="chk"><input type="checkbox" id="mcCross" ${sy.cross ? "checked" : ""}> Crosshair: follows across the charts</label>
-    <p class="help" style="margin:8px 0 0">Each chart has its own contract, timeframe, chart type, indicators and drawings, saved in the layout. Click a chart to make it the active one (blue border): the watchlist, Find, BUY / SELL and the Pine Editor work on it. ⛶ (or F) in a chart shows it big; again to go back. ${mcMob() ? "On the phone one chart shows at a time: the numbers above the chart switch." : ""} Contract, timeframe and date-range sync come next.</p>`;
+    <label class="chk"><input type="checkbox" id="mcSym" ${sy.sym ? "checked" : ""}> Contract: a contract opened on one chart opens on all</label>
+    <label class="chk"><input type="checkbox" id="mcTf" ${sy.tf ? "checked" : ""}> Timeframe: one chart's timeframe on all</label>
+    <label class="chk"><input type="checkbox" id="mcRange" ${sy.range ? "checked" : ""} ${mcMob() ? "disabled" : ""}> Date range: scroll / zoom one chart, the others show the same time</label>
+    <label class="chk"><input type="checkbox" id="mcCross" ${sy.cross ? "checked" : ""} ${mcMob() ? "disabled" : ""}> Crosshair: follows across the charts</label>
+    <p class="help" style="margin:4px 0 0">Ticking contract, timeframe or date range lines every chart up with the active one now.</p>
+    <p class="help" style="margin:8px 0 0">Each chart has its own contract, timeframe, chart type, indicators and drawings, saved in the layout. Click a chart to make it the active one (blue border): the watchlist, Find, BUY / SELL and the Pine Editor work on it. ⛶ (or F) in a chart shows it big; again to go back. ${mcMob() ? "On the phone one chart shows at a time: the numbers above the chart switch." : ""}</p>`;
   p.querySelectorAll("[data-g]").forEach(b => b.onclick = () => mcSetGrid(b.dataset.g));
   $("#gridClose").onclick = () => p.classList.add("hide");
   $("#mcCross").onchange = e => { const L = layCur(); if(!L) return; L.sync = {...mcSync(), cross: e.target.checked}; mcSaveLayout(); if(!e.target.checked) mcCrossOut(-1); };
+  for(const [id, k] of [["#mcSym", "sym"], ["#mcTf", "tf"], ["#mcRange", "range"]]) $(id).onchange = e => {
+    const L = layCur(); if(!L) return;
+    L.sync = {...mcSync(), [k]: e.target.checked}; mcSaveLayout();
+    if(e.target.checked) mcLineUp(k);                    // every chart lined up with the active one now
+  };
 }
 function mcSaveLayout(){ if(layAuto()){ clearTimeout(LAY.saveT); LAY.saveT = setTimeout(layFlush, 300); } else { LAY.dirty = true; layUi(); } }
 async function mcSetGrid(g){
@@ -164,6 +174,28 @@ async function mcPhoneCell(k){
   await layApplyChart((L.charts || [])[k] || {}); layPrefsNow();
   mcDots();
 }
+/* sync: contract, timeframe, date range. A change on one chart goes to the others; ticking an option lines them all
+   up with the active chart. Phone: the layout's other charts take the contract / timeframe (mcAfterTouch). */
+async function mcRow(s){ if(sym[s]) return sym[s]; const j = await api("/api/symbol?s=" + encodeURIComponent(s)); if(j.ok){ sym[j.row.s] = j.row; return j.row; } return null; }
+async function mcLineUp(k){
+  const L = layCur(); if(!L) return;
+  const src = (L.charts || [])[LAY.cell] || {};
+  if(!mcOn()){                                            // the phone: into the layout's charts
+    (L.charts || []).forEach((c, i) => { if(i === LAY.cell) return; if(k === "sym" && src.cur) c.cur = layCopy(src.cur); if(k === "tf" && src.tf2) c.tf2 = src.tf2; });
+    mcSaveLayout(); mcDots(); return;
+  }
+  if(k === "sym" && src.cur){ const row = await mcRow(src.cur.s); if(row) mcEach((w, i) => { if(i !== LAY.cell && w.cellInfo().s !== row.s) w.openSymbol(row); }); }
+  if(k === "tf" && src.tf2) mcEach((w, i) => { if(i !== LAY.cell) w.cellSetTf(src.tf2); });
+  if(k === "range"){ const w = mcWin(); const r = w && w.cellRangeNow(); if(r) mcRange(LAY.cell, r, true); }
+}
+function mcTf(i, k){ if(!mcSync().tf) return; mcEach((w, j) => { if(j !== i) w.cellSetTf(k); }); }
+function mcRange(i, r, force){ if(!force && !mcSync().range) return; mcEach((w, j) => { if(j !== i) w.cellRange(r); }); }
+function mcAfterTouch(L, i){                              // the phone: a change on the chart shown, into the others
+  if(mcGrid() === "1" || !mcMob()) return;
+  const sy = mcSync(), src = L.charts[i];
+  L.charts.forEach((c, k) => { if(k === i) return; if(sy.sym && src.cur) c.cur = layCopy(src.cur); if(sy.tf && src.tf2) c.tf2 = src.tf2; });
+  mcDots();
+}
 /* the crosshair across the charts */
 function mcCross(i, x){ if(!mcSync().cross) return; MC.cells.forEach((f, k) => { if(k === i) return; const w = mcWin(k); if(w && w.cellCrossShow) w.cellCrossShow(x); }); }
 function mcCrossOut(i){ MC.cells.forEach((f, k) => { if(k === i) return; const w = mcWin(k); if(w && w.cellCrossClear) w.cellCrossClear(); }); }
@@ -180,6 +212,7 @@ function mcEach(fn){ MC.cells.forEach((f, k) => { const w = mcWin(k); if(w) try{
     sym[row.s] = row;
     const w = mcWin(); if(!w){ toast("That chart is still loading"); return; }
     w.openSymbol(row); paperOnSymbol(row);
+    if(mcSync().sym) mcEach((x, i) => { if(i !== LAY.cell) x.openSymbol(row); });   // contract sync: on every chart
   };
   const ar = arm;
   arm = function(side){ if(!mcOn()) return ar.apply(this, arguments); const w = mcWin(); if(w) w.arm(side); else toast("That chart is still loading"); };
@@ -212,6 +245,7 @@ function mcEach(fn){ MC.cells.forEach((f, k) => { const w = mcWin(k); if(w) try{
   }).observe(document.body, {attributes: true, attributeFilter: ["class"]});
   MC.mob = mcMob();
 })();
+window.mcTf = mcTf; window.mcRange = mcRange; window.mcAfterTouch = mcAfterTouch; window.mcSync = mcSync;
 window.mcOn = mcOn; window.mcRender = mcRender; window.mcGrid = mcGrid; window.mcWin = mcWin; window.mcSetGrid = mcSetGrid; window.mcPhoneCell = mcPhoneCell;
 window.mcCellState = mcCellState; window.mcCellSet = mcCellSet; window.mcActive = mcActive; window.mcMax = mcMax;
 window.mcCross = mcCross; window.mcCrossOut = mcCrossOut; window.mcDrawn = mcDrawn;
@@ -223,7 +257,7 @@ window.mcCtrlS = () => { if(layAuto()) toast("Layouts save themselves as you cha
   if(!PW || PW === window || typeof PW.mcCellState !== "function") return;    // opened on its own: an ordinary page
   const C = PW.mcCellState(I) || {};
   window.cellErrs = []; addEventListener("error", e => window.cellErrs.push(String(e.message)));
-  let rt = null, HOVER = false;
+  let rt = null, HOVER = false, RELAY = false, raf = 0;
   const report = () => { clearTimeout(rt); rt = setTimeout(() => PW.mcCellSet(I, JSON.parse(JSON.stringify(C))), 150); };
   // this chart's set-up lives in the layout's charts[N], not in the shared preferences
   const pg = prefGet, ps = prefSet;
@@ -245,7 +279,16 @@ window.mcCtrlS = () => { if(layAuto()) toast("Layouts save themselves as you cha
   // Ctrl+S: the layout
   window.addEventListener("keydown", e => { if((e.ctrlKey || e.metaKey) && !e.altKey && e.code === "KeyS" && !(e.target.closest && e.target.closest("input,textarea,.CodeMirror"))){ e.preventDefault(); e.stopImmediatePropagation(); PW.mcCtrlS(); } }, true);
   // the crosshair: where it is here goes to the other charts; theirs shows here (same contract: the price line too)
-  const hook = () => { if(!chart) return; chart.subscribeCrosshairMove(p => {
+  // a timeframe picked here goes to the other charts (timeframe sync); one sent from there doesn't come back
+  const st = setTf;
+  setTf = function(k){ const r = st.apply(this, arguments); if(!RELAY) PW.mcTf(I, k); return r; };
+  window.cellSetTf = function(k){ if(tf === k || !parseTf(k)) return; RELAY = true; try{ setTf(k); } finally { RELAY = false; } };
+  // the time on screen: scrolled / zoomed here (the mouse is on this chart) -> the others (date-range sync)
+  window.cellRange = function(r){ if(HOVER || !chart || !r) return; try{ chart.timeScale().setVisibleRange(r); }catch(e){} };
+  window.cellRangeNow = function(){ try{ return chart.timeScale().getVisibleRange(); }catch(e){ return null; } };
+  const hook = () => { if(!chart) return;
+    chart.timeScale().subscribeVisibleTimeRangeChange(r => { if(!HOVER || !r) return; cancelAnimationFrame(raf); raf = requestAnimationFrame(() => PW.mcRange(I, {from: r.from, to: r.to})); });
+    chart.subscribeCrosshairMove(p => {
     if(!HOVER) return;
     const t = p && p.point ? (p.time != null ? p.time : p.logical != null && typeof L2t === "function" ? L2t(p.logical) : null) : null;   // (past the last bar: from the bar count)
     if(t != null){ const pr = series.coordinateToPrice(p.point.y); PW.mcCross(I, {t, p: pr, s: cur && cur.s}); }

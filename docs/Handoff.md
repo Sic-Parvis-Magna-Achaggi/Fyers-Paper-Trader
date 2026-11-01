@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 1 Nov 2026, version **0.24.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 1 Nov 2026, version **0.24.1**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -102,7 +102,12 @@ Monday's order-flow check.
   that index. The body class `mob` switching on / off re-renders (MutationObserver).
 - boot() now waits for DOMContentLoaded before `loadPrefs()` (so a frame never starts with the shared prefs: its
   overrides are in place first).
-- Next: v0.24.1 contract / timeframe / date-range sync (the page around relays like the crosshair: `mcEach`).
+- Sync (v0.24.1), `L.sync` = {cross, sym, tf, range}: contract - the page's `openSymbol` wrapper opens on every frame;
+  timeframe - a frame's `setTf` wrapper calls `mcTf` (frames get `cellSetTf`, which doesn't relay back); date range - a
+  frame's `subscribeVisibleTimeRangeChange` while the mouse is on it -> `mcRange` -> others `cellRange` (setVisibleRange;
+  a frame with the mouse on it ignores relays). Ticking one: `mcLineUp(k)` from the active chart. Phone: `mcAfterTouch`
+  (called from `layTouch` / `laySave`) copies cur / tf2 into the layout's other charts. A chart click in a frame closes
+  the page's popovers (`mcActive`: frames' clicks never reach the page's own "click outside" handlers).
 
 ## Layouts (v0.23.0)
 
@@ -115,6 +120,8 @@ Monday's order-flow check.
   Ctrl+S (`laySave`), switching asks first (`guard` in `layRender`).
 - `layApply(L)` puts a layout's chart on screen (prefs, `buildChart()`, `openSymbol`) with `LAY.applying` set (no saving
   meanwhile); `layOpen(id)` = apply + send prefs now (`layPrefsNow`) + mark active + touch.
+- `layPost` merges the server's answer: the open layout keeps the page's own object (only `name` / `updated` taken), so a
+  change made while a save was on its way isn't lost (v0.24.1 fix; `layouts_flow.js` holds saves 1 s to prove it).
 - **The saved layout wins, at start-up:** `boot()` (index.html) calls `layBoot()` right after `loadPrefs()`, before the chart is
   built: a chart that disagrees with the open layout takes the layout's set-up straight into the prefs (`layToPrefs`), so
   the chart opens as the layout with nothing rebuilt afterwards. (A first version applied it after the chart had loaded:
@@ -286,9 +293,9 @@ indicator option to add (not built).
 2. Compare the app's charges with what Fyers deducted (roadmap item 1, last part).
 3. Monday: read the order-flow check with the owner; the footprint only if it's exact (and decide roadmap item 12,
    seconds / tick charts, from the same numbers). Then Telegram alerts, the journal, saved layouts, multi-charts
-   (the owner's order, 1 Nov: multi-charts (item 6) - v0.24.0 shipped, v0.24.1 sync next - then Telegram (3) and the
-   journal (4); item 8, CFD prices, is on hold). Shipped and waiting for the owner's try: measurement and drawing tools
-   (v0.22.0), layouts (v0.23.0), angles (v0.23.1), multi-charts (v0.24.0).
+   (the owner's order, 1 Nov: Telegram alerts (3) next, then the journal (4); item 8, CFD prices, is on hold). Shipped
+   and waiting for the owner's try: measurement and drawing tools (v0.22.0), layouts (v0.23.0), angles (v0.23.1),
+   multi-charts with sync (v0.24.0 / v0.24.1).
 4. The owner tries the phone layout (v0.19.0) and the order bubble (v0.20.3) on his phone; fix what he reports.
 5. The owner checks v0.20.0 on real Fyers: Pivot Points and the Chandelier exit on GOLDPETAL 2m, scrolling back,
    and the Style / Visibility tabs on his own scripts.

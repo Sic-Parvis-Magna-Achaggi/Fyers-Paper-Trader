@@ -79,6 +79,8 @@ let br;
   // drag the SL line on the chart: the bubble's ₹ at the stop follows
   const dr = await pg.evaluate(() => { const r = document.querySelector("#chart").getBoundingClientRect(); return {x: r.left + r.width * 0.45, y: r.top + series.priceToCoordinate(slNow()), sl: slNow(), risk: P.plan.risk}; });
   await pg.mouse.move(dr.x, dr.y); await pg.mouse.down(); await pg.mouse.move(dr.x, dr.y + 20, {steps: 5}); await pg.mouse.up(); await pg.waitForTimeout(1500);
+  // (the entry follows the market and the SL keeps its distance: give the sheet a moment to catch up with the last tick)
+  await pg.waitForFunction(() => Math.abs(+document.querySelector("#mtSl").value - slNow()) <= 3, null, { timeout: 3000 }).catch(() => {});
   const da = await pg.evaluate(() => ({sl: slNow(), risk: P.plan.risk, l2: document.querySelector("#mBub .l2").textContent, sheetSl: +document.querySelector("#mtSl").value}));
   ok(da.sl < dr.sl && da.risk > dr.risk && da.l2.includes("₹" + Math.round(da.risk).toLocaleString("en-IN")) && Math.abs(da.sheetSl - da.sl) <= 3,
      `dragging the SL line down (${dr.sl} → ${da.sl}) updates the bubble (risk ₹${dr.risk} → ₹${da.risk}: "${da.l2}") and the sheet behind it (${da.sheetSl})`);

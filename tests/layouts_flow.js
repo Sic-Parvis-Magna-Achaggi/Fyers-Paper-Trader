@@ -45,6 +45,17 @@ let br;
   await pg.waitForTimeout(1600);
   ok(((await lay("Layout 1")).charts[0].indicators || []).some(c => c.type === "volume"), "adding Volume saves into the open layout (on the server)");
 
+  // ---- a change made while a save is on its way isn't lost when the server's answer comes back (each save held 1 s)
+  await pg.route("**/api/layouts", async r => { if(r.request().method() === "POST") await new Promise(z => setTimeout(z, 1000)); await r.continue(); });
+  await pg.evaluate(() => setTf("15m"));                       // saved 0.9 s later; the answer comes 1 s after that
+  await pg.waitForTimeout(1700);
+  await pg.evaluate(() => prefSet("lgdMin0", true));          // made while that save is on its way
+  await pg.waitForTimeout(4500);
+  await pg.unroute("**/api/layouts");
+  let rc = (await lay("Layout 1")).charts[0];
+  ok(rc.tf2 === "15m" && rc.lgdMin0 === true, `both changes reach the saved layout (timeframe ${rc.tf2}, collapsed read-outs ${rc.lgdMin0})`);
+  await pg.evaluate(() => { prefSet("lgdMin0", false); setTf("5m"); }); await pg.waitForTimeout(2500);
+
   // ---- a new layout: blank, renamed "Scalp"; its own contract, timeframe and chart type
   await openMenu(); await pg.click("#layNew"); await settle();
   ok(await pg.isVisible("#layName"), "＋ New layout asks for its name");

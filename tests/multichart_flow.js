@@ -115,6 +115,48 @@ let br;
   ok(inf[2].s === DEC && inf[1].tf === "15m" && inf[3].type === "ha" && inf[0].inds.includes("volume") && inf[2].inds.includes("pine"), "after a reload: the same 2×2, each chart as it was");
   ok(inf.every(c => !c.errs.length), "no errors inside the charts" + (inf.some(c => c.errs.length) ? ": " + inf.map(c => c.errs.join(" | ")).join(" / ") : ""));
 
+  // ---- sync (v0.24.1): contract, timeframe, date range; ticking one lines the charts up with the active one
+  await pg.click("#bGrid"); await pg.waitForTimeout(150);
+  ok(await pg.evaluate(() => ["#mcSym", "#mcTf", "#mcRange", "#mcCross"].every(id => !!document.querySelector(id))), "Grid › Sync: contract, timeframe, date range, crosshair");
+  const a0 = await cellBox(0); await pg.mouse.click(a0.x + a0.width / 2, a0.y + a0.height / 2); await pg.waitForTimeout(200);   // chart 1 active (November)
+  ok(await pg.isHidden("#gridPick"), "a click in a chart closes the Grid menu");
+  await pg.click("#bGrid"); await pg.check("#mcSym");
+  await pg.waitForFunction(s => [0, 1, 2, 3].every(k => { const w = mcWin(k); return w.cellInfo().s === s && w.cellInfo().n > 20; }), NOV, { timeout: 25000 });
+  ok(true, "ticking Contract puts the active chart's contract (November) on every chart");
+  await pg.click("#gridClose");
+  await pg.evaluate(async s => openBySymbol(s), DEC);
+  await pg.waitForFunction(s => [0, 1, 2, 3].every(k => { const w = mcWin(k); return w.cellInfo().s === s && w.cellInfo().n > 20; }), DEC, { timeout: 25000 });
+  inf = await info();
+  ok(inf.every(c => c.s === DEC) && inf[1].tf === "15m" && inf[3].type === "ha", "contract sync: December from the watchlist opens on all four (their timeframes and types stay)");
+  await pg.click("#bGrid"); await pg.check("#mcTf"); await pg.click("#gridClose");
+  await pg.waitForFunction(() => [0, 1, 2, 3].every(k => mcWin(k).cellInfo().tf === "5m"), null, { timeout: 25000 });
+  ok(true, "ticking Timeframe puts the active chart's timeframe (5m) on every chart");
+  await frame(3).evaluate(() => setTf("30m"));
+  await pg.waitForFunction(() => [0, 1, 2, 3].every(k => mcWin(k).cellInfo().tf === "30m" && mcWin(k).cellInfo().n > 10), null, { timeout: 25000 });
+  ok(true, "timeframe sync: 30m picked on chart 4 goes to all four");
+  await pg.waitForTimeout(1500);
+  await pg.click("#bGrid"); await pg.check("#mcRange"); await pg.click("#gridClose");
+  const z0 = await cellBox(0);
+  const before = await pg.evaluate(() => mcWin(1).cellRangeNow());
+  await pg.mouse.move(z0.x + z0.width * 0.4, z0.y + z0.height * 0.5);
+  for(let k = 0; k < 4; k++){ await pg.mouse.wheel(0, -240); await pg.waitForTimeout(80); }   // zoom in on chart 1
+  await pg.mouse.down(); await pg.mouse.move(z0.x + z0.width * 0.55, z0.y + z0.height * 0.5, {steps: 6}); await pg.mouse.up();   // and drag it
+  await pg.waitForTimeout(600);
+  const rg = await pg.evaluate(() => [0, 1, 2, 3].map(k => mcWin(k).cellRangeNow()));
+  const near = (a, b) => a && b && Math.abs(a.from - b.from) <= 3600 && Math.abs(a.to - b.to) <= 3600;
+  ok(before && rg[1] && (rg[1].from !== before.from || rg[1].to !== before.to), `…chart 2's time on screen really moved (${before && before.from} → ${rg[1] && rg[1].from})`);
+  ok(rg.slice(1).every(r => near(r, rg[0])), `date-range sync: zooming and dragging chart 1 shows the same time on the others (${JSON.stringify(rg.map(r => r && [r.from, r.to]))})`);
+  await pg.mouse.move(z0.x - 200, z0.y - 50);
+  // sync off again; each chart back as it was for the checks after this
+  await pg.click("#bGrid"); for(const id of ["#mcSym", "#mcTf", "#mcRange"]) await pg.uncheck(id); await pg.click("#gridClose");
+  const put = async (k, s, t) => { const b = await cellBox(k); await pg.mouse.click(b.x + b.width / 2, b.y + b.height / 2); await pg.waitForTimeout(150);
+    await pg.evaluate(async s => openBySymbol(s), s); await pg.waitForFunction(([k, s]) => mcWin(k).cellInfo().s === s, [k, s], { timeout: 20000 });
+    await pg.evaluate(([k, t]) => mcWin(k).cellSetTf(t), [k, t]); };
+  await put(0, NOV, "5m"); await put(1, NOV, "15m"); await put(2, DEC, "5m"); await put(3, NOV, "5m");
+  await pg.waitForTimeout(2000);
+  inf = await info();
+  ok(inf[0].s === NOV && inf[2].s === DEC && inf[1].tf === "15m" && inf[0].tf === "5m", "with sync off, each chart takes its own contract and timeframe again");
+
   // ---- other grids, then back to one chart
   await pg.evaluate(() => mcSetGrid("3")); await ready(3);
   ok(await pg.evaluate(() => getComputedStyle(document.querySelector('#mcGrid .mc-cell[data-i="0"]')).gridRowEnd === "3" || document.querySelector('#mcGrid .mc-cell[data-i="0"]').getBoundingClientRect().height > document.querySelector('#mcGrid .mc-cell[data-i="1"]').getBoundingClientRect().height * 1.5),
@@ -142,6 +184,11 @@ let br;
   await mp.evaluate(() => setTf("1h")); await mp.waitForTimeout(1800);
   L = await (async () => { const j = await mp.evaluate(async () => (await api("/api/layouts"))); return j.layouts.find(l => l.id === j.active); })();
   ok(L.charts[2].tf2 === "1h" && L.charts[1].tf2 === "15m" && L.charts[0].tf2 === "5m", "a change on the phone saves into that chart only");
+  await mp.evaluate(() => { const L = layCur(); L.sync = {...mcSync(), tf: true}; });
+  await mp.evaluate(() => setTf("30m")); await mp.waitForTimeout(1800);
+  L = await (async () => { const j = await mp.evaluate(async () => (await api("/api/layouts"))); return j.layouts.find(l => l.id === j.active); })();
+  ok(L.charts.every(c => c.tf2 === "30m"), "phone, timeframe sync: 30m on the chart shown goes to all the layout's charts");
+  await mp.evaluate(() => { const L = layCur(); L.sync = {...mcSync(), tf: false}; });
   await mp.tap('#mcDots [data-k="3"]');
   await mp.waitForFunction(() => !LAY.applying && LAY.cell === 3 && ctType() === "ha", null, { timeout: 20000 });
   ok(true, "tapping 4: Heikin-Ashi, as saved");
