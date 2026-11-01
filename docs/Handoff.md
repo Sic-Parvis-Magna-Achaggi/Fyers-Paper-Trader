@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 1 Nov 2026, version **0.28.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 1 Nov 2026, version **0.28.1**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -70,6 +70,15 @@ and roadmap updated too.
 - `web/jinsights.js`: the journal's Insights, weekly review, walk-through, calendar, Copy for Gemini, export (v0.28.0).
 - `tests/`: the test kit (fake Fyers feed and order API, route check, engine tests incl. `live_test.py`, browser
   tests incl. `live_flow.js` and `mobile_flow.js`). See `tests/README.md`.
+
+Test kit (v0.28.1): `mock_server.py` adds the response headers in `server/Caddyfile`'s `header` block (as Caddy does),
+so a header that breaks something (the grid's frames under `X-Frame-Options DENY`) fails the browser tests too. When
+changing the Caddyfile, re-run `multichart_flow.js`.
+
+Test data (1 Nov): many runs on one data folder in one day pile up losing paper trades in today's journal session, and
+the journal's 2% lockout then refuses the tests' orders (journal_flow, live_flow, then everything after live_flow leaves
+the account Live). Start from fresh data (make_old_data.py + security_flow.js) when that happens.
+`drawings_flow.js`'s "a drag on the new trade's SL line moves the SL" failed once in 4 runs (1 Nov, v0.28.1). Same advice.
 
 Test-kit quirk (1 Nov): `navigation_flow.js`'s "Go to a date on 1D" check fails some runs (landed a day late; 2 of 5
 runs on 1 Nov, on v0.20.2 code too). Cause not found; it's a test-kit issue so far (the mock stamps day candles at

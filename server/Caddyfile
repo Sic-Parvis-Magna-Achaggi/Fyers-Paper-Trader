@@ -3,7 +3,8 @@ __HOST__ {
 	header {
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options nosniff
-		X-Frame-Options DENY
+		X-Frame-Options SAMEORIGIN
+		Content-Security-Policy "frame-ancestors 'self'"
 		Referrer-Policy same-origin
 		-Server
 	}

@@ -310,7 +310,7 @@ let br;
   const pos = await pg.evaluate(async () => {
     await papi("reset", {confirm: "RESET", capital: 1000000});          // room for 1 lot (margin, loss limits)
     const t = last[cur.s]; const e = t.ask || t.ltp;
-    const j = await papi("place", {s: cur.s, side: 1, type: "market", product: "INTRADAY", sl: roundTick(e - 40, cur.tick), mode: "lots", lots: 1});
+    const j = await papi("place", {s: cur.s, side: 1, type: "market", product: "MARGIN", sl: roundTick(e - 40, cur.tick), mode: "lots", lots: 1});
     return j.ok || j.error;
   });
   await pg.waitForTimeout(600);
@@ -359,7 +359,7 @@ let br;
   ok(both === "both", "a candle reaching both the stop and the target is marked (counted as the stop)");
 
   // ---- the trade manager's lines still win over a drawing on top of them
-  await pg.evaluate(() => arm(1));
+  await pg.evaluate(() => { P.T.product = "MARGIN"; arm(1); });     // Carry: Intraday is refused after the evening square-off
   await pg.waitForFunction(() => P.plan && slNow() != null && (P.drags || []).some(d => d.price && Math.abs(d.price() - slNow()) < 1e-6), null, { timeout: 15000 });   // (its SL line is on the chart)
   await pg.waitForTimeout(300);
   const sl = await pg.evaluate(() => series.priceToCoordinate(slNow()));

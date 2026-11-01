@@ -138,4 +138,36 @@ def tick_feed(feed):
 
 threading.Thread(target=ticker, daemon=True).start()
 import uvicorn  # noqa: E402
-uvicorn.run("helper.app:app", host="127.0.0.1", port=8766, log_level="warning")
+from helper.app import app  # noqa: E402
+
+
+def caddy_headers() -> dict:
+    """The response headers the real server's Caddy adds (server/Caddyfile), so the browser tests see the same rules -
+    v0.28.1: Caddy's "X-Frame-Options DENY" broke multi-chart grids on the server, and the tests (no Caddy) never saw it."""
+    import re
+    import shlex
+    txt = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "server", "Caddyfile")).read()
+    block = re.search(r"header\s*\{([^}]*)\}", txt).group(1)
+    out = {}
+    for line in block.splitlines():
+        line = line.strip()
+        if not line or line.startswith(("-", "#")):
+            continue
+        name, *val = shlex.split(line)
+        if name.lower() != "strict-transport-security":      # the test server is plain http
+            out[name] = " ".join(val)
+    return out
+
+
+CADDY = caddy_headers()
+
+
+@app.middleware("http")
+async def _caddy(request, call_next):
+    resp = await call_next(request)
+    for k, v in CADDY.items():
+        resp.headers.setdefault(k, v)
+    return resp
+
+
+uvicorn.run(app, host="127.0.0.1", port=8766, log_level="warning")

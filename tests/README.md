@@ -36,6 +36,9 @@ FYERS_HELPER_DATA=/tmp/fyers_test node tests/jinsights_flow.js     # journal v0.
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/mobile_flow.js        # the phone layout on an emulated Pixel 7: order sheet and its bubble, positions, tabs, full screen (resets the admin's paper account)
 ```
 
+`mock_server.py` sends the same response headers as the server's Caddy (read from `server/Caddyfile`), so browser
+tests see the real rules (v0.28.1: Caddy's frame header broke multi-chart grids on the server only).
+
 `fake_telegram.py` is a fake Telegram Bot API and Healthchecks.io (`mock_server.py` starts it on :8767; `/_sent` lists the
 messages, `/_docs` the documents sent (journal pictures), `/_deleted` the deleted messages). Tokens starting `1234567:` are good.
 

@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 1 Nov 2026 (v0.28.0). This is the one task list for the project.
+Updated 1 Nov 2026 (v0.28.1). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -205,6 +205,7 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Done
 
+- [x] **v0.28.1** (1 Nov): multi-chart grids work on the server (Caddy refused frames: `X-Frame-Options DENY` → SAMEORIGIN; reported 1 Nov).
 - [x] **v0.28.0** (1 Nov): the journal's last step (item 4): Insights, the weekly review with the outcome × process grid, walk-through and calendar, the summary to Telegram, Copy for Gemini, CSV, backup and restore.
 - [x] **v0.27.0** (1 Nov): journal pictures (item 4, second step): the server draws each trade at entry and exit, the open chart adds its own picture, 📷 on the chart bar, your own uploads / paste / drop labelled by timeframe, the viewer, the Telegram backup copy; P&F trend lines no longer run on after price crossed them (reported 1 Nov).
 - [x] **v0.26.3** (1 Nov): Release to GitHub puts this version's whole changelog entry into the commit message.

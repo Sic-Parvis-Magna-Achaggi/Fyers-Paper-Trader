@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.28.1 — 1 Nov 2026 — Multi-chart grids work on the server
+
+Fixed
+- **Grids showed "68-183-245-178.sslip.io refused to connect" in every chart** (reported 1 Nov with a screenshot). Each
+  chart in a grid is the app itself in a frame, and the server's Caddy sent `X-Frame-Options: DENY`, which forbids frames
+  even from the same site. Now `X-Frame-Options: SAMEORIGIN` with `Content-Security-Policy: frame-ancestors 'self'`: the app
+  can frame itself, other websites still can't frame it. `server/Caddyfile`; the update's install step copies it and
+  reloads Caddy on its own. Broken since v0.24.0 on the real server only.
+
+Tests
+- `tests/mock_server.py` now adds the response headers from `server/Caddyfile` (as Caddy does on the server), so the
+  browser tests run under the same rules. Checked: with the old `DENY` line `multichart_flow.js` fails; with the fix it
+  passes (43 checks). Every browser suite re-run under the new headers on fresh test data: all pass (live 22, journal
+  43, jshots 45, jinsights 40, multichart 43, charttypes 92, pine_compat 121, indicator_settings 37, navigation 36,
+  watchlists 16, drawings 78, layouts 31, telegram 33, mobile 61).
+- `tests/drawings_flow.js`: its test trade uses Carry, so it also runs after the evening Intraday square-off (23:15 IST).
+
 ## v0.28.0 — 1 Nov 2026 — Journal: Insights, the weekly review, Copy for Gemini, export and backup
 
 Added
