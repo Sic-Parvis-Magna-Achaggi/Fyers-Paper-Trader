@@ -1,13 +1,18 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 1 Nov 2026, version **0.25.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 1 Nov 2026, version **0.26.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
 
 The repo is `Sic-Parvis-Magna-Achaggi/Fyers-Paper-Trader` (private). The owner uploads release zips by dragging the
 folder's contents into GitHub; the server pulls every minute. Always start from the latest commit in the repo, not
-an old zip. Every release: changelog text, a one-line commit message, the version number; VERSION and CHANGELOG.md
+an old zip. The owner releases with `tools/github_upload.html` (Release to GitHub, v0.26.1): a single page opened from disk; with his
+fine-grained token (this repo, Contents: Read and write) it reads the zip in the browser, compares git blob ids with the
+branch's tree, sends only changed files as blobs and makes ONE commit (fast-forward only; deletes only if ticked; warns on
+an older VERSION). GitHub's web upload takes at most 100 files (the repo has 110), so dragging is only the fallback (two
+drags: `tests/`, `docs/`, `server/`, `tools/` + top files; then `helper/`, `web/`). Every release is the full repo zip. A new
+chat starts from GitHub's Code › Download ZIP of the latest commit. Every release: changelog text, a one-line commit message, the version number; VERSION and CHANGELOG.md
 updated; `tests/routes_check.py` passes; the guide updated when behaviour changes; the project copies of the guide
 and roadmap updated too.
 
@@ -71,6 +76,40 @@ probably the history read before the kill switch's close was booked. Same advice
 `indicator_settings_flow.js`'s "at the start of a contract's history it stops asking" failed once in 2 runs on 1 Nov
 (v0.22.0; passed on re-run, 37/37). Same advice.
 
+## The journal (v0.26.0, roadmap item 4: first of three releases)
+
+- `helper/journal.py`: the Octagon port. `Journal(uid)` per user (`journal.get(uid)`), file `u/<user>/journal.json` =
+  {trades: {"<acct>:<pos id>": trade}, settings: {rules, pillars, p1}, practice, reviews, ended, hidden, synced}. A trade =
+  the engine's facts (s, side, product, lots, qty, entries, avg, exit, opened, closed, first_sl, sl, tp, gross, charges, net,
+  init_risk, r, planned_r, balance_after, day, base = account size, status open / closed / removed, parts / closes) + the
+  annotations (direction, wait, execution, zen, target, regime, bias, ke, p1Checks, execFaults, numberRunning,
+  payoutPressure, setup, notes, review, claimedAt...). Live parts (`P...p1`) merge into the base id (`base_id()`).
+- How trades arrive: `Paper._jn()` at the end of `fill()` ("open") and `close()` ("close"); rt wires `journal_hook`,
+  `journal_guard`, `journal_lock` on every engine. `sync(urt, full)` reads the engines' history and open positions; `full`
+  (start-up in `rt.start`, and the first time) also archived accounts and `paper_trades_until_*.json` (marked claimed). An
+  open trade whose position disappeared without a close (a reset) becomes "removed".
+- The audit: `metrics()`, `session_engine()`, `audit_trade()`, `compute_audit()` are line-by-line ports of Octagon's
+  `metrics / sessionEngine / auditTrade / computeAudit`, in seconds and IST; R / planned R are the app's net figures.
+  `tests/journal_test.py` runs Octagon's own JS (`tests/fixtures/octagon_core.js`, extracted from octagon_journal.html) on
+  the same random trades and compares every pillar and session figure: keep it passing when touching the audit.
+- One source of truth: the server computes the audit and sessions; the page only shows them (`POST /api/journal/audit`
+  previews an edit for the form, nothing saved). Edits answer with the trades of the affected session (`view(only=...)`);
+  the page merges (`jnMerge`).
+- Lockouts: `today_state(aid, day)` -> lock {kind dd / afk / end, on (switch), until, text}; `lock_reason()` is what
+  `Paper.guard_new` returns (so plan / preview / PLACE refuse with it); `check_lock(urt, aid, before)` after a close, an
+  annotation, a settings change or `/api/journal/end` cancels waiting entry orders when a lock starts (switch
+  `cancel_pending`; on the event loop). The snapshot carries `jlock` (header pill `#pJLock`).
+- `journal.on_change` -> app `_journal_changed` -> `{"journal": 1}` on the user's sockets -> page `jnPush()` reloads.
+- Page: `web/journal.js` + `web/journal.css` (loaded before mobile.js). `JN` state; `jnShow()` (pgShow wrapper), Trades
+  (`jnReps`, `jnToday`, `jnGoal`, strip, `jCard`), the audit form (`jnForm`, a modal), Settings (`jnSettings`). Filters in
+  prefs `jn`. Never rebuild under a held button (`JN.holding`: a rebuild cancelled holds in testing). The phone: a row
+  added to More (wraps `mMore`).
+- Next (v0.27.0): screenshots (server-drawn at entry and exit with Pillow + the open chart's own picture via LWC
+  `takeScreenshot()`, own uploads / paste labelled by timeframe), image viewer, Telegram backup to the journal's channel
+  (the bot in Settings › Telegram alerts; the channel ID typed in Journal › Settings). Telegram is admin-only today: other
+  users would need their own bot setting. Then v0.28.0: Insights, Review + calendar + walk-through, Copy for Gemini,
+  CSV / backup. 4b (prop-firm journals) waits for the owner's yes.
+
 ## Telegram alerts (v0.25.0)
 
 - `helper/telegram.py`: per-user bot settings `u/<user>/telegram.json` = {token (sealed), bot, chat, chat_title, alerts,
@@ -90,9 +129,9 @@ probably the history read before the kill switch's close was booked. Same advice
   UUID URL); flat with a key -> `POST <api>/api/v3/checks/<uuid>/pause` once (a ping un-pauses). Writes `watchdog.json`
   (the page shows running / not, and its hc state).
 - Page: `web/tgalerts.js` (Settings › Telegram alerts, `#tgSec`, admin only; wraps `secRender` and `liveCard`).
-- Not yet run on the real server or with a real bot: the first deploy installs the service through `install.sh`; Settings
-  should then say "Watchdog: running". Things to check there: Telegram reachable from the droplet; Healthchecks.io's real
-  pause API (written to its docs: `POST /api/v3/checks/<uuid>/pause`, `X-Api-Key`).
+- On the real server (owner, 1 Nov): deployed, bot set up, the test message arrived, "Watchdog: running" (so the service
+  installed through `install.sh` and the droplet reaches Telegram). Not yet seen for real: an outage message during a live
+  trade; Healthchecks.io's real pause API (written to its docs: `POST /api/v3/checks/<uuid>/pause`, `X-Api-Key`).
 
 ## Live candles, watchlists, seconds (agreed 1 Nov, roadmap 10-12)
 
@@ -316,9 +355,9 @@ indicator option to add (not built).
 2. Compare the app's charges with what Fyers deducted (roadmap item 1, last part).
 3. Monday: read the order-flow check with the owner; the footprint only if it's exact (and decide roadmap item 12,
    seconds / tick charts, from the same numbers). Next build: the journal (4) (the owner's order, 1 Nov; item 8, CFD
-   prices, is on hold). Shipped and waiting for the owner's try: measurement and drawing tools (v0.22.0), layouts
-   (v0.23.0), angles (v0.23.1), multi-charts with sync (v0.24.0 / v0.24.1), Telegram alerts (v0.25.0: set up the bot,
-   send the test, check the watchdog runs; the journal will reuse the same bot for screenshots).
+   prices, is on hold): v0.26.0 shipped, v0.27.0 (screenshots + Telegram backup) next. Shipped and waiting for the owner's try: measurement and drawing tools (v0.22.0), layouts
+   (v0.23.0), angles (v0.23.1), multi-charts with sync (v0.24.0 / v0.24.1), Telegram alerts (v0.25.0: set up and tested
+   by the owner 1 Nov; the journal will reuse the same bot for screenshots), the journal (v0.26.0).
 4. The owner tries the phone layout (v0.19.0) and the order bubble (v0.20.3) on his phone; fix what he reports.
 5. The owner checks v0.20.0 on real Fyers: Pivot Points and the Chandelier exit on GOLDPETAL 2m, scrolling back,
    and the Style / Visibility tabs on his own scripts.

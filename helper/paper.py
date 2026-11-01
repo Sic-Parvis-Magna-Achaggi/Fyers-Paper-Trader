@@ -132,6 +132,9 @@ class Refused(Exception):
 
 class Paper:
     mode = "paper"
+    journal_hook = None      # callback(kind, obj): "open" (filled / added to) or "close" (a history record) - the journal
+    journal_guard = None     # callback() -> refusal text while a journal lockout blocks new orders, else None
+    journal_lock = None      # callback() -> the journal's lock for today (shown on the ticket), else None
 
     def __init__(self, folder: str = "", link=None, name: str = ""):
         self.dir = folder                # "u/<user>/a/<account>/" - every file of this account lives there
@@ -511,8 +514,19 @@ class Paper:
             out["blocked"] = self.guard_new(out)
         return out
 
+    def _jn(self, kind, obj):
+        if self.journal_hook:
+            try:
+                self.journal_hook(kind, obj)
+            except Exception as ex:
+                log.exception("journal hook: %s", ex)
+
     def guard_new(self, o) -> str | None:
         R = self.rules
+        if self.journal_guard:
+            j = self.journal_guard()
+            if j:
+                return j
         if R["max_trades"]:
             n = self.day.get("trades", 0) + len(self.orders)
             adding = any(p["s"] == o["s"] and p["product"] == o["product"] for p in self.positions)
@@ -598,6 +612,7 @@ class Paper:
         self._symbols_changed()
         self.changed(f"{verb} {'LONG' if side > 0 else 'SHORT'} {self.short(plan['s'])}: {qty // (row.get('lot') or 1)} lot "
                      f"@ {price} ({how}), charges ₹{c['total']:.2f}")
+        self._jn("open", pos)
 
     def close(self, pos, price: float, reason: str):
         row = self.row(pos["s"], pos["product"])
@@ -627,6 +642,7 @@ class Paper:
         self.changed(f"Closed {self.short(pos['s'])} @ {price} ({reason}): net ₹{net:,.2f} "
                      f"(gross {g:,.2f}, charges {allc['total']:,.2f})" + (f", {rec['r']:+.2f}R" if rec["r"] is not None else ""),
                      "warn" if net < 0 else "info")
+        self._jn("close", rec)
 
     # ------------------------------------------------------------ user actions on open things
     def find_pos(self, pid):
@@ -1070,7 +1086,13 @@ class Paper:
         return {"acct": acct, "positions": [self.pos_view(p) for p in self.positions],
                 "orders": [self.order_view(o) for o in self.orders], "trail": self.trail, "ticket": self.ticket,
                 "rules": self.rules, "events": self.events[-20:], "day": self.day, "squareoff_today": self.squareoff_today(),
-                "mode": self.mode}
+                "mode": self.mode, "jlock": self._jlock()}
+
+    def _jlock(self):
+        try:
+            return self.journal_lock() if self.journal_lock else None
+        except Exception:
+            return None
 
     def set_rules(self, new: dict):
         r = dict(self.rules)

@@ -11,6 +11,8 @@ node tests/ctype_test.js                              # chart types (Heikin-Ashi
 python3 tests/feedcheck_test.py                       # the order-flow check's counting (exact / merged trades)
 python3 tests/feed_test.py                            # the price feed: 40 a page, at most 95 with trades first, polls of 50
 python3 tests/alerts_test.py                          # Telegram alerts: the helper's checks, the watchdog (fake clock, then as its own process), the outside heartbeat
+node tests/github_upload_flow.js                      # tools/github_upload.html against a fake GitHub API (fake_github.py on :8768); no helper needed
+python3 tests/journal_test.py                         # the journal: the server's Octagon port vs Octagon's own JS (fixtures/octagon_core.js), then on paper engines: lockouts, switches, audit
 python3 tests/candles_test.py                         # saved candles: exact contract (no cont_flag), clean-out, a day fetched again replaces it
 
 python3 tests/make_old_data.py /tmp/fyers_test        # fresh v0.12-style data, admin password OldPass12345
@@ -26,6 +28,7 @@ FYERS_HELPER_DATA=/tmp/fyers_test node tests/drawings_flow.js       # drawing to
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/layouts_flow.js       # saved layouts: Layout 1, new / copy / rename / delete, switching brings each back, auto-save and by hand (Ctrl+S), page closed mid-switch, second device, phone
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/multichart_flow.js    # multi-charts: grids, each chart its own, the active chart (watchlist, BUY, Pine), crosshair sync, drawings per contract, ⛶, reload, phone buttons
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/telegram_flow.js     # Settings › Telegram alerts, the Live card, then the real watchdog with the helper frozen (SIGSTOP) -> the message; ~1.5 min
+FYERS_HELPER_DATA=/tmp/fyers_test node tests/journal_flow.js       # the Journal page: trades arriving, the audit form, claim, filters, lockouts (on a fresh account each run, archived after), phone
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/mobile_flow.js        # the phone layout on an emulated Pixel 7: order sheet and its bubble, positions, tabs, full screen (resets the admin's paper account)
 ```
 

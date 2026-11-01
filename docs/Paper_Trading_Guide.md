@@ -89,13 +89,51 @@ An account can be **Paper** or **Live**. A Live account uses the same ticket, ch
 
 ## Pages
 
-The top bar has **Chart · Trades · History · Book · Account · Log**. The chart keeps running while you're on another page, and the address remembers the page.
+The top bar has **Chart · Trades · History · Journal · Book · Account · Log**. The chart keeps running while you're on another page, and the address remembers the page.
 
 - **Trades:** all open positions and pending orders in tables. Click any price to change it; set Trail BE / Trail SL per trade; BE, close, cancel. BE all, Cancel all orders and Close all at the top.
 - **History:** filters, stats (net, win rate, profit factor, average R, expectancy, drawdown, streaks...), an equity curve, daily P&L, results by contract and by exit, and each trade's charges. Download the filtered list as CSV.
+- **Journal:** your trade journal, the Octagon (see below).
 - **Book:** up to 4 order books side by side.
 - **Account:** the account's figures, your paper accounts (new, rename, archive), rules, trailing defaults, reset and the charges in use.
 - **Log:** everything the paper account did, the helper's own log, and **Security** (your logins, 2FA and password changes).
+
+## Journal (the Octagon)
+
+The Octagon trade journal, inside the app and saved on the server (per user, every device).
+
+- **Trades arrive on their own.** Every paper and live trade of every account: it appears when it opens and is completed when
+  it closes (a live position closed in parts is one trade). Trades from before the journal (each account's history and the
+  archives of resets and Paper ↔ Live switches) were taken in once, and count as claimed reps.
+- **Money and R are net.** ₹ is after every charge, R = net ₹ ÷ the net risk at the first stop, exactly as History shows them.
+  So a "2R win" for the 99 Club is 2R after charges, and the target in R (Pillar 8) is the net ₹ at your take-profit ÷ that
+  risk. (Octagon worked R out from points before charges.)
+- **A session** is one trading day of one account (IST; the day starts at the reset hour in that account's rules, 06:00 by
+  default). Times of day are Indian buckets (opening hour, morning, midday, afternoon, after NSE close, evening, night).
+- **The audit:** open a trade, **Audit this trade**: the 8 pillars, word for word (Direction & regime with the Pillar 1 checks,
+  market regime, bias and KE; Wait state; Execution and what went wrong; numbers running; payout pressure; Zen Temple;
+  Target), setup tags, plan and review. The octagon at the top follows every click. A Zen Temple breach makes Execution wrong.
+  Pillars 4 and 5 are worked out from the session; Pillar 8 is optional on a losing or open trade.
+- **Reps:** every closed trade is one rep, across all your accounts in the order you took them. **Hold to claim** each new rep.
+  Milestones every 50 (settable); "Reps done before this journal" carries an older count on.
+- **Today:** the session's octagon, P&L (closed trades, net), the room before the 2% line, the 99 Club count, the daily
+  ground-state practice tick with its streak, and **Hold to end today's session**. Pick the account with its chip (or the Account filter).
+- **The 5% execution block** (Pillar 6) of that account, on top of the list.
+- **Filters:** period (by close time, IST), account, contract, side, octagon (clean, any pillar broken, each pillar, not
+  fully audited, still open, removed), regime, setup tags (any of / all of), search. They're saved with your settings.
+- **Remove from journal** takes a trade out of the stats, reps and sessions (it stays in History); Octagon › Removed brings it back.
+
+**Lockouts refuse new orders** (Journal › Settings, a switch each, all on at first):
+- **2% trailing drawdown** (Pillar 4): the day's closed trades (net) fall 2% of the account size below the session's peak →
+  no new orders until the next trading day. Open P&L doesn't count (as in Octagon).
+- **The 99 Club break** (Pillar 5): 3 wins in a row, or 3 wins of 2R or more → no new orders for 20 minutes.
+- **Session over** (Pillar 5): a trade marked "my mind was running numbers", or Hold to end today's session → no new orders
+  until the next trading day.
+- **Cancel waiting entry orders when a lockout starts** (Live: at Fyers too).
+While locked, the ticket's preview says why, PLACE is off, and a red pill in the top bar names the lockout (amber "not
+blocking" when its switch is off). Closing, BE, trailing and the stops of open trades are never blocked. The numbers (2%,
+20 minutes, 3 wins, 2R, the 2.5R stretched-target flag, the 5% block, the rep milestone) are in Journal › Settings, with the
+text of each pillar and the Pillar 1 checks (Original puts your text back).
 
 ## On a phone
 
@@ -110,7 +148,7 @@ Phones get their own layout, like MT5's app (a desktop browser never does). **Mo
 - **A pending order** (Trade tab): move its price, SL and target, Save; or Cancel order.
 - **Trade tab:** the account figures, every position and order, BE all, Close all (tap twice), Cancel all, and the trailing defaults for new trades.
 - **History tab:** Today, 7 days, 30 days or All, with net P&L, win rate, profit factor, average R and charges. Tap a trade for every charge. The full History page (equity curve, filters) is linked at the bottom.
-- **More tab:** Account, rules and charges; switch account; trades table; order book; log; settings (Fyers app, security, users, reset); theme; desktop layout; log out.
+- **More tab:** Journal; Account, rules and charges; switch account; trades table; order book; log; settings (Fyers app, security, users, reset); theme; desktop layout; log out.
 - **Full screen:** ⛶ in the chart's toolbar, or turn the phone sideways on the Chart tab. Only the chart and the SELL / BUY bar stay. ✕ (or turning it back upright) returns.
 - **Live account:** a red LIVE badge and **KILL** in the top bar, live warnings under it, LIVE on the PLACE button (and on the bubble's), and the stop at Fyers on each position.
 
@@ -438,6 +476,6 @@ When BE-T has already moved the stop to break-even, a Trail SL of N R behind the
 
 - Footprint / delta (order flow): waiting for the order-flow check (Monday 2 Nov).
 - Comparing the charges the app counts with what Fyers actually deducted (live).
-- The journal inside the app, and Telegram screenshots.
+- The journal's screenshots (automatic at entry and exit, and your own) and their Telegram backup: v0.27.0. Insights, the weekly review and calendar, Copy for Gemini, CSV / backup: v0.28.0.
 - Partial closes.
 - Agri MCX contracts use the non-agri rates.

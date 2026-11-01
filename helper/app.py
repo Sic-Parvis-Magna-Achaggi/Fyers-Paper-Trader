@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from fastapi.staticfiles import StaticFiles
 
-from . import alerts, charges, charges_watch, fyers_link, logbuf, rt, store, symbols, telegram, users
+from . import alerts, charges, charges_watch, fyers_link, journal, logbuf, rt, store, symbols, telegram, users
 from .feedcheck import FC
 from . import candles as candles_store
 from .paper import Refused
@@ -91,6 +91,26 @@ def _charges_check():
         log.warning("charges check: %s", e)
 
 
+_jpush: dict = {}              # uid -> a "journal changed" note is on its way
+
+
+def _journal_changed(uid):
+    """The journal of a user changed (a trade arrived or closed): tell their pages, at most every half second."""
+    urt = rt.RT.get(uid)
+    loop = urt and urt.feed.loop
+    if not loop or _jpush.get(uid):
+        return
+
+    def send():
+        _jpush[uid] = False
+        try:
+            urt.feed.broadcast({"journal": 1})
+        except Exception as ex:
+            log.warning("journal push: %s", ex)
+    _jpush[uid] = True
+    loop.call_soon_threadsafe(lambda: loop.call_later(0.5, send))
+
+
 @app.on_event("shutdown")
 def _shutdown():
     FC.flush()
@@ -107,6 +127,7 @@ async def _startup():
     elif users.any_users() and store.path("paper.json").exists():   # files left at the top from an earlier version
         rt.migrate(next(u["uid"] for u in users.all_users() if u["role"] == "admin"))
     rt.on_engine_change = _engine_changed
+    journal.on_change = _journal_changed
     rt.start(loop)
     loop.create_task(_engine_loop())
     if not users.any_users():
@@ -1240,6 +1261,125 @@ async def telegram_test(request: Request):
     except telegram.TgError as e:
         return _err(e)
     return {"ok": True}
+
+
+# ------------------------------------------------------------------ the trade journal (Octagon)
+def _jkey(b: dict) -> str:
+    return str(b.get("id") or "")
+
+
+@app.get("/api/journal")
+async def journal_get(request: Request):
+    u, r = _urt(request)
+    j = journal.get(u["uid"])
+    j.sync(r)
+    return {"ok": True, "j": j.view(r)}
+
+
+@app.post("/api/journal/trade")
+async def journal_trade(request: Request):
+    """The audit, tags, plan and review of one trade: {id, direction, wait, execution, zen, target, regime, bias, ke,
+    p1Checks, execFaults, numberRunning, payoutPressure, setup, notes, review}. Answers with that session's trades."""
+    _same_origin(request)
+    u, r = _urt(request)
+    b = await _body(request)
+    j = journal.get(u["uid"])
+    try:
+        t0 = j.d["trades"].get(_jkey(b)) or {}
+        e = r.engines.get(t0.get("acct", ""))
+        before = j.lock_reason(t0["acct"], e.trading_day()) if e else None
+        t = j.annotate(_jkey(b), b)
+    except (KeyError, ValueError) as e:
+        return _err(str(e).strip("'\""))
+    journal.check_lock(r, t["acct"], before)
+    return {"ok": True, "j": j.view(r, {journal.session_key(t)})}
+
+
+@app.post("/api/journal/audit")
+async def journal_audit(request: Request):
+    """What the 8 pillars of a trade would be with these edits (the form shows it as you click); nothing is saved."""
+    u, r = _urt(request)
+    b = await _body(request)
+    try:
+        return {"ok": True, **journal.get(u["uid"]).preview(_jkey(b), b)}
+    except (KeyError, ValueError) as e:
+        return _err(str(e).strip("'\""))
+
+
+@app.post("/api/journal/claim")
+async def journal_claim(request: Request):
+    _same_origin(request)
+    u, r = _urt(request)
+    b = await _body(request)
+    j = journal.get(u["uid"])
+    try:
+        t = j.claim(_jkey(b))
+    except (KeyError, ValueError) as e:
+        return _err(str(e).strip("'\""))
+    return {"ok": True, "j": j.view(r, {journal.session_key(t)})}
+
+
+@app.post("/api/journal/hide")
+async def journal_hide(request: Request):
+    """Remove a trade from the journal (its stats, reps and sessions) or bring it back: {id, hidden}."""
+    _same_origin(request)
+    u, r = _urt(request)
+    b = await _body(request)
+    j = journal.get(u["uid"])
+    try:
+        j.set_hidden(_jkey(b), bool(b.get("hidden", True)))
+    except KeyError as e:
+        return _err(str(e).strip("'\""))
+    return {"ok": True, "j": j.view(r)}
+
+
+@app.post("/api/journal/practice")
+async def journal_practice(request: Request):
+    _same_origin(request)
+    u, r = _urt(request)
+    b = await _body(request)
+    j = journal.get(u["uid"])
+    try:
+        j.set_practice(str(b.get("day") or ""), bool(b.get("on")))
+    except ValueError as e:
+        return _err(e)
+    return {"ok": True, "practice": j.d["practice"]}
+
+
+@app.post("/api/journal/settings")
+async def journal_settings(request: Request):
+    """{rules: {...}} (Octagon rules and the lockout switches), {pillars: {n: {title, short, rule} | null}},
+    {p1: [[key, label], ...] | null}."""
+    _same_origin(request)
+    u, r = _urt(request)
+    b = await _body(request)
+    j = journal.get(u["uid"])
+    before = {aid: j.lock_reason(aid, e.trading_day()) for aid, e in r.engines.items()}
+    try:
+        j.set_settings(b)
+    except (ValueError, TypeError, IndexError) as e:
+        return _err(e)
+    for aid in r.engines:                                  # a rule change can start or end a lockout
+        journal.check_lock(r, aid, before.get(aid))
+        _engine_changed(r, aid, None)
+    return {"ok": True, "j": j.view(r)}
+
+
+@app.post("/api/journal/end")
+async def journal_end(request: Request):
+    """End today's session for the account in X-Acct (Pillar 5: walk away at peak equity). With the switch on, new
+    orders are refused until the next trading day."""
+    _same_origin(request)
+    u, r = _urt(request)
+    b = await _body(request)
+    e = _eng(request, b)
+    aid = next((k for k, v in r.engines.items() if v is e), "")
+    j = journal.get(u["uid"])
+    before = j.lock_reason(aid, e.trading_day())
+    j.end_session(aid, e.trading_day())
+    journal.check_lock(r, aid, before)
+    _engine_changed(r, aid, "Journal: session ended for today")
+    return {"ok": True, "j": j.view(r)}
 
 
 # ------------------------------------------------------------------ live prices (each user's own feed)

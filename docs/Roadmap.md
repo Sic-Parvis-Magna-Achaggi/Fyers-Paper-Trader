@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 1 Nov 2026 (v0.25.0). This is the one task list for the project.
+Updated 1 Nov 2026 (v0.26.1). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -36,7 +36,7 @@ ahead of 3-6.
      - [x] The recorder: the server records every feed snapshot for chosen contracts (default CRUDEOIL and NIFTY futures) and reports how much of the volume arrives as single, exact trades (Log page, admin). *(v0.16.0)*
      - [ ] Measure on Monday 2 Nov (needs the owner's Fyers login that morning), then read the report together.
      - [ ] Then decide with the owner: build the footprint (buy x sell volume at each price per bar, delta, cumulative delta, imbalances) only where the trades are exact; otherwise ask Fyers for a trade feed. Buyer / seller is classified by the bid / ask at the trade, as Fyers' own order flow does.
-3. [x] **Telegram alerts:** shipped in **v0.25.0**, see Done. Not yet tried on the real server and the owner's real bot (to do: set it up, send the test, check `systemctl status fyers-watchdog`).
+3. [x] **Telegram alerts:** shipped in **v0.25.0**, see Done. Set up on the real server 1 Nov (owner): the test message arrived and Settings shows "Watchdog: running". A real outage during a live trade is still untried (optional, with the first live trade).
    Asked: a message if the server stops responding while a live trade is open (with the journal's Telegram set-up).
    Design (1 Nov 2026, Claude's proposal on the owner's "let's finish the Telegram alert"; he can change any of it):
    - Your own Telegram bot (the journal's bot can be reused): its token typed only in Settings › Telegram alerts (saved
@@ -51,10 +51,36 @@ ahead of 3-6.
    - **The whole server down** (droplet off, network): nothing on it can send, so an optional outside heartbeat
      (Healthchecks.io, free): the watchdog pings it every minute while a live trade is open and pauses it when flat (with its
      API key; without the key it pings all the time); Healthchecks.io sends its own Telegram message when the pings stop.
-4. [ ] **Journal: full Octagon port** (from `octagon_journal.html`)
-   - Paper and live trades arrive automatically, per user and account.
-   - 8 pillars audit; notes, tags, plan; insights; review calendar; filters and stats.
-   - Screenshots on the server, with the chart captured automatically at entry and exit. Telegram as a backup copy.
+4. [ ] **Journal: full Octagon port** (from `octagon_journal.html`; started 1 Nov 2026, owner: "Let's start the journal").
+   It stays on the server (per user); the Cloudflare relay isn't needed (Telegram is only a backup copy, prices come from
+   the app's own Fyers candles). The Telegram bot is the one saved in Settings › Telegram alerts.
+   Agreed 1 Nov 2026 (owner's answers):
+   - **Lockouts block orders, each switchable:** the 2% trailing drawdown from the session peak, the 99 Club break (20 min
+     after 3 wins in a row or 3 wins of 2R+) and "numbers running" / session ended refuse new orders like the risk guards,
+     each with its own switch in the journal's settings. The 2% line counts closed trades only, net of charges (as Octagon;
+     the owner can ask for open P&L to count too).
+   - **The 8 pillars word for word**, each pillar's text and the Pillar 1 checks editable in the journal's settings.
+   - **Screenshots: server + browser:** the server draws the chart itself at every entry and exit (works with no page
+     open); when a chart of that contract is open, its own picture (indicators, drawings) is added too.
+   - Money: R and ₹ are the app's net figures (net ₹ after all charges / risk at the first stop), so "2R+ wins" and the
+     stretched-target check are after charges. A session = one IST trading day per account; time-of-day buckets are
+     Indian (Octagon's Asia / London / NY don't apply).
+   In three releases:
+   - [x] **v0.26.0:** the Journal page; paper and live trades arrive automatically, per user and account (open trades too;
+     past trades taken from each account's history and its archives); the trade list with the octagon seal; the 8-pillar
+     audit (Direction + regime + Pillar 1 checks, Wait state, Execution + faults, numbers running, payout pressure, Zen,
+     Target), bias / KE, setup tags, plan, review; the session engine and lockouts (blocking, switchable); Today card;
+     Reps with hold-to-claim and milestones; stats strip and equity curve (balance / P&L); filters (period, account,
+     symbol, side, octagon, regime, tag, search); Octagon rules and pillar text in settings; ground-state practice. *(v0.26.0)*
+   - [ ] **v0.27.0:** screenshots on the server (automatic at entry and exit, server-drawn + the open chart's picture;
+     your own uploads / paste, labelled by timeframe), the image viewer, Telegram backup copy to the journal's channel.
+   - [ ] **v0.28.0:** Insights (performance, by symbol / time of day / regime / tag / pillar / weekday, lockout stats,
+     rep blocks, the equity chart with drawdown), the weekly Review and calendar with the walk-through and weekly focus,
+     Copy for Gemini, CSV export, backup / restore.
+   - [ ] **4b. Prop-firm journals in the same journal** (Claude's suggestion 1 Nov; waiting for the owner's yes): prop
+     accounts as their own accounts (own currency $ and broker clock, never mixed with ₹), the Octagon backup imported
+     once, MT5 history import, manual entry with Gemini ticket reading, phases / payouts / account chains. Reps, pillars
+     and the review count across all accounts.
 **Order change (owner, 1 Nov 2026, after v0.22.0):** item 5 (saved layouts, done in v0.23.0), then 6 (multi-charts, done in
 v0.24.0 / v0.24.1); Telegram (3, done in v0.25.0) and the journal (4) next.
 
@@ -160,8 +186,9 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 - [ ] Switch the order-flow recorder off after Monday's measurement (Log page): it writes tens of MB a day per busy
   contract on the 25 GB disk.
 - [ ] Partial closes.
-- [ ] **Telegram alerts on the real server (owner):** after v0.25.0 deploys, Settings › Telegram alerts should say "Watchdog:
-  running"; set up the bot and send the test. Optional: the Healthchecks.io check.
+- [x] **Telegram alerts on the real server (owner, 1 Nov):** bot set up, test message received, "Watchdog: running".
+- [ ] Optional, with the first live trade: `systemctl stop fyers-helper` for under a minute -> the "isn't responding" message,
+  then start it -> "answering again". Optional: the Healthchecks.io check.
 - [ ] **Fyers support (owner, 1 Nov):** GOLDPETAL26NOVFUT's history for 29-30 Oct doesn't match Fyers' own live prices
   (emailed by the owner 1 Nov; waiting for Fyers). When Fyers fixes it, the app takes the corrected days on its own
   within a week (v0.20.7).
@@ -170,6 +197,8 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Done
 
+- [x] **v0.26.1** (1 Nov): Release to GitHub (`tools/github_upload.html`): a zip goes in as one commit through GitHub's API, only changed files, no 100-file limit (asked 1 Nov, after the 120-file v0.26.0 zip was refused by github.com's uploader).
+- [x] **v0.26.0** (1 Nov): the journal, first step (item 4): the Journal page; trades arrive on their own; the 8-pillar audit; the session engine with lockouts that refuse orders (switchable); Today, Reps, stats and curve, filters, settings.
 - [x] **v0.25.0** (1 Nov): Telegram alerts for live trades (item 3): the server not answering (a watchdog service of its own), a live warning lasting 30 s, no prices for 60 s; your own bot, Find my chat, test message; optional outside heartbeat (Healthchecks.io) for the whole server being down.
 - [x] **v0.24.1** (1 Nov): multi-charts, second step (item 6 complete): contract, timeframe and date-range sync.
 - [x] **v0.24.0** (1 Nov): multi-charts, first step (item 6): 1 / 2 / 2 / 3 / 2×2 grids, each chart its own, the active chart for the watchlist, BUY / SELL and Pine, crosshair sync, the phone's chart buttons.

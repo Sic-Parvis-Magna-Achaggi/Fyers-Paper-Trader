@@ -29,7 +29,7 @@ Nothing to do. Every minute the server checks GitHub (`fyers-update.timer`). Whe
 - installs any new Python packages;
 - restarts the helper.
 
-Upload a new zip to GitHub and it's live within about a minute. The version shows at the bottom of Settings.
+Upload a new zip to GitHub (with `tools/github_upload.html`, see the README) and it's live within about a minute. The version shows at the bottom of Settings.
 
 ## Useful console commands
 

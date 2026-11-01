@@ -9,7 +9,7 @@ import secrets
 import shutil
 import time
 
-from . import store, users
+from . import journal, store, users
 from .feedcheck import FC
 from .feed import Feed
 from .fyers_link import FyersLink
@@ -57,6 +57,9 @@ class UserRT:
             e = Paper(folder, self.link, a.get("name", ""))
         e.on_change = lambda ev, aid=a["id"]: on_engine_change and on_engine_change(self, aid, ev)
         e.on_symbols = lambda: self.feed._resync()
+        e.journal_hook = lambda kind, obj, aid=a["id"]: journal.on_trade(self, aid, kind, obj)
+        e.journal_guard = lambda aid=a["id"]: journal.guard(self, aid)
+        e.journal_lock = lambda aid=a["id"]: journal.lock_state(self, aid)
         now = time.time()                          # a new engine (an account just made, switched or restored) starts
         for s, t in list(self.feed.last.items()):  # with the prices of the last few seconds, not empty
             if now - self.feed.last_at.get(s, 0) < 10:
@@ -270,9 +273,14 @@ class UserRT:
 def start(loop):
     global _loop
     _loop = loop
+    journal._loop = loop
     for u in users.all_users():
         if not u["disabled"]:
-            get(u["uid"])
+            r = get(u["uid"])
+            try:                                   # the journal takes in any trade it hasn't seen (also archives)
+                journal.get(u["uid"]).sync(r, full=True)
+            except Exception as ex:
+                log.exception("[%s] journal sync: %s", r.label, ex)
 
 
 def get(uid: str) -> UserRT:

@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Release to GitHub</title>
+<!--
+  Release to GitHub: puts a release zip into a GitHub repo as ONE commit, through GitHub's own API
+  (no 100-file limit, unlike dragging files into github.com).
+
+  Use: open this file in a browser (double-click it; it needs nothing else, no server). Paste a GitHub token, pick the zip,
+  Check, then Commit. Only files whose content changed are sent; nothing is deleted unless you tick the box.
+
+  The token: a fine-grained personal access token (github.com > Settings > Developer settings > Personal access tokens >
+  Fine-grained), "Only select repositories" = this repo, Repository permissions > Contents: Read and write. It stays in this
+  page (and, only if you tick "Remember", in this browser's storage on this device). It is sent only to the API address.
+
+  How: GET the branch and its tree, work out each file's git blob id locally (SHA-1 of "blob <size>\0" + bytes) to see what
+  changed, POST a blob per changed file, POST one tree on top of the current one, POST the commit, PATCH the branch
+  (fast-forward only: if the branch moved meanwhile, nothing is changed and you Check again).
+  Tested against a fake GitHub API (tests/github_upload_flow.js); see tests/README.md.
+-->
+<style>
+:root{--bg:#f4f5f7;--panel:#fff;--line:#e1e4e9;--text:#15191f;--muted:#626b78;--accent:#2563eb;--up:#118452;--down:#cf3328;--warn:#a86f00;--chip:#eef0f3}
+@media (prefers-color-scheme: dark){:root{--bg:#0f1216;--panel:#161a20;--line:#262c35;--text:#e6e9ee;--muted:#8b94a3;--accent:#4f8cff;--up:#22a06b;--down:#e2483d;--warn:#d99a1e;--chip:#222833}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:860px;margin:0 auto;padding:24px 16px 60px}
+h1{font-size:22px;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:14px}
+.card h2{font-size:15px;margin:0 0 10px}
+label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+input[type=text],input[type=password],textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:8px 10px;font:inherit}
+textarea{resize:vertical;min-height:64px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row > div{flex:1 1 180px;min-width:0}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--chip);color:var(--text);border-radius:6px;padding:8px 14px}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button:disabled{opacity:.5;cursor:not-allowed}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center}
+.check{display:flex;gap:8px;align-items:flex-start;font-size:13px;margin:10px 0 0;color:var(--text)}
+.check input{margin-top:3px}
+.drop{border:2px dashed var(--line);border-radius:10px;padding:22px;text-align:center;color:var(--muted);cursor:pointer}
+.drop.over{border-color:var(--accent);color:var(--accent)}
+.st{margin-top:10px;font-size:13px;white-space:pre-wrap}
+.ok{color:var(--up)} .bad{color:var(--down)} .warn{color:var(--warn)} .muted{color:var(--muted)}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+.sum{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0}
+.pill{background:var(--chip);border-radius:999px;padding:2px 10px;font-size:12.5px}
+details{margin-top:8px}
+details ul{margin:6px 0 0;padding-left:20px;max-height:240px;overflow:auto;font-size:12.5px}
+.bar{height:6px;border-radius:3px;background:var(--chip);overflow:hidden;margin-top:10px}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+small.hint{display:block;color:var(--muted);font-size:12px;margin-top:6px}
+a{color:var(--accent)}
+</style>
+</head>
+<body>
+<main>
+  <h1>Release to GitHub</h1>
+  <p class="sub">Puts a release zip into your repo as one commit, through GitHub's API (no 100-file limit). Only changed files are sent.</p>
+
+  <div class="card">
+    <h2>1 · Repository and token</h2>
+    <div class="row">
+      <div><label for="repo">Repository (owner/name)</label><input type="text" id="repo" class="mono" value="Sic-Parvis-Magna-Achaggi/Fyers-Paper-Trader" autocomplete="off"></div>
+      <div style="flex:0 1 160px"><label for="branch">Branch (empty = default)</label><input type="text" id="branch" class="mono" placeholder="main" autocomplete="off"></div>
+    </div>
+    <label for="token">GitHub token (fine-grained, this repo only, Contents: Read and write)</label>
+    <div class="row" style="flex-wrap:nowrap"><input type="password" id="token" autocomplete="off" placeholder="github_pat_…"><button type="button" id="show" style="flex:none">Show</button></div>
+    <label class="check"><input type="checkbox" id="remember"> Remember the token in this browser on this device (otherwise it's forgotten when you close the page)</label>
+    <details><summary class="muted">API address (only for testing)</summary><input type="text" id="api" class="mono" value="https://api.github.com" style="margin-top:6px"></details>
+  </div>
+
+  <div class="card">
+    <h2>2 · The release zip</h2>
+    <div class="drop" id="drop" tabindex="0">Drop the zip here, or click to choose it<br><small>The top folder (e.g. <span class="mono">Fyers-Paper-Trader/</span>) is left out, as when you drag its contents.</small></div>
+    <input type="file" id="file" accept=".zip,application/zip" hidden>
+    <div class="st" id="zipSt"></div>
+    <div class="btns"><button class="primary" id="check" disabled>Check against GitHub</button></div>
+    <div class="st" id="chkSt"></div>
+    <div id="plan"></div>
+  </div>
+
+  <div class="card" id="commitCard" hidden>
+    <h2>3 · Commit</h2>
+    <label for="msg">Commit message</label>
+    <textarea id="msg" rows="3"></textarea>
+    <label class="check" id="delWrap" hidden><input type="checkbox" id="del"> <span id="delTxt"></span></label>
+    <label class="check" id="oldWrap" hidden><input type="checkbox" id="old"> <span id="oldTxt"></span></label>
+    <div class="btns"><button class="primary" id="go">Commit to GitHub</button><span class="muted" id="goNote"></span></div>
+    <div class="bar"><i id="barI"></i></div>
+    <div class="st" id="goSt"></div>
+  </div>
+</main>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const S = {files: null, zipName: "", plan: null};
+const LS = {get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }, set(k, v){ try{ localStorage.setItem(k, v); }catch(e){} }, del(k){ try{ localStorage.removeItem(k); }catch(e){} }};
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function st(id, text, cls){ const el = $(id); el.className = "st " + (cls || ""); el.textContent = text; }
+
+/* ---------------------------------------------------------------- settings remembered on this device */
+for(const k of ["repo", "branch", "api"]){ const v = LS.get("ghup." + k); if(v) $(k).value = v; }
+if(LS.get("ghup.token")){ $("token").value = LS.get("ghup.token"); $("remember").checked = true; }
+for(const k of ["repo", "branch", "api"]) $(k).addEventListener("change", () => LS.set("ghup." + k, $(k).value.trim()));
+$("remember").onchange = () => { if($("remember").checked) LS.set("ghup.token", $("token").value.trim()); else LS.del("ghup.token"); };
+$("token").addEventListener("change", () => { if($("remember").checked) LS.set("ghup.token", $("token").value.trim()); });
+$("show").onclick = () => { const t = $("token"); t.type = t.type === "password" ? "text" : "password"; $("show").textContent = t.type === "password" ? "Show" : "Hide"; };
+
+/* ---------------------------------------------------------------- reading the zip (no library: the browser inflates) */
+async function inflateRaw(bytes){
+  const ds = new DecompressionStream("deflate-raw");
+  const out = new Response(new Blob([bytes]).stream().pipeThrough(ds));
+  return new Uint8Array(await out.arrayBuffer());
+}
+async function readZip(buf){
+  const u8 = new Uint8Array(buf), dv = new DataView(buf);
+  let eocd = -1;
+  for(let i = u8.length - 22; i >= Math.max(0, u8.length - 65557); i--) if(dv.getUint32(i, true) === 0x06054b50){ eocd = i; break; }
+  if(eocd < 0) throw new Error("this isn't a zip file (no end-of-zip record)");
+  const n = dv.getUint16(eocd + 10, true), cdOff = dv.getUint32(eocd + 16, true);
+  if(cdOff === 0xffffffff) throw new Error("zip64 archives aren't supported");
+  const dec = new TextDecoder();
+  const out = [];
+  let p = cdOff;
+  for(let k = 0; k < n; k++){
+    if(dv.getUint32(p, true) !== 0x02014b50) throw new Error("damaged zip (central directory)");
+    const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true), usize = dv.getUint32(p + 24, true);
+    const nl = dv.getUint16(p + 28, true), xl = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true);
+    const ext = dv.getUint32(p + 38, true), lho = dv.getUint32(p + 42, true);
+    const name = dec.decode(u8.subarray(p + 46, p + 46 + nl));
+    p += 46 + nl + xl + cl;
+    if(name.endsWith("/")) continue;
+    const lnl = dv.getUint16(lho + 26, true), lxl = dv.getUint16(lho + 28, true), start = lho + 30 + lnl + lxl;
+    const raw = u8.subarray(start, start + csize);
+    let data;
+    if(method === 0) data = raw.slice();
+    else if(method === 8) data = await inflateRaw(raw);
+    else throw new Error(`${name}: compression method ${method} isn't supported`);
+    if(data.length !== usize) throw new Error(`${name}: size doesn't match after unzipping`);
+    const mode = (ext >>> 16) & 0o777;
+    out.push({name, data, exec: !!(mode & 0o111)});
+  }
+  return out;
+}
+const SKIP = /(^|\/)(__pycache__|\.git|\.DS_Store|Thumbs\.db|node_modules)(\/|$)|\.pyc$/;
+function stripTop(entries){
+  const tops = new Set(entries.map(e => e.name.split("/")[0]));
+  const strip = tops.size === 1 && entries.every(e => e.name.includes("/"));
+  const top = strip ? [...tops][0] + "/" : "";
+  return {top, files: entries.map(e => ({...e, path: e.name.slice(top.length)})).filter(e => e.path && !SKIP.test(e.path))};
+}
+async function gitSha(data){                      // git's blob id: SHA-1 of "blob <size>\0" + content
+  const head = new TextEncoder().encode(`blob ${data.length}\0`), all = new Uint8Array(head.length + data.length);
+  all.set(head); all.set(data, head.length);
+  const h = new Uint8Array(await crypto.subtle.digest("SHA-1", all));
+  return [...h].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+function b64(data){
+  let s = ""; const CH = 0x8000;
+  for(let i = 0; i < data.length; i += CH) s += String.fromCharCode.apply(null, data.subarray(i, i + CH));
+  return btoa(s);
+}
+async function takeZip(file){
+  S.files = null; S.plan = null; $("plan").innerHTML = ""; $("commitCard").hidden = true; st("chkSt", "");
+  st("zipSt", "Reading " + file.name + "…");
+  try{
+    const ents = await readZip(await file.arrayBuffer());
+    const {top, files} = stripTop(ents);
+    for(const f of files) f.sha = await gitSha(f.data);
+    S.files = files; S.zipName = file.name;
+    const ver = files.find(f => f.path === "VERSION");
+    S.zipVersion = ver ? new TextDecoder().decode(ver.data).trim() : "";
+    st("zipSt", `${file.name}: ${files.length} files${top ? ` (top folder "${top.slice(0, -1)}" left out)` : ""}${S.zipVersion ? ` · version ${S.zipVersion}` : ""}`, "ok");
+    $("check").disabled = false;
+  }catch(e){ st("zipSt", "Couldn't read the zip: " + e.message, "bad"); $("check").disabled = true; }
+}
+$("drop").onclick = () => $("file").click();
+$("drop").onkeydown = e => { if(e.key === "Enter" || e.key === " "){ e.preventDefault(); $("file").click(); } };
+$("file").onchange = () => { if($("file").files[0]) takeZip($("file").files[0]); };
+$("drop").ondragover = e => { e.preventDefault(); $("drop").classList.add("over"); };
+$("drop").ondragleave = () => $("drop").classList.remove("over");
+$("drop").ondrop = e => { e.preventDefault(); $("drop").classList.remove("over"); const f = e.dataTransfer.files[0]; if(f) takeZip(f); };
+
+/* ---------------------------------------------------------------- GitHub's API */
+function repoParts(){
+  const v = $("repo").value.trim().replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, "").replace(/\/+$/, "");
+  if(!/^[\w.-]+\/[\w.-]+$/.test(v)) throw new Error("repository: owner/name, e.g. Sic-Parvis-Magna-Achaggi/Fyers-Paper-Trader");
+  return v;
+}
+async function gh(method, path, body, tries = 6){
+  const token = $("token").value.trim();
+  if(!token) throw new Error("paste your GitHub token first");
+  const base = $("api").value.trim().replace(/\/+$/, "");
+  for(let a = 0; ; a++){
+    let r;
+    try{
+      r = await fetch(base + path, {method, headers: {"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28", ...(body ? {"Content-Type": "application/json"} : {})}, body: body ? JSON.stringify(body) : undefined});
+    }catch(e){ if(a < 2){ await sleep(2000); continue; } throw new Error("can't reach GitHub (" + e.message + ")"); }
+    let j = null; try{ j = await r.json(); }catch(e){}
+    const msg = (j && j.message) || ("HTTP " + r.status);
+    const limited = (r.status === 403 || r.status === 429) && (/rate limit/i.test(msg) || r.headers.get("retry-after"));
+    if(limited && a < tries){                                     // GitHub's secondary limit (content created too fast): wait
+      const ra = Number(r.headers.get("retry-after")), reset = Number(r.headers.get("x-ratelimit-reset"));
+      const wait = ra ? ra * 1000 : reset ? Math.max(1000, reset * 1000 - Date.now()) : 60000;
+      onWait && onWait(Math.ceil(Math.min(wait, 120000) / 1000));
+      await sleep(Math.min(wait, 120000)); continue;
+    }
+    if(r.status >= 500 && a < 2){ await sleep(3000); continue; }
+    if(!r.ok){
+      const e = new Error(r.status === 401 ? "GitHub refused the token (wrong, expired or revoked)"
+        : r.status === 403 ? "the token can't do this: it needs Contents: Read and write on this repository (" + msg + ")"
+        : r.status === 404 ? "not found: check the repository name and that the token has access to it (" + path + ")" : msg);
+      e.status = r.status; throw e;
+    }
+    return j;
+  }
+}
+let onWait = null;
+
+/* ---------------------------------------------------------------- check: what would change */
+$("check").onclick = async () => {
+  $("check").disabled = true; $("plan").innerHTML = ""; $("commitCard").hidden = true; st("goSt", ""); $("barI").style.width = "0";
+  st("chkSt", "Reading the repository…");
+  try{
+    const repo = repoParts();
+    const info = await gh("GET", `/repos/${repo}`);
+    const branch = $("branch").value.trim() || info.default_branch;
+    const ref = await gh("GET", `/repos/${repo}/git/ref/heads/${encodeURIComponent(branch)}`);
+    const head = ref.object.sha;
+    const commit = await gh("GET", `/repos/${repo}/git/commits/${head}`);
+    const tree = await gh("GET", `/repos/${repo}/git/trees/${commit.tree.sha}?recursive=1`);
+    if(tree.truncated) throw new Error("the repository is too big to compare in one go (GitHub truncated its file list)");
+    const remote = new Map(tree.tree.filter(x => x.type === "blob").map(x => [x.path, x]));
+    const local = new Map(S.files.map(f => [f.path, f]));
+    const changed = [], added = [], same = [];
+    for(const f of S.files){ const r = remote.get(f.path); if(!r) added.push(f); else if(r.sha !== f.sha) changed.push(f); else same.push(f); }
+    const gone = [...remote.keys()].filter(p => !local.has(p) && !SKIP.test(p)).sort();
+    // the version in the repo now, to catch an older zip
+    let repoVer = "";
+    if(remote.get("VERSION")){ const b = await gh("GET", `/repos/${repo}/git/blobs/${remote.get("VERSION").sha}`);
+      try{ repoVer = new TextDecoder().decode(Uint8Array.from(atob(b.content.replace(/\s/g, "")), c => c.charCodeAt(0))).trim(); }catch(e){} }
+    S.plan = {repo, branch, head, baseTree: commit.tree.sha, remote, changed, added, gone, repoVer, headMsg: commit.message};
+    const li = arr => `<ul class="mono">${arr.map(x => `<li>${esc(x.path || x)}</li>`).join("")}</ul>`;
+    $("plan").innerHTML = `<div class="sum"><span class="pill">${changed.length} changed</span><span class="pill">${added.length} new</span><span class="pill">${same.length} the same</span><span class="pill">${gone.length} only on GitHub</span></div>
+      <div class="muted">${esc(repo)} · ${esc(branch)} · last commit <span class="mono">${head.slice(0, 7)}</span>: ${esc((commit.message || "").split("\n")[0])}${repoVer ? ` · version ${esc(repoVer)}` : ""}</div>
+      ${changed.length ? `<details open><summary>Changed (${changed.length})</summary>${li(changed)}</details>` : ""}
+      ${added.length ? `<details open><summary>New (${added.length})</summary>${li(added)}</details>` : ""}
+      ${gone.length ? `<details><summary>On GitHub but not in this zip (${gone.length}): kept unless you tick the box below</summary>${li(gone)}</details>` : ""}`;
+    if(!changed.length && !added.length && !gone.length){ st("chkSt", "Nothing to upload: GitHub already has exactly these files.", "ok"); $("check").disabled = false; return; }
+    st("chkSt", changed.length + added.length ? `Ready: ${changed.length + added.length} file${changed.length + added.length === 1 ? "" : "s"} to send.`
+      : "GitHub already has every file in this zip. Only the deletions below are left, if you want them.", "ok");
+    $("commitCard").hidden = false;
+    $("msg").value = defaultMsg();
+    $("delWrap").hidden = !gone.length; $("del").checked = false;
+    $("delTxt").textContent = `Also delete the ${gone.length} file${gone.length === 1 ? "" : "s"} that ${gone.length === 1 ? "is" : "are"} on GitHub but not in this zip (see the list above)`;
+    const older = S.zipVersion && repoVer && cmpVer(S.zipVersion, repoVer) < 0;
+    $("oldWrap").hidden = !older; $("old").checked = false;
+    $("oldTxt").innerHTML = `<b class="warn">This zip is version ${esc(S.zipVersion)}, older than GitHub's ${esc(repoVer)}.</b> Tick to upload it anyway.`;
+    goState();
+  }catch(e){ st("chkSt", e.message, "bad"); }
+  $("check").disabled = false;
+};
+function cmpVer(a, b){ const A = a.split(".").map(Number), B = b.split(".").map(Number); for(let i = 0; i < Math.max(A.length, B.length); i++){ const d = (A[i] || 0) - (B[i] || 0); if(d) return d; } return 0; }
+function defaultMsg(){
+  const cl = S.files.find(f => f.path === "CHANGELOG.md");
+  if(cl){ const m = new TextDecoder().decode(cl.data).match(/^##\s+v?([\d.]+)\s+[—-]+\s+[^—\n]*[—-]+\s+(.+)$/m); if(m) return `v${m[1]}: ${m[2].trim()}`; }
+  return S.zipVersion ? `v${S.zipVersion}` : "Release " + S.zipName;
+}
+function goState(){ const P = S.plan;
+  $("go").disabled = !P || (!$("oldWrap").hidden && !$("old").checked) || !$("msg").value.trim() || (!P.changed.length && !P.added.length && !$("del").checked); }
+$("old").onchange = goState; $("msg").oninput = goState; $("del").onchange = goState;
+
+/* ---------------------------------------------------------------- commit: blobs, one tree, one commit, move the branch */
+$("go").onclick = async () => {
+  const P = S.plan; if(!P) return;
+  $("go").disabled = true; $("check").disabled = true;
+  const send = [...P.changed, ...P.added], del = $("del").checked ? P.gone : [];
+  const slow = send.length > 60;                                  // GitHub allows about 80 created items a minute
+  let done = 0;
+  const bar = () => { $("barI").style.width = (100 * done / (send.length + 3)).toFixed(1) + "%"; };
+  onWait = s => st("goSt", `GitHub asked to slow down: waiting ${s} s, then carrying on (${done} of ${send.length} sent)…`, "warn");
+  try{
+    // make sure nobody committed since Check (else the list above would be out of date)
+    const ref = await gh("GET", `/repos/${P.repo}/git/ref/heads/${encodeURIComponent(P.branch)}`);
+    if(ref.object.sha !== P.head) throw Object.assign(new Error("the branch changed since you checked: press Check again"), {moved: true});
+    const entries = [];
+    for(const f of send){
+      st("goSt", `Sending ${f.path} (${done + 1} of ${send.length})…`);
+      const t0 = Date.now();
+      const b = await gh("POST", `/repos/${P.repo}/git/blobs`, {content: b64(f.data), encoding: "base64"});
+      if(b.sha !== f.sha) throw new Error(`${f.path}: GitHub stored it as ${b.sha.slice(0, 7)}, expected ${f.sha.slice(0, 7)} - stopped, nothing committed`);
+      const r = P.remote.get(f.path);
+      entries.push({path: f.path, mode: r ? r.mode : (f.exec ? "100755" : "100644"), type: "blob", sha: b.sha});
+      done++; bar();
+      if(slow){ const w = 800 - (Date.now() - t0); if(w > 0) await sleep(w); }
+    }
+    for(const p of del) entries.push({path: p, mode: P.remote.get(p).mode, type: "blob", sha: null});
+    st("goSt", "Making the commit…");
+    const tree = await gh("POST", `/repos/${P.repo}/git/trees`, {base_tree: P.baseTree, tree: entries}); done++; bar();
+    const commit = await gh("POST", `/repos/${P.repo}/git/commits`, {message: $("msg").value.trim(), tree: tree.sha, parents: [P.head]}); done++; bar();
+    try{
+      await gh("PATCH", `/repos/${P.repo}/git/refs/heads/${encodeURIComponent(P.branch)}`, {sha: commit.sha, force: false});
+    }catch(e){
+      if(e.status === 422) throw Object.assign(new Error("the branch changed while sending (someone committed meanwhile): nothing was changed. Press Check again."), {moved: true});
+      throw e;
+    }
+    done++; bar();
+    const url = `https://github.com/${P.repo}/commit/${commit.sha}`;
+    $("goSt").className = "st ok";
+    $("goSt").innerHTML = `Done: commit <a href="${esc(url)}" target="_blank" rel="noopener" class="mono">${commit.sha.slice(0, 7)}</a> on ${esc(P.branch)} · ${send.length} file${send.length === 1 ? "" : "s"} sent${del.length ? `, ${del.length} deleted` : ""}. The server picks it up within a minute.`;
+    S.plan = null;
+  }catch(e){
+    st("goSt", (e.moved ? "" : "Stopped: ") + e.message + (e.moved ? "" : "\nThe branch wasn't changed (the commit is only made at the very end)."), "bad");
+    $("go").disabled = false;
+  }
+  onWait = null; $("check").disabled = false;
+};
+</script>
+</body>
+</html>

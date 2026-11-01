@@ -548,6 +548,7 @@ body:not(.is-admin) .admin-only{display:none!important}
 </style>
 <link rel="stylesheet" href="/static/draw.css?v=__V__">
 <link rel="stylesheet" href="/static/multichart.css?v=__V__">
+<link rel="stylesheet" href="/static/journal.css?v=__V__">
 <link rel="stylesheet" href="/static/mobile.css?v=__V__">
 </head>
 <body data-page="chart">
@@ -596,7 +597,7 @@ body:not(.is-admin) .admin-only{display:none!important}
 <div id="app" class="hide">
   <header>
     <span class="brand">Trade Manager</span>
-    <nav id="nav"><button data-pg="chart" class="on">Chart</button><button data-pg="trades">Trades <span class="nb hide" id="nbTrades"></span></button><button data-pg="history">History</button><button data-pg="book">Book</button><button data-pg="account">Account</button><button data-pg="log">Log</button></nav>
+    <nav id="nav"><button data-pg="chart" class="on">Chart</button><button data-pg="trades">Trades <span class="nb hide" id="nbTrades"></span></button><button data-pg="history">History</button><button data-pg="journal">Journal</button><button data-pg="book">Book</button><button data-pg="account">Account</button><button data-pg="log">Log</button></nav>
     <select id="acctSel" title="Paper account"></select>
     <span class="pill" id="pFyers"><span class="dot"></span><span>Fyers</span></span>
     <button class="primary hide" id="bFyersLogin">Log in to Fyers</button>
@@ -725,6 +726,7 @@ body:not(.is-admin) .admin-only{display:none!important}
   <section id="pages" class="hide">
     <div class="pg hide" id="pg_trades"></div>
     <div class="pg hide" id="pg_history"></div>
+    <div class="pg hide" id="pg_journal"></div>
     <div class="pg hide" id="pg_book"></div>
     <div class="pg hide" id="pg_account"></div>
     <div class="pg hide" id="pg_log"></div>
@@ -926,6 +928,7 @@ function connectWS(){
     if(m.feed) feedPill(m.feed);
     if(m.paper && (!m.acct || m.acct === ACCT)) paperUpdate(m.paper, m.events);
     if(m.depth){ renderBook(m.depth); pagesDepth(m.depth); }
+    if(m.journal && typeof jnPush === "function") jnPush();
     if(m.charges && (S.user || {}).role === "admin"){ chargePill(m.charges); toast("Fyers' charges page has changed: review it on the Account page"); }
   };
   ws.onclose = ev => {
@@ -2415,6 +2418,7 @@ boot();
 <script src="/static/drawui.js?v=__V__"></script>
 <script src="/static/layouts.js?v=__V__"></script>
 <script src="/static/multichart.js?v=__V__"></script>
+<script src="/static/journal.js?v=__V__"></script>
 <script src="/static/mobile.js?v=__V__"></script>
 </body>
 </html>

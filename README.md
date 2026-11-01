@@ -107,3 +107,14 @@ Upload the new files to this repo. The server picks them up within a minute. See
 - No secrets are kept in this repo.
 - Each user's Fyers App ID and Secret and daily Fyers token, and the password hashes and 2FA secrets, stay on the server in `/home/helper/data`, readable only by the `helper` user. Secrets and tokens are encrypted with a key kept in the same folder (`secret.key`).
 - The server's GitHub key is read-only.
+
+## Releasing a new version to GitHub
+
+Open `tools/github_upload.html` in a browser (double-click it: a single file, nothing to install), paste a GitHub token, pick
+the release zip, **Check against GitHub**, then **Commit to GitHub**. It makes one commit through GitHub's API with only the
+files that changed (no 100-file limit, unlike dragging into github.com). Nothing on GitHub is deleted unless you tick the box.
+
+The token: github.com › Settings › Developer settings › Personal access tokens › **Fine-grained tokens** › Generate new token:
+Repository access "Only select repositories" = this repo; Repository permissions › **Contents: Read and write** (Metadata:
+Read-only is added on its own); an expiry date. Type it only into the page (or tick Remember on your own device).
+

@@ -1,5 +1,62 @@
 # Changelog
 
+## v0.26.1 — 1 Nov 2026 — Release to GitHub without the 100-file limit
+
+Added
+- `tools/github_upload.html` (**Release to GitHub**): one page, opened from disk, that puts a release zip into the repo as
+  **one commit** through GitHub's API, so the 100-file limit of dragging into github.com doesn't apply (the repo has 110
+  files now). It reads the zip in the browser (no library), compares each file's git id with the branch, and sends only what
+  changed; shows changed / new / only-on-GitHub before you commit; deletes nothing unless ticked; keeps file modes; refuses
+  to overwrite a commit made meanwhile (fast-forward only); asks before uploading a zip older than GitHub's VERSION; waits
+  out GitHub's rate limit. The token (fine-grained, this repo, Contents: Read and write) stays in the page, or on your
+  device if you tick Remember. How to make the token: README › Releasing a new version.
+
+Tests
+- `tests/github_upload_flow.js` (25 checks, new) with `tests/fake_github.py` (a fake GitHub git-data API with CORS): the page
+  opened from file://, a Download-ZIP style folder, the right files found and sent (blob ids equal `git hash-object`),
+  one commit on top, modes kept, delete only when ticked, nothing to upload afterwards, older zip, branch moved meanwhile,
+  bad token, rate limit, the token not kept unless asked.
+
+## v0.26.0 — 1 Nov 2026 — The journal (Octagon), first step
+
+Added
+- **Journal page** (roadmap item 4, first of three releases): the Octagon trade journal inside the app, saved on the server
+  per user (`u/<user>/journal.json`), on every device. New tab **Journal** (phone: More › Journal).
+  - **Trades arrive on their own** from every paper and live account: when they open, and completed when they close (a live
+    position closed in parts is one trade). Past trades (each account's history and the archives of resets and Paper ↔ Live
+    switches) were taken in once; they count as claimed reps.
+  - **The 8 pillars, word for word**, in an audit form with the live octagon: Direction & regime with the Pillar 1 checks,
+    market regime, bias and KE; Wait state; Execution and its faults; numbers running; payout pressure; Zen Temple (a breach
+    makes Execution wrong); Target. Setup tags with suggestions, plan, review.
+  - **The session engine** ported from Octagon (one IST trading day per account): the 2% trailing drawdown from the session
+    peak, the 99 Club break (3 wins in a row or 3 wins of 2R+ → 20 minutes), numbers running; Pillars 4, 5 and 8 worked out.
+  - **Lockouts refuse new orders**, each with its own switch (Journal › Settings): after the 2% lockout and after the session
+    ends (numbers running, or **Hold to end today's session**) until the next trading day; during the 99 Club break. A
+    lockout that starts cancels waiting entry orders (switch). The ticket's preview says why; a pill in the top bar shows it.
+    Closing, BE, trailing and stops are never blocked.
+  - **Today card** (the session's octagon, P&L, room before the 2% line, 99 Club count, ground-state practice and its
+    streak), **Reps** (every closed trade, hold to claim, milestones), the **5% execution block**, stats strip (net, win
+    rate, profit factor, average R, expectancy, charges, drawdown) and the balance / P&L curve.
+  - **Filters** (period by close time IST, account, contract, side, octagon, regime, setup tags any / all, search), saved in
+    your settings. **Remove from journal** / bring back.
+  - **Settings:** Octagon's numbers (2%, 20 min, 3 wins, 2R, 2.5R, 5%, rep milestone, reps before), the lockout switches,
+    each pillar's text and the Pillar 1 checks (Original puts your text back).
+- Money and R in the journal are the app's net figures: net ₹ after every charge, R = net ÷ the net risk at the first stop
+  (Octagon used points before charges).
+- Routes: `GET /api/journal`, `POST /api/journal/trade`, `/audit`, `/claim`, `/hide`, `/practice`, `/settings`, `/end`.
+
+Changed
+- `Paper` engine: a journal hook on every fill and close, a journal check in `guard_new()` (so the preview and PLACE show a
+  lockout like any other guard), `jlock` in the snapshot.
+
+Tests
+- `tests/journal_test.py` (58 checks, new): the server's port against **Octagon's own code** (`tests/fixtures/octagon_core.js`,
+  extracted word for word from octagon_journal.html): 60 random sessions, every pillar state and every session figure equal
+  (seeds 1-7 checked); then the journal on real paper engines: trades arriving, past trades and archives, live parts merged,
+  each lockout refusing orders and its switch, waiting orders cancelled, audit rules, preview, claim, hide, settings.
+- `tests/journal_flow.js` (43 checks, new): the Journal page in a browser, the audit form, claiming, filters, lockouts on a
+  fresh account (2% line, ending the session cancels a waiting order), the header pill, pillar text, reload, the phone.
+
 ## v0.25.0 — 1 Nov 2026 — Telegram alerts for live trades
 
 Added

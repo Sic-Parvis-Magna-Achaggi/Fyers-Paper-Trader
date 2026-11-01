@@ -15,7 +15,7 @@ ROADMAP (THE TASK LIST)
 - Keep docs/Handoff.md current too (where things stand, how the code is laid out, what's next).
 
 HOW TO DELIVER CODE
-- Give me a zip of the changed repo, with the top folder "Fyers-Paper-Trader/". I upload it by dragging the folder's CONTENTS into the GitHub repo, not the folder itself.
+- Give me a zip of the whole repo, with the top folder "Fyers-Paper-Trader/". I upload it with tools/github_upload.html (Release to GitHub: one commit through GitHub's API, only changed files sent, no 100-file limit). Dragging into github.com is the fallback (two drags: it takes at most 100 files at a time).
 - EVERY zip comes with: (1) changelog text I can paste, (2) a one-line commit message, (3) the new version number. Keep VERSION and CHANGELOG.md updated in the repo.
 - Test everything before giving me a zip with the test kit in tests/ (tests/README.md): run the helper against the fake Fyers feed and click through the page in a real browser. Tell me plainly what was and wasn't tested, especially anything that needs the live Fyers feed.
 - Never remove existing features or routes by accident. Run tests/routes_check.py before each release, and add new routes to it.
