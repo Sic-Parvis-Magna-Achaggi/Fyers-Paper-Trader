@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 1 Nov 2026 (v0.22.0). This is the one task list for the project.
+Updated 1 Nov 2026 (v0.23.0). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -41,11 +41,17 @@ ahead of 3-6.
    - Paper and live trades arrive automatically, per user and account.
    - 8 pillars audit; notes, tags, plan; insights; review calendar; filters and stats.
    - Screenshots on the server, with the chart captured automatically at entry and exit. Telegram as a backup copy.
-5. [ ] **Saved chart layouts, per user** (asked 31 Oct 2026)
-   - Save the chart as a named layout: contract, timeframe, indicators (built-in and your Pine scripts) with their settings, and the chart settings.
-   - Pick a layout to open the chart exactly like that. Saved on the server, so every device has them.
+**Order change (owner, 1 Nov 2026, after v0.22.0):** item 5 (saved layouts, done in v0.23.0), then 6 (multi-charts, next);
+Telegram (3) and the journal (4) after them.
+
+5. [x] **Saved chart layouts, per user** (asked 31 Oct 2026): shipped in **v0.23.0**, see Done.
 6. [ ] **Multi-charts in a layout** (asked 31 Oct 2026)
    - Several charts side by side and stacked (vertical and horizontal splits) inside one layout, each with its own contract, timeframe and indicators. Saved with the layout.
+   - Suggested 1 Nov 2026 (to agree with the owner before building): grids 1, 2 side by side, 2 stacked, 3 (one big + two),
+     2×2; sync options per layout like TradingView (crosshair, contract, timeframe, date range); the trade panel and the
+     BUY / SELL tool act on the chart last clicked (highlighted); the phone shows one chart at a time and swipes between
+     them. Each chart's history comes out of the same Fyers data budget (queued), so switching all four timeframes at
+     once can take a few seconds.
 7. [x] **Measurement tool** (MT5 + TradingView, with net ₹ and R): shipped in **v0.22.0**, see Done.
 
 8. [ ] **CFD prices for prop-firm analysis** (asked 31 Oct 2026: analysis only, for prop-firm trades, not broker trades). **On hold** (owner, 31 Oct 2026).
@@ -135,6 +141,10 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Done
 
+- [x] **v0.23.0** (1 Nov): saved chart layouts (item 5, asked 31 Oct). Design (1 Nov; Claude's suggestions taken where the
+  owner didn't choose, he can change them): a layout holds the contract, timeframe, chart type, indicators and Pine scripts
+  with their settings, chart settings, toolbar on / off; **drawings stay per contract**; **auto-save** like TradingView, or by
+  hand (●, Save / Ctrl+S, "save first?"); saved on the server per user; a layout holds a list of charts, ready for item 6.
 - [x] **v0.22.0** (1 Nov): drawing tools (item 9, extras left there) with a toolbar you can hide / show and exact coordinates in each drawing's settings; long / short position drawings for looking back.
   - [x] **Measurement tool, a mix of MT5 and TradingView** (item 7, asked 31 Oct): MT5's ruler (middle-button drag, figures at
     the cursor) and TradingView's measure box (Shift+click / Shift+drag, the ruler button; green up / red down; points, %,

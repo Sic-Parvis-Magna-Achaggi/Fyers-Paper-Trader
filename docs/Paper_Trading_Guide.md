@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.22.0)
+# Paper and live trading: how it works (v0.23.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -150,6 +150,15 @@ Phones get their own layout, like MT5's app (a desktop browser never does). **Mo
 - **Go to a date: the calendar button** at the chart's bottom left (or **Alt+G**, as on TradingView). Pick a date (and a time, on intraday charts; Indian time) and press Go to or Enter: older candles load first if the chart doesn't reach that far back, and the chart centres on that candle (or the one just before, if the market was shut), marked by the crosshair. A date before Fyers' first candle for the contract goes to the oldest one and says so. **Latest** in the same box, or **»** (bottom right, shown whenever the latest candle is off screen), brings you back to now, keeping your zoom.
 - Daily, weekly and monthly charts show dates only on the time axis.
 - **⛶ or F** maximises the chart inside the browser window, so your tabs stay one click away. **Shift+F** gives real full screen. When maximised, **P** (or Panel) slides the trade panel in, its **✕** hides it, and **Esc** goes back to the normal view.
+
+## Layouts (▦ on the chart's top bar)
+
+A layout is a named chart set-up: the contract, timeframe, chart type (with its Renko / range / P&F sizes), indicators and Pine scripts with all their settings and pane heights, the chart settings (colours, lines, Volume, timer...), the drawing toolbar on / off and the indicator read-outs collapsed or not. Your chart as it was before layouts existed is **Layout 1**.
+- **▦** shows the open layout's name (on a narrow chart just ▦; the name is in its tooltip). Its menu lists your layouts with what each holds; click one to open it exactly as saved.
+- **＋ New layout:** a blank chart (candles, no indicators) on the same contract; type its name. **⧉ Copy this one:** a new layout from the chart as it is now. ✎ renames (names are unique), ✕ deletes (click twice; the last layout stays).
+- **Saving:** the open layout saves itself as you change the chart, like TradingView. Untick **Save changes automatically** to save by hand: ● on the button means changes not saved, **Save** (or **Ctrl+S**) keeps them, and leaving the layout asks Save / Don't save / Cancel. Don't save: the layout opens next time as it was last saved.
+- **Drawings belong to the contract, not the layout**: every layout on GOLDPETAL shows GOLDPETAL's drawings.
+- Saved on the server: every device has the same layouts and opens the same one. The saved layout is what counts. If you switched layouts on another device, this one opens that layout as saved the next time it loads.
 
 ## Drawing tools (the toolbar left of the chart)
 
@@ -313,7 +322,7 @@ Candles are saved on the server and in your browser.
 
 ## Saved on the server
 
-Everything here is per user. Your Pine scripts and libraries, the indicators on your chart (with their inputs, style, timeframe and visibility), your watchlists, your drawings (per contract) and drawing settings, pinned timeframes, last chart, theme, panel on/off, ticket defaults (risk mode and amount, product, R) and remembered stop distances are saved on the server. Rules and trailing settings are saved per paper account. Any device, after any login, opens the same set-up.
+Everything here is per user. Your Pine scripts and libraries, the indicators on your chart (with their inputs, style, timeframe and visibility), your watchlists, your chart layouts, your drawings (per contract) and drawing settings, pinned timeframes, last chart, theme, panel on/off, ticket defaults (risk mode and amount, product, R) and remembered stop distances are saved on the server. Rules and trailing settings are saved per paper account. Any device, after any login, opens the same set-up.
 
 ## Every ₹ figure is net
 

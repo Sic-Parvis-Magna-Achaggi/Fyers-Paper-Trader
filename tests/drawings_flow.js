@@ -21,8 +21,13 @@ let br;
   await pg.goto("http://localhost:8766/"); await LOGIN(pg);
   await pg.waitForFunction(() => typeof drAttach === "function" && P.snap, null, { timeout: 20000 });
   // a clean start: no drawings on the two contracts, default drawing settings, 5m candles
-  await pg.evaluate(async ([a, b]) => { for(const s of [a, b]) await api("/api/drawings", {body: {s, items: []}}); await api("/api/prefs", {body: {draw: {}, ctype: {type: "candles"}, tf2: "5m"}}); ls.set("draw", {}); }, [NOV, DEC]);
-  await pg.reload(); await LOGIN(pg);
+  await pg.evaluate(async ([a, b]) => { for(const s of [a, b]) await api("/api/drawings", {body: {s, items: []}}); ls.set("draw", {}); }, [NOV, DEC]);
+  // the chart to start from, set with no page open; no saved layouts (v0.23.0: the open layout would put its own chart back)
+  await pg.goto("about:blank");
+  await ctx.request.post("http://localhost:8766/api/prefs", {data: {draw: {}, ctype: {type: "candles"}, tf2: "5m", indicators: []}, headers: {Origin: "http://localhost:8766"}});
+  const D = process.env.FYERS_HELPER_DATA || ".";
+  for(const u of fs.existsSync(D + "/u") ? fs.readdirSync(D + "/u") : []){ const f = D + "/u/" + u + "/layouts.json"; if(fs.existsSync(f)) fs.unlinkSync(f); }
+  await pg.goto("http://localhost:8766/"); await LOGIN(pg);
   await pg.waitForFunction(() => typeof drAttach === "function" && P.snap, null, { timeout: 20000 });
   await pg.evaluate(async s => { tf = "5m"; prefSet("tf2", "5m"); await openBySymbol(s); }, NOV);
   await pg.waitForFunction(() => DISP.length > 100 && DR.loaded && DR.items.length === 0, null, { timeout: 20000 });

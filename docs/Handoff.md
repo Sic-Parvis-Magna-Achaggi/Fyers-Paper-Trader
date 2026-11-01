@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 1 Nov 2026, version **0.22.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 1 Nov 2026, version **0.23.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -80,6 +80,30 @@ plus the order-flow check's contracts for the admin); browsers add theirs throug
 Standard: **100 contracts** on the data socket (5,000 on Prime); seconds history (5S-45S) is Prime-only, 30 trading
 days. Item 11 (multiple watchlists) comes right after item 10; item 12 (seconds / tick charts) is decided after
 Monday's order-flow check.
+
+## Layouts (v0.23.0)
+
+- `web/layouts.js` (loaded after drawui.js, before mobile.js), CSS `#layPick` / `#bLay` in index.html, server
+  `/api/layouts` (`u/<user>/layouts.json` = {layouts: [{id, name, grid: "1", charts: [chart], updated}], active}; ops
+  put / del / active, one layout at a time). A chart = `layNow()`: prefs `cur`, `tf2`, `ctype`, `chart`, `indicators`,
+  `lgdMin0` (`LAY_KEYS`) + `tb` (drawing toolbar). `charts` is a list so multi-charts (item 6) add charts[1..] and `grid`.
+- `prefSet` is wrapped: a change to one of those keys (or `draw.tb`) calls `layTouch()` -> the open layout (900 ms debounce,
+  `layFlush`). By hand (pref `layAuto` false): `LAY.dirty` (● on the button; `layEq` against the saved chart), Save /
+  Ctrl+S (`laySave`), switching asks first (`guard` in `layRender`).
+- `layApply(L)` puts a layout's chart on screen (prefs, `buildChart()`, `openSymbol`) with `LAY.applying` set (no saving
+  meanwhile); `layOpen(id)` = apply + send prefs now (`layPrefsNow`) + mark active + touch.
+- **The saved layout wins, at start-up:** `boot()` (index.html) calls `layBoot()` right after `loadPrefs()`, before the chart is
+  built: a chart that disagrees with the open layout takes the layout's set-up straight into the prefs (`layToPrefs`), so
+  the chart opens as the layout with nothing rebuilt afterwards. (A first version applied it after the chart had loaded:
+  that rebuilt the chart a second or two later and wiped whatever was done meanwhile; three test suites caught it.)
+  `layInit()` / `layApply()` is only the late fallback.
+  Found in testing: the opposite rule ("the chart wins") copied a layout into another when a page closed right after a
+  switch (the active mark reached the server, the prefs didn't). `pagehide` sends what's waiting (fetch keepalive).
+- Tests that set chart prefs through `/api/prefs` must delete `layouts.json` (no page open) first, or the layout puts its
+  chart back (tests/README.md).
+- Note (1 Nov): this release's first draft of layouts.js / the route was found already in the folder when work started
+  (an earlier interrupted attempt in the same session); it was reviewed line by line, completed (saving by hand, the
+  copy of the chart as shown) and fixed (the load rule above) before release.
 
 ## Drawing tools and the measure (v0.22.0)
 
@@ -237,8 +261,9 @@ indicator option to add (not built).
 2. Compare the app's charges with what Fyers deducted (roadmap item 1, last part).
 3. Monday: read the order-flow check with the owner; the footprint only if it's exact (and decide roadmap item 12,
    seconds / tick charts, from the same numbers). Then Telegram alerts, the journal, saved layouts, multi-charts
-   (roadmap items 3-6, in that order; item 8, CFD prices, is on hold). The measurement and drawing tools (items 7 and
-   9) shipped in v0.22.0: the owner tries them (desktop and phone) and reports.
+   (the owner's order, 1 Nov: multi-charts (item 6) next - agree its design first (roadmap item 6 has the suggestions),
+   then Telegram (3) and the journal (4); item 8, CFD prices, is on hold). Shipped and waiting for the owner's try:
+   measurement and drawing tools (v0.22.0), layouts (v0.23.0).
 4. The owner tries the phone layout (v0.19.0) and the order bubble (v0.20.3) on his phone; fix what he reports.
 5. The owner checks v0.20.0 on real Fyers: Pivot Points and the Chandelier exit on GOLDPETAL 2m, scrolling back,
    and the Style / Visibility tabs on his own scripts.

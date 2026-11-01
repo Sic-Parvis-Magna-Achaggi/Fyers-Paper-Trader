@@ -22,6 +22,7 @@ FYERS_HELPER_DATA=/tmp/fyers_test node tests/indicator_settings_flow.js  # indic
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/navigation_flow.js         # Go to a date (Alt+G), », P&F zoom and box, no-trade candles, the browser's candle copy, the data check
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/watchlists_flow.js    # several watchlists: new / rename / move / delete, + in Find, streaming, saved, phone
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/drawings_flow.js       # drawing tools and the measure: toolbar, drawing, editing, undo, saved per contract, every chart type, net ₹ / R, position drawings, phone
+FYERS_HELPER_DATA=/tmp/fyers_test node tests/layouts_flow.js       # saved layouts: Layout 1, new / copy / rename / delete, switching brings each back, auto-save and by hand (Ctrl+S), page closed mid-switch, second device, phone
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/mobile_flow.js        # the phone layout on an emulated Pixel 7: order sheet and its bubble, positions, tabs, full screen (resets the admin's paper account)
 ```
 
@@ -34,6 +35,9 @@ for one position. `mock_server.py` uses it, so Live accounts work in the browser
 After `security_flow.js` the admin has 2FA. Other browser tests log in with `require("./login.js")(page)`, which
 types the password and a fresh code read from the test data (a code can't be used twice, so it may wait up to 30 s).
 Screenshots go to `<data folder>/shots/`. `fixtures/` holds a small symbol list (MCX, NSE, BSE, currency).
+
+**Layouts (v0.23.0):** the open layout is what a page opens with. A test that sets chart prefs straight through `/api/prefs`
+must also delete `u/<user>/layouts.json` (with no page open), or the saved layout will put its own chart back.
 
 **Rule:** every indicator works on every chart type, P&F included. When the app gains a Pine feature, add a script
 that uses it to `tests/pine_compat.js`; `pine_compat_flow.js` then checks it on every chart type.

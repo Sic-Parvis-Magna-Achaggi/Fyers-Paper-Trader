@@ -85,7 +85,7 @@ body.mob .wlbar button,body.mob .wlmenu button,body.mob .wledit button{min-heigh
 .empty{color:var(--muted);font-size:13px;padding:14px 4px}
 
 section.chartwrap{display:grid;grid-template-rows:auto minmax(0,1fr) auto;min-width:0;min-height:0;position:relative}
-.charthead{display:flex;align-items:center;gap:12px;padding:6px 10px 6px 14px;border-bottom:1px solid var(--line);flex-wrap:nowrap;min-width:0;overflow:hidden;overflow:clip}
+.charthead{display:flex;align-items:center;gap:6px;padding:6px 10px 6px 14px;border-bottom:1px solid var(--line);flex-wrap:nowrap;min-width:0;overflow:hidden;overflow:clip}
 .charthead .sym,.charthead .ltp{flex:0 0 auto}
 .charthead .spacer{flex:1 1 0;min-width:0}
 .charthead .tf{flex:0 1 auto;min-width:0;flex-wrap:wrap;height:26px;overflow:hidden;overflow:clip}   /* buttons that don't fit drop out whole; ▾ has them all */
@@ -313,6 +313,17 @@ a.btnlink{border:1px solid var(--line);border-radius:6px;padding:6px 12px;color:
 #ctPick .sec{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:12px 0 4px}
 #ctPick .cr{display:grid;grid-template-columns:1fr 130px;gap:6px;align-items:center;margin:4px 0}
 #ctPick .cr input,#ctPick .cr select{padding:3px 6px;font-size:12.5px}
+#layPick{position:absolute;right:10px;top:42px;z-index:31;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;width:340px;max-width:calc(100% - 20px);max-height:calc(100% - 60px);overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.35);font-size:12.5px}
+#layPick .cfgh{display:flex;align-items:center;margin-bottom:6px} #layPick .cfgh b{flex:1}
+#layPick .lay-r{display:flex;align-items:center;gap:4px;padding:6px 8px;border-radius:6px;cursor:pointer;border:1px solid transparent}
+#layPick .lay-r:hover{background:var(--panel2)} #layPick .lay-r.on{border-color:var(--accent)}
+#layPick .lay-n{flex:1;min-width:0} #layPick .lay-n b{font-weight:600}
+#layPick .lay-n .sub{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#layPick .lay-r button{padding:2px 7px;font-size:12px;border-color:transparent;background:transparent;color:var(--muted)}
+#layPick .lay-r button:hover{color:var(--text);border-color:var(--line)} #layPick .lay-r button.arm{background:var(--down);color:#fff}
+#layPick .lay-r button:disabled{opacity:.3;cursor:default}
+#layPick .lay-r input{flex:1;padding:4px 8px} #layPick .btns button{flex:1}
+#bLay{max-width:140px;overflow:hidden;text-overflow:clip;white-space:nowrap;flex:0 60 auto!important;min-width:30px}   /* gives way before the timeframe buttons: down to its ▦ */
 #indPick{position:absolute;right:10px;top:42px;z-index:31;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;width:320px;max-height:calc(100% - 60px);overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.35);font-size:12.5px}
 #indPick .cfgh{display:flex;align-items:center;margin-bottom:6px}
 #indPick .cfgh b{flex:1}
@@ -2367,6 +2378,7 @@ async function boot(){
   applyTheme();
   if(!await refreshState()) return;
   await loadPrefs();
+  if(typeof layBoot === "function") await layBoot();   // the open layout's chart, before the chart is built (layouts.js)
   wlLoad(); cur = prefGet("cur", null); tf = prefGet("tf2", "5m"); tfFav = prefGet("tfs", tfFav);
   document.body.classList.toggle("nopanel", !!prefGet("nopanel", false));
   applyTheme();
@@ -2390,6 +2402,7 @@ boot();
 </script>
 <script src="/static/draw.js?v=__V__"></script>
 <script src="/static/drawui.js?v=__V__"></script>
+<script src="/static/layouts.js?v=__V__"></script>
 <script src="/static/mobile.js?v=__V__"></script>
 </body>
 </html>

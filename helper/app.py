@@ -785,6 +785,75 @@ async def drawings_save(request: Request):
     return {"ok": True, "updated": now}
 
 
+# ------------------------------------------------------------------ chart layouts (v0.23.0)
+# Each user's saved layouts (u/<user>/layouts.json): {layouts: [{id, name, charts: [{...chart set-up}], grid, updated}],
+# active}. Changed one layout at a time, so two devices editing different layouts don't overwrite each other.
+LAYOUTS_MAX = 50
+LAYOUT_BYTES = 200_000
+
+
+def _layouts(r) -> dict:
+    d = store.load(r.dir + "layouts.json", {"layouts": [], "active": ""})
+    if not isinstance(d, dict) or not isinstance(d.get("layouts"), list):
+        d = {"layouts": [], "active": ""}
+    return d
+
+
+@app.get("/api/layouts")
+async def layouts_get(request: Request):
+    u, r = _urt(request)
+    d = _layouts(r)
+    return {"ok": True, "layouts": d["layouts"], "active": d.get("active", "")}
+
+
+@app.post("/api/layouts")
+async def layouts_set(request: Request):
+    """{op: "put", layout} adds or replaces one layout (by id); {op: "del", id}; {op: "active", id}."""
+    _same_origin(request)
+    u, r = _urt(request)
+    b = await _body(request)
+    d = _layouts(r)
+    lst, op = d["layouts"], b.get("op")
+    if op == "put":
+        lay = b.get("layout")
+        if not isinstance(lay, dict) or not str(lay.get("id") or "") or not isinstance(lay.get("charts"), list):
+            return _err("bad layout")
+        name = str(lay.get("name") or "").strip()[:60]
+        if not name:
+            return _err("a layout needs a name")
+        if len(json.dumps(lay)) > LAYOUT_BYTES:
+            return _err("layout too large")
+        lid = str(lay["id"])[:40]
+        if any(x["name"].lower() == name.lower() and x["id"] != lid for x in lst):
+            return _err(f'you already have a layout called "{name}"')
+        lay = {**lay, "id": lid, "name": name, "updated": int(time.time())}
+        i = next((k for k, x in enumerate(lst) if x["id"] == lid), None)
+        if i is None:
+            if len(lst) >= LAYOUTS_MAX:
+                return _err(f"at most {LAYOUTS_MAX} layouts")
+            lst.append(lay)
+        else:
+            lst[i] = lay
+        if b.get("activate"):
+            d["active"] = lid
+    elif op == "del":
+        lid = str(b.get("id") or "")
+        if len(lst) <= 1:
+            return _err("the last layout can't be deleted")
+        d["layouts"] = lst = [x for x in lst if x["id"] != lid]
+        if d.get("active") == lid:
+            d["active"] = lst[0]["id"]
+    elif op == "active":
+        lid = str(b.get("id") or "")
+        if not any(x["id"] == lid for x in lst):
+            return _err("no such layout")
+        d["active"] = lid
+    else:
+        return _err("bad request")
+    store.save(r.dir + "layouts.json", d)
+    return {"ok": True, "layouts": d["layouts"], "active": d.get("active", "")}
+
+
 @app.post("/api/measure")
 async def measure(request: Request):
     """Net ₹ for moves measured on the chart (the measure tool, the long / short position drawings), after every charge

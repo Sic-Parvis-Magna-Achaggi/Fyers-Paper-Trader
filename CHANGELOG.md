@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.23.0 — 1 Nov 2026 — Saved chart layouts
+
+Added
+- **Saved chart layouts, per user** (owner, 31 Oct; roadmap item 5). The **▦** button on the chart's top bar shows the
+  open layout; its menu opens, makes (＋ New layout: a blank chart on the same contract), copies (⧉: the chart as it is
+  now), renames and deletes layouts (✕ twice; the last one stays). Your chart as it was becomes "Layout 1".
+- A layout holds the contract, timeframe, chart type (with its Renko / range / P&F sizes), indicators and Pine scripts
+  with all their settings and pane heights, chart settings (colours, lines, Volume, timer...), the drawing toolbar on /
+  off and the indicator read-outs collapsed or not. **Drawings stay with the contract**: every layout on GOLDPETAL shows
+  GOLDPETAL's drawings.
+- **Saves itself as you change the chart**, like TradingView. Or untick "Save changes automatically" in the menu to save
+  by hand: ● on the button means not saved; Save (or **Ctrl+S**); leaving a layout with changes asks Save / Don't save /
+  Cancel.
+- Saved on the server: every device opens the same layouts and the same one open. On the phone the ▦ button is on the
+  chart bar.
+- Safe against a page closed mid-change: a layout switch reaches the server at once (not after the usual 0.6 s), what's
+  still waiting is sent as the page closes, and on opening the saved layout is what counts (a chart that disagrees
+  with it, e.g. after a switch on another device, opens the layout as saved; never the other way round). That check
+  happens while the page starts, before the chart is drawn, so nothing you do in the first seconds is undone.
+
+Changed
+- The chart bar's buttons sit closer (6 px apart, was 12) to make room for ▦; on a narrow chart ▦ shrinks to its icon
+  before any timeframe button drops out (the name is in its tooltip and menu).
+
+Server
+- `GET / POST /api/layouts` (per user, `u/<user>/layouts.json`; one layout changed at a time, so two devices editing
+  different layouts don't overwrite each other; 50 layouts, 200 KB each). In `tests/routes_check.py`.
+
+Tests
+- `tests/layouts_flow.js` (30 checks, new): "Layout 1" from your chart, auto-save, a new blank layout, each layout's own
+  contract / timeframe / chart type / indicators coming back on a switch, rename (a taken name refused), copy, drawings
+  per contract, delete (twice, never the last), saving by hand (●, the question, Don't save, Save, Ctrl+S), a reload, a
+  page closed mid-switch, a second device, the phone.
+
 ## v0.22.0 — 1 Nov 2026 — Drawing tools and the measure tool
 
 Added
