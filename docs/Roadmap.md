@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 1 Nov 2026 (v0.20.8). This is the one task list for the project.
+Updated 1 Nov 2026 (v0.20.9). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -58,12 +58,35 @@ Updated 1 Nov 2026 (v0.20.8). This is the one task list for the project.
    - **Long / short position tools** for looking back: entry, stop and target drawn on past bars, showing risk, reward, R, and whether the stop or the target was hit first (and when). Separate from the trade manager: no orders, just a drawing.
    - Work on every chart type (P&F included) and on the phone layout.
 
-10. [ ] **Keep the candles the app saw live** (asked 1 Nov 2026). Fyers rewrote GOLDPETAL NOV's 30 Oct after the close
-    (its history and its own chart show a thin day ending at 14,201; the real Friday fell to 13,960 on heavy volume).
-    - The server builds candles from the live feed as they happen (for the contracts it's streaming), and keeps them.
-    - When Fyers' history for a finished day disagrees badly with what the app saw live (price path, volume), the live
-      candles are used, with a note on the chart; a setting chooses. Design to agree before building (it changes which
-      data charts and indicators use).
+10. [ ] **Keep the candles the app saw live** (asked 1 Nov 2026; design agreed 1 Nov). Fyers rewrote GOLDPETAL NOV's
+    30 Oct after the close (its history and its own chart show a thin day ending at 14,201; the real Friday fell to 13,960
+    on heavy volume, as Fyers' live prices still say).
+    - **Recording:** the server builds 1-minute candles from Fyers' live feed (open / high / low / close from the price
+      snapshots, volume from the growth of the day's volume), per user, in a store of its own beside Fyers' history.
+      Other timeframes are built from them.
+    - **What's recorded, all session, browser open or not:** the watchlist (every list, once item 11 exists), open
+      positions and orders, and any chart while it's open. Inside Fyers' Standard limit of **100 contracts** on the price
+      socket, with room left for open charts. A contract added starts recording then (no past); removed: stops, and
+      what's recorded is kept until it expires; expired contracts stop on their own.
+    - **Use:** Fyers' history stays the source. When the data check (v0.20.8) fails for a day and the server recorded that
+      whole session without gaps, the chart uses the live candles for that day, marked on the chart; indicators, Pine and
+      P&F use the same candles. A gap (restart, feed down): the warning, as now.
+    - **Keep:** settable on the Account page, default **1 year** (about 150 MB for 10 contracts on the 25 GB disk); older
+      ones are deleted on their own; the Account page shows the space used.
+    - Caveat: built from snapshots, so a spike between two snapshots can be missing from a live candle's high / low.
+11. [ ] **Multiple watchlists** (asked 1 Nov 2026; right after item 10)
+    - Named lists (e.g. MCX, Index F&O, Stocks): new, rename, delete, reorder; a switcher on the Watchlist tab and the
+      phone's Quotes tab; saved on the server.
+    - The server records the contracts of **all** lists (not just the one on screen). Deleting a list stops recording its
+      contracts unless they're in another list or a trade; what's recorded is kept until it expires. A new list records
+      from when its contracts are added.
+    - More than 20 prices per page (the cap today), inside the 100-contract socket limit.
+12. [ ] **Seconds and tick charts** (asked 1 Nov 2026; **decide after Monday's order-flow check**)
+    - Fyers' own seconds candles (5s-45s) need **Prime** and reach back 30 trading days only. On Standard: the live
+      recording (item 10) also keeps one-second detail (kept 30 days, settable; about 1.5-2 MB a day per busy contract),
+      giving 5s / 15s / 30s charts and tick charts (a bar every N feed updates) for recorded contracts.
+    - Caveats: snapshots (merged trades' volume lands on the last trade's price); a tick chart counts feed updates, not
+      exact trades, unless Monday's check shows updates are close to one per trade; nothing before recording starts.
 
 ## Rules that shape live trading and other users (checked 30 Oct 2026)
 
@@ -86,6 +109,8 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 ## Small follow-ups
 
 - [ ] The owner checks the phone layout on his own phone (tested on emulated Android and iPhone screens in Chromium, not on a real iPhone / Safari).
+- [ ] Switch the order-flow recorder off after Monday's measurement (Log page): it writes tens of MB a day per busy
+  contract on the 25 GB disk.
 - [ ] Partial closes.
 - [ ] **Fyers support (owner, 1 Nov):** GOLDPETAL26NOVFUT's history for 29-30 Oct doesn't match Fyers' own live prices
   (emailed by the owner 1 Nov; waiting for Fyers). When Fyers fixes it, the app takes the corrected days on its own

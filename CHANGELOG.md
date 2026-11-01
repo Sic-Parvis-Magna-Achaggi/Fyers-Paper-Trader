@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.20.9 — 1 Nov 2026 — Roadmap: live candles, multiple watchlists, seconds / tick charts (docs only)
+
+Docs
+- Roadmap item 10 (keep the candles the app saw live): design agreed. 1-minute candles from the live feed for every
+  watchlist, positions / orders and open charts, used for a day only when the data check fails and the recording has
+  no gaps; kept 1 year by default (settable on the Account page).
+- Item 11, multiple watchlists (right after item 10): the server records all lists.
+- Item 12, seconds and tick charts from the live recording (Fyers' own seconds candles need Prime): decided after
+  Monday's order-flow check.
+- Fyers Standard allows 100 contracts on the price socket (5,000 on Prime), noted in the handoff. No code changes.
+
 ## v0.20.8 — 1 Nov 2026 — Data check: a warning when the candles disagree with Fyers' live figures
 
 Added

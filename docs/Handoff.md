@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 1 Nov 2026, version **0.20.8**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 1 Nov 2026, version **0.20.9**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -68,6 +68,16 @@ runs on 1 Nov, on v0.20.2 code too). Cause not found; it's a test-kit issue so f
 00:00 UTC, real Fyers at IST midnight). Re-run it if it fails; worth a proper look when touching Go to.
 `live_flow.js`'s "history: the trade, closed by the kill switch" failed once in 4 runs on 1 Nov (passed on re-run):
 probably the history read before the kill switch's close was booked. Same advice.
+
+## Live candles, watchlists, seconds (agreed 1 Nov, roadmap 10-12)
+
+Design for item 10 is agreed (see the roadmap): server-side 1-minute candles from the live feed for every watchlist,
+positions / orders and open charts; used for a day only when the data check fails and the recording has no gaps; kept
+1 year by default (settable). Today the server streams without a browser only `rt.watch_symbols()` (positions / orders,
+plus the order-flow check's contracts for the admin); browsers add theirs through `feed.want()` (20 a page). Fyers
+Standard: **100 contracts** on the data socket (5,000 on Prime); seconds history (5S-45S) is Prime-only, 30 trading
+days. Item 11 (multiple watchlists) comes right after item 10; item 12 (seconds / tick charts) is decided after
+Monday's order-flow check.
 
 ## Users on the server
 
@@ -184,7 +194,8 @@ indicator option to add (not built).
 1. The owner's first real trade (Monday at the earliest): whitelist 134.209.159.171 (order permission), turn on
    Live, 1 lot on MCX. Fix whatever that shows.
 2. Compare the app's charges with what Fyers deducted (roadmap item 1, last part).
-3. Monday: read the order-flow check with the owner; the footprint only if it's exact. Then Telegram alerts, the
+3. Monday: read the order-flow check with the owner; the footprint only if it's exact (and decide roadmap item 12,
+   seconds / tick charts, from the same numbers). Then Telegram alerts, the
    journal, saved layouts, multi-charts, the measurement tool and the drawing tools (roadmap items 3-7 and 9, in
    that order; item 8, CFD prices, is on hold).
 4. The owner tries the phone layout (v0.19.0) and the order bubble (v0.20.3) on his phone; fix what he reports.
