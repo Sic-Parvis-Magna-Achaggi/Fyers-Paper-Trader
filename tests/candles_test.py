@@ -1,10 +1,11 @@
 """Saved candles (helper/candles.py) and the history request (helper/fyers_link.py), no browser.
 Run: python3 tests/candles_test.py
 
-Owner's report, 1 Nov 2026: GOLDPETAL NOV's 30 Oct showed the expiring OCT contract (319 lots, trading till 16:58,
-then 14,201 to the close) because history was asked for with cont_flag=1 (Fyers' continuous series). Checks:
-- the request to Fyers never carries cont_flag;
-- the one-time clean-out drops saved futures / options candles (stocks and indices stay);
+Owner's report, 1 Nov 2026: GOLDPETAL NOV's 30 Oct showed the expiring OCT contract (319 lots, trading till 16:45,
+then 14,201 to the close): Fyers' continuous series. Checked on the server 2 Nov: Fyers sends that series with
+cont_flag=1 AND when cont_flag is left out; only cont_flag=0 gives the contract itself. Checks:
+- every request to Fyers carries cont_flag=0;
+- the one-time clean-out drops saved futures / options candles (stocks and indices stay), again for v0.30.1;
 - a day fetched again replaces what was saved for it (nothing left behind); an empty answer changes nothing."""
 import datetime as dt
 import os
@@ -34,17 +35,22 @@ today = dt.datetime.now(IST).date()
 day = lambda d, hh, mm=0: int(dt.datetime(d.year, d.month, d.day, hh, mm, tzinfo=IST).timestamp())
 NOV, STK = "MCX:GOLDPETAL26NOVFUT", "NSE:SBIN-EQ"
 
-# ---- the request: no cont_flag
+# ---- the request: cont_flag=0, every chunk
 link = fyers_link.FyersLink("u/t/", "test")
 seen = []
 link._get = lambda url, params: (seen.append(dict(params)), {"s": "ok", "candles": []})[1]
 link.history_range(NOV, "15", today - dt.timedelta(days=3), today)
-ok(seen and all("cont_flag" not in p for p in seen), "history asks Fyers for the contract itself (no cont_flag)", seen[:1])
+link.history_range(NOV, "15", today - dt.timedelta(days=250), today)            # several chunks
+ok(len(seen) >= 3 and all(p.get("cont_flag") == "0" for p in seen),
+   f"history asks Fyers for the contract itself: cont_flag=0 on every request ({len(seen)} requests)", seen[:1])
 
-# ---- an old candles.db (before v0.20.6): futures candles from the continuous series, and a stock's
+# ---- an old candles.db (fetched up to v0.30.0): futures candles from the continuous series, and a stock's
+# (the meta table of a v0.20.6-v0.30.0 database says fetch_v "2": it must be cleaned out again)
 db = sqlite3.connect(D + "/u/t/candles.db")
 db.execute("CREATE TABLE bars (sym TEXT, res TEXT, t INTEGER, o REAL, h REAL, l REAL, c REAL, v REAL, PRIMARY KEY (sym, res, t)) WITHOUT ROWID")
 db.execute("CREATE TABLE cover (sym TEXT, res TEXT, first_day TEXT, fetched REAL, PRIMARY KEY (sym, res))")
+db.execute("CREATE TABLE meta (k TEXT PRIMARY KEY, v TEXT)")
+db.execute("INSERT INTO meta VALUES ('fetch_v', '2')")
 d1 = today - dt.timedelta(days=1)
 for sym in (NOV, "NFO:NIFTY26NOV24000CE", "NFO:NIFTY26NOV23000PE", STK):
     db.executemany("INSERT INTO bars VALUES (?,?,?,?,?,?,?,?)", [(sym, "15", day(d1, 9, 15 * i), 1, 1, 1, 1, 5) for i in range(4)])
@@ -52,7 +58,8 @@ for sym in (NOV, "NFO:NIFTY26NOV24000CE", "NFO:NIFTY26NOV23000PE", STK):
 db.commit(); db.close()
 c = candles._conn("u/t/")
 left = dict(c.execute("SELECT sym, COUNT(*) FROM bars GROUP BY sym").fetchall())
-ok(left == {STK: 4}, "the clean-out drops saved futures and options candles; the stock's stay", left)
+ok(left == {STK: 4}, "the clean-out (v0.30.1, on a v0.20.6-v0.30.0 database) drops saved futures and options candles; the stock's stay", left)
+ok(c.execute("SELECT v FROM meta WHERE k='fetch_v'").fetchone()[0] == "3", "the database is marked as fetched with cont_flag=0 (fetch_v 3)")
 ok(c.execute("SELECT COUNT(*) FROM cover WHERE sym=?", (NOV,)).fetchone()[0] == 0, "so the futures chart fetches again from Fyers")
 candles._dbs.clear()
 c = candles._conn("u/t/")

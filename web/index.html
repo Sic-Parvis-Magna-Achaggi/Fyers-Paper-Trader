@@ -1810,10 +1810,12 @@ async function openSymbol(row){
    Indicators that want more bars (Pine "Bars of history") make the chart load more days. */
 const CDB = {
   p: null,
-  // "-2" (v0.20.6): copies saved before were Fyers' continuous series for futures / options (another contract's
-  // candles on some days); the old store is deleted and every chart loads again from the server
-  open(){ return this.p || (this.p = new Promise(res => { try{ try{ indexedDB.deleteDatabase("fyers-candles"); }catch(e){}
-    const r = indexedDB.open("fyers-candles-2", 1);
+  // "-3" (v0.30.1): copies saved before were Fyers' continuous series for futures / options (another contract's
+  // candles around expiries: Fyers' API sends that series when cont_flag is left out, as v0.20.6-v0.30.0 did); the
+  // old stores are deleted and every chart loads again from the server
+  open(){ return this.p || (this.p = new Promise(res => { try{
+    for(const old of ["fyers-candles", "fyers-candles-2"]) try{ indexedDB.deleteDatabase(old); }catch(e){}
+    const r = indexedDB.open("fyers-candles-3", 1);
     r.onupgradeneeded = () => r.result.createObjectStore("c"); r.onsuccess = () => res(r.result); r.onerror = () => res(null); }catch(e){ res(null); } })); },
   async get(k){ const db = await this.open(); if(!db) return null;
     return new Promise(res => { try{ const q = db.transaction("c").objectStore("c").get(k); q.onsuccess = () => res(q.result || null); q.onerror = () => res(null); }catch(e){ res(null); } }); },
@@ -1850,8 +1852,9 @@ function noTradeDrop(rows){
   }
   return out;
 }
-/* the data check (owner, 1 Nov): Fyers rewrote GOLDPETAL NOV's 30 Oct after the close - its history ended at 14,201
-   on 319 lots while its live prices said 13,960 and the real day had been heavy. The chart's candles (Fyers' history)
+/* the data check (owner, 1 Nov): GOLDPETAL NOV's 30 Oct history ended at 14,201 on 319 lots while its live prices said
+   13,960 and the real day had been heavy (it was Fyers' continuous series - the expiring OCT contract - fixed in v0.30.1
+   by sending cont_flag=0; the check stays as a safeguard). The chart's candles (Fyers' history)
    are compared with Fyers' live figures for the same session: the day's open, high, low and volume, and once the
    market is closed the last price. A warning shows on the chart when a price is off by more than 0.5% (at least 10
    ticks) or the volume by more than 5x (a gap that is the contract's lot / multiplier is a unit difference, not an

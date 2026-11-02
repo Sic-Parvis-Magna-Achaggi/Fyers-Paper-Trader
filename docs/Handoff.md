@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 2 Nov 2026, version **0.30.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 2 Nov 2026, version **0.30.1**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -244,7 +244,8 @@ automatic pictures off itself (other suites turn them on).
 
 ## Live candles, watchlists, seconds (agreed 1 Nov, roadmap 10-12)
 
-Design for item 10 is agreed (see the roadmap): server-side 1-minute candles from the live feed for every watchlist,
+Design for item 10 is agreed (see the roadmap; its original reason, a day "rewritten" by Fyers, turned out to be the
+continuous series, fixed in v0.30.1 - the owner was asked on 2 Nov whether item 10 still comes next): server-side 1-minute candles from the live feed for every watchlist,
 positions / orders and open charts; used for a day only when the data check fails and the recording has no gaps; kept
 1 year by default (settable). Today the server streams without a browser only `rt.watch_symbols()` (positions / orders,
 plus the order-flow check's contracts for the admin); browsers add theirs through `feed.want()` (20 a page). Fyers
@@ -420,13 +421,21 @@ socket's `quote` block (`ltq`, `vtt_diff`, msg.proto) is filled per trade on NIF
   quote fields but not yet seen on this server). `mktClosedNow()`: weekends and outside `sessRange()` (no holidays).
   The mock sends no day open / high / low (its random walk doesn't follow its candles). To confirm on real Fyers: no false
   warnings in a normal session (NSE's official close vs LTP after 15:30 is the likeliest; tolerance 0.5%).
+- **v0.30.1: every history request sends `cont_flag=0`** (`fyers_link.history_range`). Fyers' API gives its continuous
+  series (each date = that day's near-month contract) when cont_flag is LEFT OUT as well as with "1": checked on the server
+  2 Nov (GOLDPETAL NOV 30 Oct 15m: none / "1" = 319 lots, close 14,201, the expiring OCT contract; "0" = 314,649 lots, low
+  13,699, close 13,960). Fyers' own charts have a "Continuous Futures" setting, on by default since July 2025 (Fyers Web:
+  profile › Settings › Charts): turn it off to compare. `candles.FETCH_V` "3" dropped saved FUT / CE / PE candles once;
+  browser store "fyers-candles-3" (older ones deleted). The mock flags any history request without cont_flag "0"
+  ("CONT_FLAG ASKED" in its log). The two notes below about a Fyers "rewrite" were wrong (it was the continuous series);
+  kept for history.
 - **v0.20.6 / v0.20.7:** history is never asked with `cont_flag` (with it, GOLDPETAL NOV's 29 Oct had ~165,000 lots that
   Fyers' own chart doesn't show; without it the app matches Fyers' charts). `candles.py`: `_migrate()` (meta `fetch_v`
   = "2") dropped saved FUT / CE / PE candles once; `_replace()` deletes the whole days it re-fetched before saving
   Fyers' answer (not on an empty answer); each new-candles fetch starts `RECHECK_DAYS` (7) before the last saved day,
-  so a day Fyers corrects later is replaced. Browser: IndexedDB store "fyers-candles-2" (old one deleted);
+  so a day Fyers corrects later is replaced. Browser: IndexedDB store "fyers-candles-3" since v0.30.1 (older ones deleted);
   `loadHistory()` asks the server from 7 days before its last saved candle and replaces its copy from there.
-  **Fyers data issue (1 Nov):** GOLDPETAL26NOVFUT's 30 Oct in Fyers' history is a thin day (trading until ~17:00,
+  **Not a Fyers data issue (resolved 2 Nov, v0.30.1, see above):** GOLDPETAL26NOVFUT's 30 Oct in Fyers' history is a thin day (trading until ~17:00,
   then 14,201) while its live prices are 13,951 / 13,958 and the real Friday fell to 13,960 on heavy volume (Fyers'
   history sent that during Friday). Fyers' own chart shows the thin day too. Reported to Fyers by the owner. The
   roadmap's "live candles" item is the safeguard.
@@ -477,7 +486,9 @@ indicator option to add (not built).
 1. The owner's first real trade (Monday at the earliest): whitelist 134.209.159.171 (order permission), turn on
    Live, 1 lot on MCX. Fix whatever that shows.
 2. Compare the app's charges with what Fyers deducted (roadmap item 1, last part).
-3. Order flow: measured and parked (2 Nov, see "Order flow" above). v0.30.0 (2 Nov): roadmap 13, the option chain's
+3. v0.30.1 (2 Nov): history asks Fyers for continuous data off (cont_flag=0); the owner checks GOLDPETAL NOV's 30 Oct
+   on 15m in the app after the update (should match Fyers' chart with Continuous Futures off: low ~13,700, close ~13,960).
+   Order flow: measured and parked (2 Nov, see "Order flow" above). v0.30.0 (2 Nov): roadmap 13, the option chain's
    fixed header and a contract's lists from its row, waiting for the owner's try on real Fyers. Next build: the journal (4) (the owner's order, 1 Nov; item 8, CFD
    prices, is on hold): v0.26.0, v0.27.0 (pictures + Telegram backup) and v0.28.0 (Insights, review, export) shipped: the
    journal is complete. v0.29.0: the trade replay (4c as agreed 1 Nov). Next in the roadmap's order: item 10 (live

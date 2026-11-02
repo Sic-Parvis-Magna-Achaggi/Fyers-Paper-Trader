@@ -16,9 +16,9 @@ IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 _dbs: dict = {}            # one database per user (u/<user>/candles.db): each user's candles come from their own login
 _lock = threading.Lock()
 FRESH_SEC = 45            # ask Fyers for new candles at most this often per chart
-RECHECK_DAYS = 7          # each fetch of new candles also takes the week before again (still one request): Fyers
-                          # sometimes rewrites a finished day (GOLDPETAL NOV's 30 Oct after the close), and a correction
-                          # it makes later then reaches the saved candles too
+RECHECK_DAYS = 7          # each fetch of new candles also takes the week before again (still one request), so a day
+                          # Fyers corrects later reaches the saved candles too. (v0.20.7 thought Fyers had rewritten
+                          # GOLDPETAL NOV's 30 Oct; it was the continuous series, see FETCH_V "3". Kept as a safeguard.)
 
 
 def _conn(folder: str = ""):
@@ -36,10 +36,12 @@ def _conn(folder: str = ""):
     return _db
 
 
-# v0.20.6: candles fetched before were asked for with cont_flag=1 (Fyers' continuous series), so futures and options
-# may hold another contract's candles (GOLDPETAL NOV's 30 Oct was the expiring OCT contract). Those are dropped once
-# and fetched again, exactly, the next time a chart asks. Stocks and indices have no other contract: they stay.
-FETCH_V = "2"
+# Futures and options candles fetched as Fyers' continuous series may hold another contract's candles around an expiry
+# (GOLDPETAL NOV's 30 Oct was the expiring OCT contract). Each FETCH_V change drops them once; they're fetched again,
+# exactly, the next time a chart asks. Stocks and indices have no other contract: they stay.
+# "2" (v0.20.6): requests stopped sending cont_flag=1. "3" (v0.30.1): Fyers sends the continuous series when cont_flag
+# is left out too, so everything fetched up to v0.30.0 was still continuous; requests now send cont_flag=0.
+FETCH_V = "3"
 DERIV = ("%FUT", "%CE", "%PE")
 
 

@@ -114,7 +114,8 @@ let br;
     return {chart: RAW.some(b => b.high >= 8888), copy: after.rows.some(r => r[2] >= 8888), dbs};
   });
   ok(!bc.chart && !bc.copy, "a wrong candle 2 days back in this browser's copy is replaced by the server's when the chart opens");
-  ok(!bc.dbs.includes("fyers-candles"), `the old browser store (continuous-series copies) is deleted (stores: ${bc.dbs.join(", ")})`);
+  ok(!bc.dbs.includes("fyers-candles") && !bc.dbs.includes("fyers-candles-2") && bc.dbs.includes("fyers-candles-3"),
+     `the old browser stores (continuous-series copies, up to v0.30.0) are deleted; fyers-candles-3 in use (stores: ${bc.dbs.join(", ")})`);
 
   // ---------------------------------------------------------------- the data check (owner, 1 Nov: "how can I trust this data?")
   // the candles against Fyers' live figures for the same day: consistent figures say nothing; Friday-like ones warn

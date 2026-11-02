@@ -44,9 +44,10 @@ def fake_get(self, url, params):
     if url.endswith("/history"):
         self.data_budget.take()
         CALLS.append(1); print("HISTORY", params["symbol"], params["resolution"], params["range_from"], params["range_to"], flush=True)
-        if "cont_flag" in params:
-            # Fyers' continuous series is another contract's candles on some days: the app must never ask for it
-            print("CONT_FLAG ASKED", params["symbol"], flush=True)
+        if str(params.get("cont_flag")) != "0":
+            # Fyers' continuous series is another contract's candles on some days, and real Fyers sends it when
+            # cont_flag is left out as well as with "1" (checked 2 Nov 2026): the app must always send cont_flag=0
+            print("CONT_FLAG ASKED", params["symbol"], params.get("cont_flag", "(left out)"), flush=True)
             return {"s": "ok", "candles": [[int(time.time()) // 60 * 60 - 60, 9999, 9999, 9999, 9999, 1]]}
         import datetime as dt, math
         sec = 86400 if params["resolution"] == "D" else int(params["resolution"]) * 60

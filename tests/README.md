@@ -15,7 +15,7 @@ node tests/github_upload_flow.js                      # tools/github_upload.html
 python3 tests/journal_test.py                         # the journal: the server's Octagon port vs Octagon's own JS (fixtures/octagon_core.js), then on paper engines: lockouts, switches, audit
 python3 tests/jshots_test.py                          # journal pictures: the server's drawing, entry / exit on paper engines, labels, the Telegram copy (fake Telegram on :8771)
 python3 tests/jreview_test.py                         # journal v0.28.0: weekly review + its Telegram summary, CSV, backup and restore (fake Telegram on :8772)
-python3 tests/candles_test.py                         # saved candles: exact contract (no cont_flag), clean-out, a day fetched again replaces it
+python3 tests/candles_test.py                         # saved candles: exact contract (cont_flag=0 on every request), clean-out, a day fetched again replaces it
 python3 tests/replay_test.py                          # trade replay: the stop's path, entry / exit set-ups (order's chart, layouts), code + drawings as then, old trades from the log, net ₹
 
 python3 tests/make_old_data.py /tmp/fyers_test        # fresh v0.12-style data, admin password OldPass12345

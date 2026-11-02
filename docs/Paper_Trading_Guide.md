@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.30.0)
+# Paper and live trading: how it works (v0.30.1)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -162,9 +162,9 @@ details, the phone's History tab). It opens over the page; **← Back** or Esc r
   replay's time). The stop, target and BE move when they moved, and the bar shows the time, the price and the open trade's
   net ₹ and R after all charges. **⏮** to the start, **▶ / ⏸** (Space), **+1** one minute (→), **⏭** to the next candle
   on this chart (Shift+→), the speed (candles a second), **Entry / Exit** to jump there, **■ Stop** for the whole chart.
-- Inside a minute the replay can't be finer than Fyers' 1-minute candles. Candles come from Fyers' history, so a day
-  Fyers rewrote afterwards (as GOLDPETAL's 30 Oct) shows the rewritten candles until the app keeps its own live candles
-  (roadmap item 10); the replay will use those then.
+- Inside a minute the replay can't be finer than Fyers' 1-minute candles. Candles come from Fyers' history (the
+  contract itself, never the continuous series); once the app keeps its own live candles (roadmap item 10) the replay
+  will use those too.
 - You can change the timeframe, chart type or indicators inside the replay to look around: nothing there is saved, and
   your own chart, layout and drawings aren't touched. Trading is off in the replay.
 - On the phone the replay fills the screen; **⋯** shows the set-up and Pine switches and the notes.
@@ -270,8 +270,8 @@ Phones get their own layout, like MT5's app (a desktop browser never does). **Mo
   - show or hide bid, ask and last;
   - candle colours, zone colours and strength, background and grid;
   - **Check candles against live prices** (on by default): the chart's candles are Fyers' history; the app compares them with Fyers' live figures for the same day - the day's open, high, low and volume, and after the close the last price. If a price differs by more than 0.5% (at least 10 ticks), or the volume by more than 5x, an amber note shows at the bottom of the chart: tap it to see candles vs Fyers live and **Load again**. Your trades aren't affected (fills, stops and P&L use the live prices), but indicators and Pine scripts read the candles, so treat them with care until it clears.
-  - Charts always show the contract you opened (never Fyers' "continuous" series), exactly as Fyers' own charts do. Candles are Fyers' history: if Fyers rewrites a day (it did GOLDPETAL NOV's 30 Oct after the close), the chart shows Fyers' version; when Fyers corrects it, the app picks the correction up within a week of that day.
-  - **Hide no-trade candles** (on by default): after MCX closes, Fyers' history can carry the exchange's closing price on empty candles (GOLDPETAL on 30 Oct: last trade 13,960, then candles at 14,201 with no volume until 23:55). No one traded at that price, so these candles are left off the chart, P&F, indicators and Pine scripts. Only candles with **no volume at a price away from the last trade** are hidden; quiet candles at the last price and indices (which have no volume) stay. Untick it to see Fyers' candles exactly as sent.
+  - Charts always show the contract you opened, never Fyers' "continuous" series (which shows, on each date, whichever contract was the near month then, so around an expiry you'd see the expiring contract under the new one's name). The app asks Fyers for continuous data **off** on every request (v0.30.1: Fyers' API, like Fyers' own charts, gives the continuous series unless it's turned off; up to v0.30.0 the app didn't say, so GOLDPETAL NOV's 30 Oct showed the expiring OCT contract's last day: 319 lots, then 14,201). To compare with Fyers' own chart, turn off **Continuous Futures** there (Fyers Web: profile › Settings › Charts; it's on by default). If Fyers corrects a day later, the app picks the correction up within a week of that day.
+  - **Hide no-trade candles** (on by default): Fyers' history can carry a closing price on empty candles where no one traded (seen on GOLDPETAL's 30 Oct: candles at 14,201 with no volume until 23:55; that day was the continuous series, fixed in v0.30.1, so the option is now a safeguard). No one traded at that price, so these candles are left off the chart, P&F, indicators and Pine scripts. Only candles with **no volume at a price away from the last trade** are hidden; quiet candles at the last price and indices (which have no volume) stay. Untick it to see Fyers' candles exactly as sent.
 
   They're saved with your preferences.
 

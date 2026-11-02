@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 2 Nov 2026 (v0.30.0). This is the one task list for the project.
+Updated 2 Nov 2026 (v0.30.1). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -113,7 +113,7 @@ ahead of 3-6.
        "Viewing trade ..." with ← Back to my chart; switch entry / exit set-up and "my current Pine code"; your layout
        isn't touched; works on the phone. Trades from before: your current set-up, marked "set-up not recorded".
      - **Item 10:** the replay asks for its candles through the chart's normal history path, so once live candles exist,
-       a day Fyers rewrote shows the recorded live candles (marked) in the replay too.
+       a day where Fyers' history is wrong or missing shows the recorded live candles (marked) in the replay too.
      - **Pictures:** automatic pictures (server drawing and the open chart's picture) off by default, one switch brings
        them back; 📷, uploads, paste and drop stay; nothing deleted (owner, 1 Nov).
    - [ ] **4b. Prop-firm journals in the same journal** (Claude's suggestion 1 Nov; waiting for the owner's yes): prop
@@ -170,9 +170,11 @@ v0.24.0 / v0.24.1); Telegram (3, done in v0.25.0) and the journal (4) next.
      XABCD patterns, show-on-timeframes per drawing (TradingView's Visibility tab), and drawings shared across a future's
      expiries (today: per contract; copy with Ctrl+C / Ctrl+V).
 
-10. [ ] **Keep the candles the app saw live** (asked 1 Nov 2026; design agreed 1 Nov). Fyers rewrote GOLDPETAL NOV's
-    30 Oct after the close (its history and its own chart show a thin day ending at 14,201; the real Friday fell to 13,960
-    on heavy volume, as Fyers' live prices still say).
+10. [ ] **Keep the candles the app saw live** (asked 1 Nov 2026; design agreed 1 Nov). Asked because GOLDPETAL NOV's
+    30 Oct looked rewritten by Fyers; it wasn't (2 Nov: the app was getting Fyers' continuous series, fixed in v0.30.1).
+    Still wanted for: recording every watchlist (item 11), seconds charts (item 12), replays finer than 1 minute, and a
+    backup if Fyers' history ever has a gap or a wrong day. Next in the roadmap's order (the owner was asked on 2 Nov
+    whether it still comes next, given the reason above).
     - **Recording:** the server builds 1-minute candles from Fyers' live feed (open / high / low / close from the price
       snapshots, volume from the growth of the day's volume), per user, in a store of its own beside Fyers' history.
       Other timeframes are built from them.
@@ -247,14 +249,15 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 - [x] **Telegram alerts on the real server (owner, 1 Nov):** bot set up, test message received, "Watchdog: running".
 - [ ] Optional, with the first live trade: `systemctl stop fyers-helper` for under a minute -> the "isn't responding" message,
   then start it -> "answering again". Optional: the Healthchecks.io check.
-- [ ] **Fyers support (owner, 1 Nov):** GOLDPETAL26NOVFUT's history for 29-30 Oct doesn't match Fyers' own live prices
-  (emailed by the owner 1 Nov; waiting for Fyers). When Fyers fixes it, the app takes the corrected days on its own
-  within a week (v0.20.7).
+- [x] **Fyers support (owner, 1 Nov):** GOLDPETAL26NOVFUT's history for 29-30 Oct. Fyers replied 2 Nov: their data is
+  right; their chart's Continuous Futures setting (on by default) showed the OCT contract. Checked on the server the same
+  evening: the app's requests got the continuous series too (Fyers sends it unless cont_flag=0). Fixed in **v0.30.1**.
 - [ ] Agri MCX contracts use the non-agri rates (low priority: Fyers doesn't offer agri commodities at present).
 - [ ] Ask Fyers in writing whether a second user's app may fetch market data from this server's IP (support request drafted 30 Oct).
 
 ## Done
 
+- [x] **v0.30.1** (2 Nov): futures and options charts show the contract itself: every history request asks Fyers for continuous data off (cont_flag=0; Fyers' API gives the continuous series otherwise, so GOLDPETAL NOV's 30 Oct was the expiring OCT contract); saved futures / options candles reloaded once; v0.20.7's "Fyers rewrote the day" corrected.
 - [x] **v0.30.0** (2 Nov): the option chain's header stays at the top (underlying, expiry, ATM on one row; only the strikes scroll; opens at the nearest strike only on open); ＋ / ★ beside every CE / PE to put it in any list; a watchlist row's ⋯ / right-click / phone swipe to move it to another list or remove it (item 13). Also recorded: the 2 Nov order-flow check and the footprint parked.
 - [x] **v0.29.0** (2 Nov): the trade replay (item 4c): each trade's chart set-up recorded at entry and exit (indicators with their settings, Pine code, drawings), ▶ On chart in the Journal and History with the trade and the stop's path drawn, ▶ Play to watch it as it played out; every stop / target move recorded (older trades from the account's log); automatic pictures off.
 
@@ -280,7 +283,7 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
     chart type (P&F in boxes).
 - [x] **v0.21.0** (1 Nov): multiple watchlists (item 11, the lists; recording them comes with item 10).
 - [x] **v0.20.8** (1 Nov): data check on every chart: a warning when the candles disagree with Fyers' live figures for the same day (open, high, low, volume, last price after the close) (asked 1 Nov).
-- [x] **v0.20.7** (1 Nov): a day Fyers corrects later reaches the saved candles (the week before is re-checked); v0.20.6's explanation corrected (Fyers rewrote GOLDPETAL's 30 Oct; its own chart shows the same).
+- [x] **v0.20.7** (1 Nov): a day Fyers corrects later reaches the saved candles (the week before is re-checked); v0.20.6's explanation corrected (Fyers rewrote GOLDPETAL's 30 Oct; its own chart shows the same). *(That correction was itself wrong: see v0.30.1.)*
 - [x] **v0.20.6** (1 Nov): charts show the contract you opened: history no longer asks for Fyers' continuous series (GOLDPETAL NOV's 30 Oct came back as the expiring OCT contract); saved futures / options candles reloaded once; the browser re-takes the last 3 days from the server (reported 1 Nov).
 - [x] **v0.20.5** (1 Nov): empty candles at the closing price after MCX closes (no volume, away from the last trade) left off the chart, P&F, indicators and Pine; Chart settings switch (reported 1 Nov).
 - [x] **v0.20.4** (1 Nov): P&F zoomed out shows X's and O's (flattened to the column's width, then solid / hollow columns), never thin lines (reported 1 Nov).

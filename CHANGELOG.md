@@ -1,5 +1,40 @@
 # Changelog
 
+## v0.30.1 — 2 Nov 2026 — Futures and options charts show the contract itself (continuous data off)
+
+Fixed
+- **Futures and options charts could show another contract's candles around an expiry** (owner, 2 Nov, after Fyers'
+  reply to his report about GOLDPETAL NOV's 30 Oct). Fyers' API gives its continuous series (on each date, whichever
+  contract was the near month then) unless a request says continuous **off**. v0.20.6 stopped asking for it but didn't
+  turn it off, so the app kept getting it. Checked on the server, 2 Nov, GOLDPETAL NOV, 30 Oct, 15m:
+  - continuous not mentioned (what the app sent) and continuous on: both 319 lots, last trade 16:45, close 14,201 (the
+    expiring OCT contract's last day);
+  - continuous off: 314,649 lots, low 13,699, close 13,960, trading until 23:15 - the real day, as Fyers' own chart
+    shows with its Continuous Futures setting off.
+  Now every history request says continuous off. Trades were never affected (fills, stops and P&L use live prices);
+  the chart's history was (candles, Volume, indicators, Pine, P&F, the journal's server pictures, replays).
+- Once, on the first start of this version: the futures / options candles saved on the server are dropped (stocks and
+  indices stay) and the browsers' saved copies are deleted, so each futures / options chart loads again from Fyers
+  when opened (one or two requests per chart, inside the request budget).
+
+Corrected
+- v0.20.7 said Fyers rewrote GOLDPETAL NOV's 30 Oct after the close and that Fyers' own chart showed the same. Wrong:
+  Fyers' chart had Continuous Futures on (its default since July 2025), and the app was getting the continuous series.
+  Fyers' data for the contract was right all along (Fyers' reply, 2 Nov). The weekly re-check of past days (v0.20.7)
+  and "Hide no-trade candles" (v0.20.5) stay as safeguards.
+
+Docs
+- Guide: charts always ask for the contract itself; how to turn off Continuous Futures on Fyers' own chart to compare.
+  Roadmap: the Fyers follow-up closed; item 10's reason restated (no rewrite happened). Handoff updated.
+
+Tests
+- `tests/candles_test.py` (9 checks): continuous off on every request, several chunks included; the clean-out runs
+  again on a v0.20.6-v0.30.0 database (futures / options dropped, stocks kept).
+- The fake Fyers (`mock_server.py`) now treats a history request without continuous off as asking for the continuous
+  series (marker price, "CONT_FLAG ASKED" in its log), as real Fyers does; none in this release's runs.
+- `tests/navigation_flow.js` (36 checks): the old browser stores (`fyers-candles`, `fyers-candles-2`) are deleted,
+  `fyers-candles-3` in use.
+
 ## v0.30.0 — 2 Nov 2026 — Option chain header that stays put; changing a contract's lists
 
 Added
@@ -530,6 +565,10 @@ Tests
   box, the setting, and the note clearing. The mock no longer sends a fixed day open / high / low.
 
 ## v0.20.7 — 1 Nov 2026 — A day Fyers corrects later reaches your charts; v0.20.6's explanation corrected
+
+> **Correction (v0.30.1):** the "Corrected" note below is itself wrong. Fyers didn't rewrite the day: requests
+> without cont_flag still get Fyers' continuous series (only cont_flag=0 turns it off), and Fyers' own chart had its
+> Continuous Futures setting on. v0.30.1 sends cont_flag=0.
 
 Changed
 - **Each fetch of new candles also takes the week before again** (still one Fyers request), and the browser takes the
