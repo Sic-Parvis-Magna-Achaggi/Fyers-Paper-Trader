@@ -6,6 +6,11 @@ It runs on our own server and serves its own page, so there is nothing to instal
 
 **Address:** https://68-183-245-178.sslip.io
 
+## Version 0.30.0: option chain and watchlists
+
+- **The option chain's header stays at the top:** underlying, expiry and ATM on one slim row; only the strikes scroll.
+- **＋ beside every CE / PE** adds it to any of your watchlists; **⋯ on a watchlist row** (a swipe left on the phone) moves it to another list or removes it.
+
 ## Version 0.19.0: the phone layout
 
 - **A proper phone version, like MT5's app:** tabs at the bottom (Quotes · Chart · Trade · History · More), a full-height chart with one-tap SELL / BUY, an order sheet with big − / + buttons, and a sheet for each position: move SL / target, BE, trailing, close.

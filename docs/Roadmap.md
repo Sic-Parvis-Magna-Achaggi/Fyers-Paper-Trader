@@ -1,11 +1,16 @@
 # Roadmap: the task list
 
-Updated 2 Nov 2026 (v0.29.0). This is the one task list for the project.
+Updated 2 Nov 2026 (v0.30.0). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
 
 ## Next, in this order
+
+**Order change (owner, 2 Nov 2026):** the footprint (item 2) is parked after the order-flow check ("Let's park it for now").
+
+**Order change (owner, 2 Nov 2026, 10:50):** item 13 (the option chain's header and lists from the row) is built now, ahead
+of item 10.
 
 **Order change (owner, 1 Nov 2026, late):** 4c (trade replay on the chart, below under item 4) was built first
 (v0.29.0); item 10 is next.
@@ -25,7 +30,7 @@ ahead of 3-6.
    - [x] Safeguards: a typed confirmation of the Fyers client ID plus a fresh 2FA code to turn Live on; a red LIVE badge everywhere; a kill switch (cancel everything, close everything at Fyers, then pause until Resume); all of it in the security log. *(v0.14.0)*
    - [ ] **First real trade (the owner):** whitelist the droplet's own IP **134.209.159.171** in the Fyers API app with order permission, turn on Live, and test with 1 lot on MCX: entry, the stop at Fyers, a trail move, BE, a close with ✕, and the kill switch. Report anything odd with a screenshot.
    - [ ] Then: compare the app's charges with the charges Fyers actually deducted, and flag any gap.
-2. [ ] **Candle types and order flow** (moved up 31 Oct 2026). Candle types done in **v0.15.0**, Point & Figure in **v0.16.0**; the footprint waits for Monday's measurement.
+2. [ ] **Candle types and order flow** (moved up 31 Oct 2026). Candle types done in **v0.15.0**, Point & Figure in **v0.16.0**; the footprint is **parked** (owner, 2 Nov 2026) after the order-flow check showed Fyers' feed merges trades.
    - [x] Heikin-Ashi, Renko, range bars, line break, plus hollow candles, bars, line and area. Indicators (Volume, built-ins, your Pine scripts) work on every type, on the bars the chart shows, as on TradingView (asked 31 Oct 2026). *(v0.15.0)*
    - [x] **Point & Figure** chart type (asked 31 Oct 2026): X / O columns, box size (ATR or fixed) and reversal (3 boxes), from closes or highs and lows, with indicators like the other types. *(v0.16.0)*
    - [ ] **Point & Figure toolkit, Definedge-style** (asked 31 Oct 2026). Drawn on P&F charts from the ƒx menu, with signals marked on the chart.
@@ -36,10 +41,12 @@ ahead of 3-6.
      - [x] Second set: horizontal counts; patterns: bull / bear traps, catapults, high / low poles, triangles (symmetrical, ascending, descending), turtle breakouts, anchor follow-through; labels placed without overlaps; a switch per pattern family. *(v0.18.0)*
      - [ ] Mini tops / bottoms: Definedge doesn't publish the rule (the owner can paste it from Definedge's library).
      - [ ] Definedge's own indicators (PMOX, XO Zone %, Noiseless RSI, Smart Don, Oops patterns): their exact rules are in Definedge's logged-in library; built only from their published definitions (the owner can paste them), never guessed.
-   - [ ] **Footprint: real trades only, never an estimate** (agreed 31 Oct 2026). Fyers' API documents no trade-by-trade feed (the tick-by-tick socket is 50-level depth only, NSE / NFO, 1 symbol on Standard); its normal feed sends snapshots with the last trade's price and size and the day's volume.
+   - [ ] **Footprint: real trades only, never an estimate** (agreed 31 Oct 2026). **Parked (owner, 2 Nov 2026).** Fyers' API documents no trade-by-trade feed (the tick-by-tick socket is 50-level depth only, NSE / NFO, 1 symbol on Standard); its normal feed sends snapshots with the last trade's price and size and the day's volume.
      - [x] The recorder: the server records every feed snapshot for chosen contracts (default CRUDEOIL and NIFTY futures) and reports how much of the volume arrives as single, exact trades (Log page, admin). *(v0.16.0)*
-     - [ ] Measure on Monday 2 Nov (needs the owner's Fyers login that morning), then read the report together.
-     - [ ] Then decide with the owner: build the footprint (buy x sell volume at each price per bar, delta, cumulative delta, imbalances) only where the trades are exact; otherwise ask Fyers for a trade feed. Buyer / seller is classified by the bid / ask at the trade, as Fyers' own order flow does.
+     - [x] **Measured 2 Nov 2026** (from the open to 10:43 IST; GOLDPETAL added at 10:07). Exact volume (each trade's price and size known): NIFTY 26 NOV FUT **6.6%** (one snapshot held 16,640 qty of trades), CRUDEOIL 26 NOV FUT **25.1%**, GOLDPETAL 26 NOV FUT **18.0%**. The feed sends about one snapshot a second; the rest of the volume arrives merged, its prices and sides unknown. Not enough for a real footprint. Recording switched off 2 Nov 10:42 (the day's file stays in `data/feedcheck/`).
+     - [x] Checked 2 Nov: Fyers' own Order Flow (Smart Charts, since Aug 2026) is built from per-trade data (price, quantity, time), buy / sell inferred from the order book at the trade; a Fyers reply (31 Aug, Fyers Community) says order flow is not part of the API and points to the TBT socket instead.
+     - [ ] If resumed: (a) ask Fyers whether a trade-by-trade (time & sales) feed exists through the API for NFO and MCX, on any plan; (b) test the TBT socket on NIFTY futures (1 symbol on Standard): its message format has a quote block (`ltp`, `ltq`, `ltt`, `vtt`, `vtt_diff`) that Fyers' docs say can be ignored; if it's filled on every trade, NIFTY's footprint could be exact. TBT doesn't cover MCX (CRUDEOIL, GOLDPETAL).
+     - [ ] Then build the footprint (buy x sell volume at each price per bar, delta, cumulative delta, imbalances) only where the trades are exact. Buyer / seller is classified by the bid / ask at the trade, as Fyers' own order flow does.
 3. [x] **Telegram alerts:** shipped in **v0.25.0**, see Done. Set up on the real server 1 Nov (owner): the test message arrived and Settings shows "Watchdog: running". A real outage during a live trade is still untried (optional, with the first live trade).
    Asked: a message if the server stops responding while a live trade is open (with the journal's Telegram set-up).
    Design (1 Nov 2026, Claude's proposal on the owner's "let's finish the Telegram alert"; he can change any of it):
@@ -187,12 +194,27 @@ v0.24.0 / v0.24.1); Telegram (3, done in v0.25.0) and the journal (4) next.
       expires. A new list records from when its contracts are added.
     - [x] 40 prices per page (was 20); the socket stays inside the 100-contract limit with open trades and orders always
       first; polled quotes in requests of 50. *(v0.21.0)*
-12. [ ] **Seconds and tick charts** (asked 1 Nov 2026; **decide after Monday's order-flow check**)
+12. [ ] **Seconds and tick charts** (asked 1 Nov 2026). The 2 Nov order-flow check showed the feed sends about one
+    snapshot a second and merges trades, so seconds charts can be built from it but exact tick charts (bars of N trades)
+    can't.
     - Fyers' own seconds candles (5s-45s) need **Prime** and reach back 30 trading days only. On Standard: the live
       recording (item 10) also keeps one-second detail (kept 30 days, settable; about 1.5-2 MB a day per busy contract),
       giving 5s / 15s / 30s charts and tick charts (a bar every N feed updates) for recorded contracts.
     - Caveats: snapshots (merged trades' volume lands on the last trade's price); a tick chart counts feed updates, not
-      exact trades, unless Monday's check shows updates are close to one per trade; nothing before recording starts.
+      exact trades (2 Nov check: updates are not one per trade); nothing before recording starts.
+
+13. [x] **Option chain and watchlist handling** (asked 2 Nov 2026, with a screenshot of the Options tab): shipped in **v0.30.0**.
+    - [x] **The chain's header: slim and fixed at the top**, on the desktop and the phone: underlying and expiry on one row
+      that never scrolls away (picking another expiry no longer means scrolling back up from the strikes near the price);
+      the chain scrolls inside it. It still opens at the strike nearest the price, but only when an underlying or expiry is
+      opened, never on its own afterwards; an ATM button goes back there. *(v0.30.0)*
+    - [x] **Add to a watchlist from the chain:** a small ＋ beside every CE and PE (★ once it's in a list) opens the list
+      picker: every list with a tick if the contract is in it; tapping a list adds or removes it there. Right-click on
+      a CE / PE still adds to the list on screen. *(v0.30.0)*
+    - [x] **Change a contract's list from the contract itself** (owner: "like a swipe menu in watch list?"): ⋯ on each
+      watchlist row (and right-click) on the desktop, swipe left on the phone (Lists · Remove), opening the same picker
+      with **Move** to another list in one tap, ticks to keep it in several lists, and Remove. On the phone the row shows ⋯
+      (× moved into the swipe and the picker). *(v0.30.0)*
 
 ## Rules that shape live trading and other users (checked 30 Oct 2026)
 
@@ -215,8 +237,8 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 ## Small follow-ups
 
 - [x] The owner checks the phone layout and the order bubble on his own phone (owner, 1 Nov: "working").
-- [ ] Switch the order-flow recorder off after Monday's measurement (Log page): it writes tens of MB a day per busy
-  contract on the 25 GB disk.
+- [x] Switch the order-flow recorder off after the measurement (Log page): done 2 Nov 10:42 (the contract list is kept,
+  with GOLDPETAL26NOVFUT added; recording is off).
 - [ ] Partial closes.
 - [ ] **Copy for Gemini after midnight** (found in testing 2 Nov, v0.28.0's feature): "today" and "this week" pick trades by
   the calendar date, but a trade between midnight and the account's day reset (an MCX night) belongs to the previous
@@ -233,6 +255,7 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Done
 
+- [x] **v0.30.0** (2 Nov): the option chain's header stays at the top (underlying, expiry, ATM on one row; only the strikes scroll; opens at the nearest strike only on open); ＋ / ★ beside every CE / PE to put it in any list; a watchlist row's ⋯ / right-click / phone swipe to move it to another list or remove it (item 13). Also recorded: the 2 Nov order-flow check and the footprint parked.
 - [x] **v0.29.0** (2 Nov): the trade replay (item 4c): each trade's chart set-up recorded at entry and exit (indicators with their settings, Pine code, drawings), ▶ On chart in the Journal and History with the trade and the stop's path drawn, ▶ Play to watch it as it played out; every stop / target move recorded (older trades from the account's log); automatic pictures off.
 
 - [x] **v0.28.1** (1 Nov): multi-chart grids work on the server (Caddy refused frames: `X-Frame-Options DENY` → SAMEORIGIN; reported 1 Nov).

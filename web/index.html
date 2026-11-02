@@ -76,8 +76,54 @@ body.mob .wlbar button,body.mob .wlmenu button,body.mob .wledit button{min-heigh
 .row .x{opacity:0;padding:0 6px;border:0;background:transparent;color:var(--muted)}
 .row:hover .x{opacity:1}
 .tag{font-size:10.5px;padding:1px 6px;border-radius:4px;background:var(--chip);color:var(--muted)}
-.chain{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px;margin-top:8px}
-.chain th{color:var(--muted);font-weight:500;padding:4px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel)}
+/* option chain (v0.30.0): a slim header that stays put; the strikes scroll under it */
+#tChain{display:flex;flex-direction:column;padding:0;overflow:hidden}
+.chainhead{flex:none;display:flex;gap:6px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line);background:var(--panel)}
+.chainhead #cU{flex:1 1 0;min-width:0;padding:5px 8px}
+.chainhead #cExp{flex:0 0 auto;width:108px;padding:5px 4px}
+.chainhead #cAtm{flex:none;padding:5px 7px;font-size:11.5px;font-weight:600;letter-spacing:.02em}
+body.mob .chainhead #cExp{width:auto;flex:1 1 0;min-width:0}
+body.mob .chainhead #cAtm{min-height:40px;padding:6px 12px}
+.chain td{-webkit-tap-highlight-color:transparent}
+#chainBox{flex:1;min-height:0;overflow:auto;padding:0 10px 10px;overscroll-behavior:contain}
+.chain{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px}
+.chain td.c{white-space:nowrap}
+.chain .wa{border:0;background:transparent;color:var(--muted);padding:0 5px;font-size:13px;line-height:1;opacity:.5;cursor:pointer}
+.chain td.c:hover .wa,.chain .wa:hover{opacity:1;color:var(--accent)}
+.chain .wa.in{opacity:1;color:var(--accent)}
+body.mob .chainhead{padding:8px 10px}
+body.mob .chain td{padding:9px 2px}
+body.mob .chain .wa{opacity:.85;padding:4px 9px;font-size:15px}
+/* watchlist rows (v0.30.0): ⋯ / right-click / a swipe on the phone open the list picker */
+.wrow{position:relative;overflow:hidden;border-radius:6px}
+.wrow .swa{position:absolute;top:0;right:0;bottom:0;display:flex}
+.wrow:not(.drag):not(.open) .swa{visibility:hidden}
+.wrow .swa button{border:0;border-radius:0;min-width:76px;color:#fff;font-weight:600}
+.wrow .swa .sl{background:var(--accent)}
+.wrow .swa .sr{background:var(--down)}
+.wrow .row{position:relative;background:var(--panel);transition:transform .18s;touch-action:pan-y}
+.wrow .row:hover{background:var(--panel2)}
+.wrow.drag .row{transition:none}
+#ms_quotes .wrow{border-radius:0}
+#ms_quotes .wrow .row .x:not(.m){display:none}
+/* the list picker */
+#wlPopBg{position:fixed;inset:0;z-index:94;background:transparent}
+body.mob #wlPopBg{background:rgba(0,0,0,.4)}
+#wlPop{position:fixed;z-index:95;min-width:250px;max-width:320px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.35);padding:6px}
+#wlPop .wph{font:12px var(--mono);color:var(--muted);padding:5px 8px 8px;border-bottom:1px solid var(--line);margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#wlPop .li{display:flex;align-items:center;gap:4px}
+#wlPop .tg{flex:1;min-width:0;display:flex;align-items:center;gap:8px;border:0;background:transparent;text-align:left;padding:7px 8px;color:var(--text);border-radius:6px}
+#wlPop .tg:hover{background:var(--panel2)}
+#wlPop .tg span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#wlPop .ck{flex:none;width:16px;height:16px;border:1px solid var(--muted);border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;line-height:1}
+#wlPop .tg.on .ck{background:var(--accent);border-color:var(--accent);color:#fff}
+#wlPop .mv{flex:none;padding:3px 9px;font-size:12px}
+#wlPop .ft{display:flex;gap:6px;border-top:1px solid var(--line);margin-top:4px;padding-top:6px}
+#wlPop .ft button{flex:1;white-space:nowrap}
+body.mob #wlPop{left:0!important;right:0;top:auto!important;bottom:0;min-width:0;max-width:none;border-radius:14px 14px 0 0;padding:10px 12px calc(12px + env(safe-area-inset-bottom,0px))}
+body.mob #wlPop .tg{padding:12px 8px;font-size:15px}
+body.mob #wlPop .mv,body.mob #wlPop .ft button{min-height:40px;padding:6px 14px}
+.chain th{color:var(--muted);font-weight:500;padding:4px;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:1;background:var(--panel);box-shadow:inset 0 -1px var(--line)}
 .chain td{padding:5px 4px;text-align:center;border-bottom:1px solid var(--line)}
 .chain td.k{background:var(--panel2);font-weight:500}
 .chain td.c{cursor:pointer;color:var(--muted)}
@@ -619,8 +665,11 @@ body:not(.is-admin) .admin-only{display:none!important}
         <div id="results"></div>
       </div>
       <div class="pane hide" id="tChain">
-        <label style="margin-top:0">Underlying</label><input id="cU" placeholder="NIFTY, BANKNIFTY, SENSEX, RELIANCE, CRUDEOIL" class="mono" autocomplete="off">
-        <label>Expiry</label><select id="cExp"></select>
+        <div class="chainhead" id="chainHead">
+          <input id="cU" placeholder="NIFTY, CRUDEOIL..." class="mono" autocomplete="off" title="Underlying: NIFTY, BANKNIFTY, SENSEX, RELIANCE, CRUDEOIL... then Enter">
+          <select id="cExp" title="Expiry"></select>
+          <button id="cAtm" title="Back to the strike nearest the price (at the money)">ATM</button>
+        </div>
         <div id="chainBox"></div>
       </div>
     </aside>
@@ -943,7 +992,7 @@ function connectWS(){
 }
 function sendWant(){
   if(!ws || ws.readyState !== 1) return;
-  const want = [...new Set([...(cur ? [cur.s] : []), ...wantSymbols(), ...pagesWant(), ...watch.map(w => w.s)])].slice(0, 40);
+  const want = [...new Set([...(cur ? [cur.s] : []), ...wantSymbols(), ...pagesWant(), ...chainWant(), ...watch.map(w => w.s)])].slice(0, 40);
   ws.send(JSON.stringify({want, depth: pagesDepthWant() || bookSymbol()}));
 }
 function onTick(t){
@@ -957,6 +1006,7 @@ function onTick(t){
     el.dataset.v = t.ltp;
   });
   onToolTick(t);
+  chainTick(t);
   if(cur && t.s === cur.s){
     $("#cLtp").textContent = fmt(t.ltp, cur.tick);
     $("#cMeta").textContent = (t.bid != null ? `Bid ${fmt(t.bid, cur.tick)} · Ask ${fmt(t.ask, cur.tick)} · ` : "") + (t.src === "poll" ? "polled" : "live");
@@ -2119,6 +2169,7 @@ document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
   document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("on", x === b));
   for(const t of ["watch","find","chain"]) $("#t" + t[0].toUpperCase() + t.slice(1)).classList.toggle("hide", t !== b.dataset.tab);
   if(b.dataset.tab === "find") $("#q").focus();
+  if(chainRef) sendWant();
 });
 function rowEl(r, {inWatch} = {}){
   sym[r.s] = r;
@@ -2132,7 +2183,12 @@ function rowEl(r, {inWatch} = {}){
   if(last[r.s]) px.textContent = fmt(last[r.s].ltp, r.tick);
   el.onclick = () => openSymbol(r);
   const x = document.createElement("button"); x.className = "x";
-  if(inWatch){ x.textContent = "×"; x.title = "Remove from this list"; x.onclick = e => { e.stopPropagation(); watch = watch.filter(w => w.s !== r.s); wlSave(); renderWatch(); sendWant(); }; }
+  if(inWatch){
+    const m = document.createElement("button"); m.className = "x m"; m.textContent = "⋯"; m.title = "Lists: move to another list, keep it in several, remove";
+    m.onclick = e => { e.stopPropagation(); wlPick(r, m, wlId); }; el.append(m);
+    el.oncontextmenu = e => { e.preventDefault(); wlPick(r, {x: e.clientX, y: e.clientY}, wlId); };
+    x.textContent = "×"; x.title = "Remove from this list"; x.onclick = e => { e.stopPropagation(); watch = watch.filter(w => w.s !== r.s); wlSave(); renderWatch(); sendWant(); chainMarks(); };
+  }
   else { x.textContent = "+"; x.title = "Add to the watchlist on screen"; x.onclick = e => { e.stopPropagation(); addWatch(r); }; }
   el.append(x);
   if((r.f === "FUT" || r.f === "IDX" || r.f === "EQ") && !inWatch){
@@ -2145,7 +2201,95 @@ function addWatch(r){
   const L = wlCur();
   if(watch.some(w => w.s === r.s)) return toast(`Already in ${L.name}`);
   if(watch.length >= WL_ITEMS) return toast(`${L.name} is full (${WL_ITEMS})`);
-  watch.push(r); wlSave(); renderWatch(); sendWant(); toast(`Added ${symLabel(r.s)} to ${L.name}`);
+  watch.push(r); wlSave(); renderWatch(); sendWant(); chainMarks(); toast(`Added ${symLabel(r.s)} to ${L.name}`);
+}
+/* a contract's lists (v0.30.0, owner 2 Nov: "if I add it to a list by mistake, I need an option to change the list from the
+   instrument itself"). The picker lists every list with a tick where the contract is; a tap adds or removes it there.
+   Opened from a watchlist row (⋯, right-click, the phone's swipe), it also offers Move (one tap: there, and out of this
+   list) and Remove. From the option chain's ＋ it's ticks only. */
+function wlItems(L){ return L.id === wlId ? watch : L.items; }
+function wlHas(L, s){ return wlItems(L).some(w => w.s === s); }
+function wlInAny(s){ return WL.some(L => wlHas(L, s)); }
+function wlPut(L, r){
+  const it = wlItems(L);
+  if(it.some(w => w.s === r.s)) return true;
+  if(it.length >= WL_ITEMS){ toast(`${L.name} is full (${WL_ITEMS})`); return false; }
+  it.push(r); return true;
+}
+function wlDrop(L, s){ if(L.id === wlId) watch = watch.filter(w => w.s !== s); else L.items = L.items.filter(w => w.s !== s); }
+function wlChanged(){ wlSave(); renderWatch(); sendWant(); chainMarks(); }
+function wlPickClose(){ const p = $("#wlPop"), b = $("#wlPopBg"); if(p) p.remove(); if(b) b.remove(); document.removeEventListener("keydown", wlPickKey); }
+function wlPickKey(e){ if(e.key === "Escape") wlPickClose(); }
+function wlPick(r, at, from){
+  wlPickClose(); wlSwipeClose();
+  const bg = document.createElement("div"); bg.id = "wlPopBg";
+  bg.onclick = wlPickClose; bg.oncontextmenu = e => { e.preventDefault(); wlPickClose(); };
+  const pop = document.createElement("div"); pop.id = "wlPop";
+  document.body.append(bg, pop); document.addEventListener("keydown", wlPickKey);
+  const draw = () => {
+    const F = from && WL.find(l => l.id === from);
+    pop.innerHTML = `<div class="wph"></div>` + WL.map(L => `<div class="li"><button class="tg ${wlHas(L, r.s) ? "on" : ""}" data-l="${esc(L.id)}"><span class="ck">${wlHas(L, r.s) ? "✓" : ""}</span><span>${esc(L.name)} (${wlItems(L).length})</span></button>${F && wlHas(F, r.s) && L.id !== F.id && !wlHas(L, r.s) ? `<button class="mv" data-m="${esc(L.id)}" title="Into ${esc(L.name)}, out of ${esc(F.name)}">Move</button>` : ""}</div>`).join("")
+      + `<div class="ft">${F && wlHas(F, r.s) ? `<button class="danger" data-a="rm">Remove from ${esc(F.name)}</button>` : ""}<button data-a="x">Close</button></div>`;
+    pop.querySelector(".wph").textContent = symLabel(r.s) + (r.d && r.d !== r.s ? " · " + r.d : "");
+    pop.querySelectorAll(".tg").forEach(b => b.onclick = () => {
+      const L = WL.find(l => l.id === b.dataset.l); if(!L) return;
+      if(wlHas(L, r.s)){ wlDrop(L, r.s); toast(`Removed ${symLabel(r.s)} from ${L.name}`); }
+      else if(wlPut(L, r)) toast(`Added ${symLabel(r.s)} to ${L.name}`);
+      wlChanged(); draw();
+    });
+    pop.querySelectorAll(".mv").forEach(b => b.onclick = () => {
+      const L = WL.find(l => l.id === b.dataset.m), F2 = WL.find(l => l.id === from); if(!L || !F2) return;
+      if(!wlPut(L, r)) return;
+      wlDrop(F2, r.s); wlChanged(); wlPickClose(); toast(`Moved ${symLabel(r.s)} to ${L.name}`);
+    });
+    const rm = pop.querySelector('[data-a="rm"]');
+    if(rm) rm.onclick = () => { const F2 = WL.find(l => l.id === from); if(F2){ wlDrop(F2, r.s); wlChanged(); toast(`Removed ${symLabel(r.s)} from ${F2.name}`); } wlPickClose(); };
+    pop.querySelector('[data-a="x"]').onclick = wlPickClose;
+  };
+  draw();
+  if(document.body.classList.contains("mob")) return;      // the phone: a sheet at the bottom (CSS)
+  const R = at && at.getBoundingClientRect ? at.getBoundingClientRect() : {left: at.x, right: at.x, top: at.y, bottom: at.y};
+  const w = pop.offsetWidth, h = pop.offsetHeight, W = innerWidth, H = innerHeight;
+  let x = R.left, y = R.bottom + 4;
+  if(x + w > W - 8) x = Math.max(8, R.right - w);
+  if(y + h > H - 8) y = Math.max(8, R.top - h - 4);
+  pop.style.left = Math.max(8, x) + "px"; pop.style.top = y + "px";
+}
+/* the phone: swipe a watchlist row left for Lists · Remove (like MT5's / a mail app's row actions) */
+const WL_SW = 152;
+function wlSwipeClose(keep){ document.querySelectorAll(".wrow.open").forEach(w => { if(w !== keep){ w.classList.remove("open"); w.querySelector(".row").style.transform = ""; } }); }
+function wlWrap(row, r){
+  const wrap = document.createElement("div"); wrap.className = "wrow";
+  const acts = document.createElement("div"); acts.className = "swa";
+  acts.innerHTML = `<button class="sl">Lists</button><button class="sr">Remove</button>`;
+  acts.querySelector(".sl").onclick = e => { e.stopPropagation(); wlPick(r, row, wlId); };
+  acts.querySelector(".sr").onclick = e => { e.stopPropagation(); wlDrop(wlCur(), r.s); wlChanged(); toast(`Removed ${symLabel(r.s)} from ${wlCur().name}`); };
+  wrap.append(acts, row);
+  let x0 = 0, y0 = 0, base = 0, dx = 0, mode = null;
+  row.addEventListener("touchstart", e => {
+    const t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; mode = null;
+    base = dx = wrap.classList.contains("open") ? -WL_SW : 0;
+  }, {passive: true});
+  row.addEventListener("touchmove", e => {
+    const t = e.touches[0], mx = t.clientX - x0, my = t.clientY - y0;
+    if(!mode){
+      if(Math.abs(mx) > 10 && Math.abs(mx) > Math.abs(my) * 1.3){ mode = "h"; wlSwipeClose(wrap); wrap.classList.add("drag"); }
+      else if(Math.abs(my) > 10) mode = "v";
+    }
+    if(mode === "h"){ dx = Math.min(0, Math.max(-WL_SW - 30, base + mx)); row.style.transform = `translateX(${dx}px)`; }
+  }, {passive: true});
+  const end = () => {
+    if(mode !== "h") return;
+    mode = null; wrap.classList.remove("drag"); row._swiped = Date.now();
+    const open = dx < -WL_SW / 2;
+    wrap.classList.toggle("open", open); row.style.transform = open ? `translateX(${-WL_SW}px)` : "";
+  };
+  row.addEventListener("touchend", end); row.addEventListener("touchcancel", end);
+  // a tap on a row that's swiped open (or just swiped) closes it instead of opening the chart
+  row.addEventListener("click", e => {
+    if(wrap.classList.contains("open") || Date.now() - (row._swiped || 0) < 400){ e.stopImmediatePropagation(); e.preventDefault(); wlSwipeClose(); }
+  }, true);
+  return wrap;
 }
 /* watchlists (owner, 1 Nov): several named lists, saved on the server - prefs "wlists" [{id, name, items}] and "wl" (the
    list on screen). `watch` is the list on screen; only it is streamed (with the chart and your trades). Up to 10 lists
@@ -2211,7 +2355,7 @@ function renderWatch(){
   watch = watch.filter(w => !w.exp || w.exp > now - 86400);
   if(WL.length) wlCur().items = watch;
   if(!watch.length){ box.innerHTML = `<div class="empty">Nothing in ${esc(wlCur() ? wlCur().name : "this list")} yet. Use Find, then + to add contracts.</div>`; return; }
-  for(const w of watch) box.append(rowEl(w, {inWatch:true}));
+  for(const w of watch) box.append(wlWrap(rowEl(w, {inWatch:true}), w));
 }
 let kind = "", exf = "", qTimer = null;
 document.querySelectorAll("#kind button").forEach(b => b.onclick = () => {
@@ -2232,36 +2376,46 @@ async function search(){
   for(const r of j.rows) box.append(rowEl(r));
 }
 
-/* option chain */
-let chainEx = "";
+/* option chain. v0.30.0 (owner, 2 Nov): the header (underlying, expiry, ATM) stays at the top and the strikes scroll under it,
+   on the desktop and the phone. It opens at the strike nearest the price only when an underlying or expiry is opened
+   (never on its own afterwards); ATM goes back there. The nearest strike's highlight follows the price. ＋ beside each CE / PE
+   opens the list picker (★ when the contract is in a list). */
+let chainEx = "", chainRef = "", chainAtm = null, chainKs = [], chainSeq = 0;
 async function showChain(u, exp, ex){
   document.querySelector('.tabs button[data-tab="chain"]').click();
   if(ex !== undefined) chainEx = ex || "";
+  const seq = ++chainSeq;
   const j = await api(`/api/chain?u=${encodeURIComponent(u.includes(":") ? u : u.toUpperCase())}&exp=${exp||0}&ex=${chainEx}`);
+  if(seq !== chainSeq) return;                                    // a newer pick is on its way
   u = j.u || u; chainEx = j.ex || chainEx;
   $("#cU").value = u;
   const sel = $("#cExp"); sel.innerHTML = "";
   for(const e of j.expiries || []){ const o = document.createElement("option"); o.value = e; o.textContent = expStr(e); sel.append(o); }
   sel.value = j.exp;
-  const box = $("#chainBox"); box.innerHTML = "";
-  if(!j.rows || !j.rows.length){ box.innerHTML = `<div class="empty">No options found for ${u.toUpperCase()}.</div>`; return; }
+  const box = $("#chainBox"); box.innerHTML = ""; box.scrollTop = 0;
+  chainKs = []; chainAtm = null;
+  if(!j.rows || !j.rows.length){ chainRef = ""; box.innerHTML = `<div class="empty">No options found for ${esc(u.toUpperCase())}.</div>`; sendWant(); return; }
   const strikes = {};
   for(const r of j.rows){ (strikes[r.k] = strikes[r.k] || {})[r.o] = r; sym[r.s] = r; }
-  const ks = Object.keys(strikes).map(Number).sort((a,b) => a-b);
-  // nearest strike to the index / stock (or else the future), when we have its price
-  const live = [j.spot, j.fut].find(s => s && last[s]) || (watch.concat(Object.values(sym)).find(r => r.u === u && r.f === "FUT" && last[r.s]) || {}).s;
-  const ref = live ? last[live].ltp : null;
-  const atm = ref ? ks.reduce((a,b) => Math.abs(b-ref) < Math.abs(a-ref) ? b : a) : null;
+  const ks = chainKs = Object.keys(strikes).map(Number).sort((a,b) => a-b);
+  // the price the nearest strike is measured from: the index / stock, or else the future (streamed while the chain is open)
+  chainRef = [j.spot, j.fut].find(s => s && last[s]) || j.spot || j.fut
+    || (watch.concat(Object.values(sym)).find(r => r.u === u && r.f === "FUT") || {}).s || "";
+  sendWant();
   const t = document.createElement("table"); t.className = "chain";
   t.innerHTML = `<thead><tr><th>Call</th><th>Strike</th><th>Put</th></tr></thead><tbody></tbody>`;
   for(const k of ks){
-    const tr = document.createElement("tr"); if(k === atm) tr.className = "atm";
+    const tr = document.createElement("tr"); tr.dataset.k = k;
     for(const side of ["CE", null, "PE"]){
       const td = document.createElement("td");
       if(!side){ td.className = "k"; td.textContent = k.toLocaleString("en-IN"); }
       else if(strikes[k][side]){
-        const r = strikes[k][side]; td.className = "c"; td.textContent = side;
-        td.title = "Open chart · right-click to add to watchlist";
+        const r = strikes[k][side]; td.className = "c";
+        const lab = document.createElement("span"); lab.textContent = side;
+        const add = document.createElement("button"); add.className = "wa"; add.dataset.s = r.s;
+        add.onclick = e => { e.stopPropagation(); wlPick(r, add); };
+        if(side === "CE") td.append(add, lab); else td.append(lab, add);
+        td.title = "Open chart · ＋ watchlists · right-click: add to the list on screen";
         td.onclick = () => openSymbol(r);
         td.oncontextmenu = e => { e.preventDefault(); addWatch(r); };
       }
@@ -2270,10 +2424,47 @@ async function showChain(u, exp, ex){
     t.tBodies[0].append(tr);
   }
   box.append(t);
-  if(atm){ const a = t.querySelector("tr.atm"); a && a.scrollIntoView({block:"center"}); }
+  chainMarks();
+  if(chainMark()) chainToAtm();
+}
+// highlight the strike nearest the price (no scrolling); true when there's a price to measure from
+function chainMark(){
+  const ref = chainRef && last[chainRef] ? last[chainRef].ltp : null;
+  if(ref == null || !chainKs.length) return false;
+  const atm = chainKs.reduce((a,b) => Math.abs(b-ref) < Math.abs(a-ref) ? b : a);
+  if(atm !== chainAtm){
+    chainAtm = atm;
+    $("#chainBox").querySelectorAll("tr.atm").forEach(x => x.classList.remove("atm"));
+    const tr = $("#chainBox").querySelector(`tr[data-k="${atm}"]`); if(tr) tr.classList.add("atm");
+  }
+  return true;
+}
+// scroll only the strikes (never the page or the header) so the nearest strike sits in the middle
+function chainToAtm(){
+  const box = $("#chainBox"), a = box.querySelector("tr.atm");
+  if(!a) return false;
+  const th = box.querySelector("thead"), hh = th ? th.offsetHeight : 0;
+  box.scrollTop += a.getBoundingClientRect().top - box.getBoundingClientRect().top - hh - (box.clientHeight - hh) / 2 + a.offsetHeight / 2;
+  return true;
+}
+// ★ on the CE / PE that are in a list
+function chainMarks(){
+  document.querySelectorAll("#chainBox .wa").forEach(b => {
+    const on = wlInAny(b.dataset.s);
+    b.classList.toggle("in", on); b.textContent = on ? "★" : "＋";
+    b.title = on ? "In " + WL.filter(L => wlHas(L, b.dataset.s)).map(L => L.name).join(", ") + " · tap to change" : "Add to a watchlist";
+  });
+}
+function chainWant(){ return chainRef && !$("#tChain").classList.contains("hide") ? [chainRef] : []; }
+function chainTick(t){
+  if(t.s !== chainRef) return;
+  const had = chainAtm != null;
+  // the price arrived after the chain was drawn: show the nearest strike once, unless you've already scrolled
+  if(chainMark() && !had && $("#chainBox").scrollTop === 0) chainToAtm();
 }
 $("#cExp").onchange = () => showChain($("#cU").value, $("#cExp").value);
 $("#cU").onkeydown = e => { if(e.key === "Enter") showChain($("#cU").value, 0, ""); };
+$("#cAtm").onclick = () => { if(!(chainMark() && chainToAtm())) toast(chainKs.length ? "No price yet for " + symLabel(chainRef || $("#cU").value) : "Pick an underlying first"); };
 
 /* ---------------------------------------------------------------- settings drawer */
 function openDrawer(){ $("#drawer").classList.add("open"); loadLogs(); secRender(); }

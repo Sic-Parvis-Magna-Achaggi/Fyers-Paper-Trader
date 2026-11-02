@@ -1,5 +1,41 @@
 # Changelog
 
+## v0.30.0 — 2 Nov 2026 — Option chain header that stays put; changing a contract's lists
+
+Added
+- **＋ beside every CE and PE in the option chain** (asked 2 Nov): opens a list picker with every watchlist, ticked where
+  the contract already is; a tap adds it to that list or takes it out. The ＋ turns into ★ once the contract is in a list
+  (its tooltip names the lists). Right-click on a CE / PE still adds it straight to the list on screen.
+- **Changing a contract's lists from its row** (asked 2 Nov: "if I add it to a list by mistake, I need an option to change
+  the list from the instrument itself"): ⋯ on each watchlist row, or right-click the row, opens the same picker with
+  **Move** (into that list and out of this one, one tap), ticks to keep it in several lists, and **Remove from …**. On the
+  phone the picker is a sheet at the bottom, and a row swiped left shows **Lists · Remove** (owner: "like a swipe menu");
+  a tap on a swiped-open row closes it instead of opening the chart.
+- **ATM** button in the chain's header: back to the strike nearest the price.
+
+Changed
+- **The option chain's header is one slim row that stays at the top** (asked 2 Nov, with a screenshot): underlying,
+  expiry and ATM side by side (was two labelled fields, about 120 px); only the strikes scroll, under it, on the desktop
+  and the phone, so another expiry is always one tap away.
+- **The chain opens at the strike nearest the price only when an underlying or expiry is opened**, by scrolling the
+  strikes alone (before, `scrollIntoView` also scrolled the Options pane, carrying the header out of sight). Nothing
+  moves it afterwards; if the price arrives after the chain is drawn, it goes there once unless you've already scrolled.
+  The nearest strike's highlight follows the price. While the Options tab is open the underlying's price is streamed
+  (it counts toward the page's 40 streamed contracts).
+- Phone: watchlist rows show ⋯ instead of ×; removing is in the swipe and the picker.
+
+Docs
+- Roadmap: item 13 (this release); the 2 Nov order-flow check read (exact volume NIFTY 6.6%, CRUDEOIL 25.1%, GOLDPETAL
+  18.0%) and the footprint parked on the owner's word, with the two ways to resume it; item 12 notes that tick charts
+  can't be exact from this feed; the recorder switched off on the server (2 Nov 10:42).
+
+Tests
+- `tests/chain_lists_flow.js` (new, 36 checks): the header's size and place while the strikes scroll (short windows, so
+  the fake 12-strike chain really scrolls), opening at the nearest strike, no pull-back while prices tick, the highlight
+  following the price, another expiry, ATM; ＋ and the picker, ★, right-click; ⋯ / right-click on a row, Move, keep in
+  two lists, Remove, saved after a reload; the phone: header, bottom sheet, ⋯, swipe left (Lists · Remove), a tap
+  closing a swiped row, a swipe right or a small move doing nothing.
+
 ## v0.29.0 — 2 Nov 2026 — Trade replay: every trade on its recorded chart, and ▶ Play
 
 Added

@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.28.0)
+# Paper and live trading: how it works (v0.30.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -10,7 +10,7 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
 - **A fresh code is asked again** (valid 5 minutes) for sensitive actions: adding or changing users, new recovery codes, moving 2FA, editing charge rates, turning an account Live, Resume after the kill switch.
 - **Lockout:** 5 wrong passwords or codes lock that user for 15 minutes. Sessions end after 48 hours without use and after 7 days at most.
 - **Users (admin only, Settings → Users):** add a user with a temporary password. They choose their own password and set up 2FA at first login, then enter their own Fyers app in their Settings for prices. You can disable / enable a user, reset their 2FA (lost phone) or give them a new temporary password. Other users are paper-only; live trading is the admin's only.
-- **Watchlists:** several named lists. At the top of the Watchlist tab (phone: Quotes › Watchlist) pick a list; **＋** makes a new one; **⋯** renames, moves up / down or deletes it (tap Delete twice; the last list can't be deleted). Up to 10 lists of 30 contracts. **+** in Find adds to the list on screen. Only the list on screen streams prices (with your chart and your trades). Saved on the server, so every device has the same lists.
+- **Watchlists:** several named lists. At the top of the Watchlist tab (phone: Quotes › Watchlist) pick a list; **＋** makes a new one; **⋯** renames, moves up / down or deletes it (tap Delete twice; the last list can't be deleted). Up to 10 lists of 30 contracts. **+** in Find adds to the list on screen. **Changing a contract's lists:** ⋯ on its row (or right-click the row; on a phone, swipe the row left for **Lists · Remove**) opens a picker with every list: a tick shows each list it's in, and tapping a list adds it there or takes it out (so it can sit in several lists); **Move** puts it in that list and takes it out of this one in one tap; **Remove from …** takes it off the list on screen. On a phone a tap on a swiped-open row just closes it. Only the list on screen streams prices (with your chart and your trades). Saved on the server, so every device has the same lists.
 - **Everything is per user:** Fyers app and login, watchlists, chart set-up, Pine scripts, paper accounts. Charge rates are shared; only the admin edits them.
 - **Lost phone and recovery codes (admin):** on the server console, in `/home/helper/app`, run `sudo -u helper /home/helper/venv/bin/python -m helper.users rescue admin`. It prints a temporary password; log in with it and set up 2FA again.
 
@@ -76,6 +76,7 @@ An account can be **Paper** or **Live**. A Live account uses the same ticket, ch
 ## Markets
 
 - **MCX** commodities, **NSE and BSE** stocks, indices, F&O, and NSE currency. Find has exchange and type filters; **Opt** on an index, stock or future opens its option chain.
+- **The option chain (Options tab):** one slim row at the top holds the underlying (type it, Enter), the expiry and **ATM**; it stays there while the strikes scroll under it, on the desktop and the phone. The chain opens at the strike nearest the price (the index or stock, else the future) when you open an underlying or an expiry, and never moves by itself after that; the nearest strike's highlight follows the price; **ATM** scrolls back to it. Click **CE** / **PE** to open its chart. **＋** beside each CE and PE opens the list picker (tick the lists it should be in); it shows **★** once the contract is in a list. Right-click a CE / PE still adds it straight to the list on screen.
 - **Indices** are for charts only: BUY / SELL tells you an index can't be traded. Trade its futures or options.
 - **Stocks:** Intraday or Delivery (CNC). A delivery sell needs shares you hold, as at the broker; to short a stock, use Intraday.
 - **F&O, currency, commodities:** Intraday or Carry (NRML).

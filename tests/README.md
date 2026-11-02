@@ -27,6 +27,7 @@ FYERS_HELPER_DATA=/tmp/fyers_test node tests/pine_compat_flow.js   # the Pine ba
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/indicator_settings_flow.js  # indicator settings (Inputs / Style / Visibility, own timeframe), Pine imports, chart scroll-back, Pivot Points on daily candles
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/navigation_flow.js         # Go to a date (Alt+G), », P&F zoom and box, no-trade candles, the browser's candle copy, the data check
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/watchlists_flow.js    # several watchlists: new / rename / move / delete, + in Find, streaming, saved, phone
+FYERS_HELPER_DATA=/tmp/fyers_test node tests/chain_lists_flow.js   # option chain header fixed while strikes scroll, opens at the nearest strike only on open, ＋ / ★ on CE / PE, a row's lists (⋯, right-click, phone swipe: Move / Remove)
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/drawings_flow.js       # drawing tools and the measure: toolbar, drawing, editing, undo, saved per contract, every chart type, net ₹ / R, position drawings, phone
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/layouts_flow.js       # saved layouts: Layout 1, new / copy / rename / delete, switching brings each back, auto-save and by hand (Ctrl+S), page closed mid-switch, second device, phone
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/multichart_flow.js    # multi-charts: grids, each chart its own, the active chart (watchlist, BUY, Pine), crosshair sync, drawings per contract, ⛶, reload, phone buttons

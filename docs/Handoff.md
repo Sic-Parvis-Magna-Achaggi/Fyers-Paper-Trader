@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 2 Nov 2026, version **0.29.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 2 Nov 2026, version **0.30.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -343,7 +343,16 @@ Monday's order-flow check.
 index.html: prefs `wlists` = [{id, name, items: [symbol rows]}] and `wl` (the list on screen); `watch` is that list's
 items (other code - sendWant, pages.js - reads `watch`, so it still means "the list on screen"); `wlLoad()` (boot; the
 old pref `watch` becomes "Watchlist"), `wlSave()` (also mirrors `watch`), `wlSwitch()`, `renderWlBar()` (switcher,
-＋, ⋯ menu, inline name editor). 10 lists x 30. Feed: `want()` 40 a page; `wanted()` puts `extra()` (trades / orders,
+＋, ⋯ menu, inline name editor). 10 lists x 30.
+v0.30.0: a contract's lists. `wlItems(L)` (the list on screen is `watch`, the others `L.items`: always go through it),
+`wlHas` / `wlInAny` / `wlPut` (30 cap) / `wlDrop`, `wlChanged()` (save, re-render, stream, chain stars). `wlPick(row,
+anchor, from)` is the picker (`#wlPop` + `#wlPopBg`; a bottom sheet under `body.mob`); with `from` (a list id) it adds Move
+and Remove. Watchlist rows are wrapped by `wlWrap()` in `.wrow` (swipe actions `.swa` behind the `.row`; touch handlers,
+`touch-action: pan-y`; a capture-phase click guard stops a swiped row opening the chart). ⋯ is `.x.m` on the row;
+right-click on a row opens the picker. Option chain: header `#chainHead` (`#cU`, `#cExp`, `#cAtm`), strikes scroll in
+`#chainBox` (thead sticky); `chainRef` (spot, else future) is streamed via `chainWant()` while the tab is open;
+`chainMark()` highlights, `chainToAtm()` scrolls only `#chainBox` (never `scrollIntoView`, which moved the pane);
+`chainTick()` scrolls once if the price arrives late and the strikes haven't been scrolled; `chainMarks()` sets ＋ / ★. Feed: `want()` 40 a page; `wanted()` puts `extra()` (trades / orders,
 order-flow check) first, then the rest, cut at 95; `_poll()` batches quotes by 50. Item 10 will record the union of all
 lists' items from prefs `wlists` server-side.
 
@@ -380,10 +389,13 @@ booked once per Fyers order id (`L["filled"]`); any open app order that nothing 
 ## Order flow (v0.16.0)
 
 The owner wants a real footprint only, never an estimate. Fyers' API documents no trade feed (the tick-by-tick
-socket is depth-only, NSE / NFO, 1 symbol on Standard). Monday 2 Nov: read the Log page's order-flow check (after the
-owner's Fyers login) for CRUDEOIL and NIFTY futures. If exact volume is close to 100% the footprint can be built from
-the normal feed; if not, the owner asks Fyers for a trade feed. Snapshot files grow by roughly tens of MB a day per
-busy contract (gzip): turn recording off on the Log page once the question is settled.
+socket is depth-only, NSE / NFO, 1 symbol on Standard). **Measured 2 Nov 2026** (the open to 10:43 IST): exact volume
+NIFTY fut 6.6% (one snapshot held 16,640 qty), CRUDEOIL fut 25.1%, GOLDPETAL fut 18.0%; about one snapshot a second.
+So no footprint from this feed. **Parked by the owner** ("Let's park it for now", 2 Nov). Recording is off on the
+server (2 Nov 10:42; the contract list, now with GOLDPETAL26NOVFUT, is kept). Fyers' own Order Flow (Smart Charts,
+Aug 2026) uses per-trade data with buy / sell inferred from the book; Fyers said (community, 31 Aug) it isn't in the API
+and pointed to the TBT socket. If resumed: ask Fyers for a time & sales feed (NFO, MCX), or test whether the TBT
+socket's `quote` block (`ltq`, `vtt_diff`, msg.proto) is filled per trade on NIFTY futures (TBT has no MCX).
 
 ## Indicators, Pine libraries and chart history (v0.20.0)
 
@@ -465,8 +477,8 @@ indicator option to add (not built).
 1. The owner's first real trade (Monday at the earliest): whitelist 134.209.159.171 (order permission), turn on
    Live, 1 lot on MCX. Fix whatever that shows.
 2. Compare the app's charges with what Fyers deducted (roadmap item 1, last part).
-3. Monday: read the order-flow check with the owner; the footprint only if it's exact (and decide roadmap item 12,
-   seconds / tick charts, from the same numbers). Next build: the journal (4) (the owner's order, 1 Nov; item 8, CFD
+3. Order flow: measured and parked (2 Nov, see "Order flow" above). v0.30.0 (2 Nov): roadmap 13, the option chain's
+   fixed header and a contract's lists from its row, waiting for the owner's try on real Fyers. Next build: the journal (4) (the owner's order, 1 Nov; item 8, CFD
    prices, is on hold): v0.26.0, v0.27.0 (pictures + Telegram backup) and v0.28.0 (Insights, review, export) shipped: the
    journal is complete. v0.29.0: the trade replay (4c as agreed 1 Nov). Next in the roadmap's order: item 10 (live
    candles), 4b only if the owner says yes. Shipped and waiting for the owner's try: measurement and drawing tools (v0.22.0), layouts
