@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.30.3 — 3 Nov 2026 — Indicator buttons always in reach
+
+Fixed
+- **An indicator with many values pushed its buttons off the screen** (owner, 3 Nov, MultiPivot "Classic + CPR 6 20" on
+  NIFTY 26 NOV 23500 CE: 15 values, the 👁 ⚙ { } ✕ only just inside the chart). The buttons came after the values on a
+  line that never wrapped. Now, like TradingView:
+  - the buttons come **right after the indicator's name**, before its values (pointing at the read-out shows them; on the
+    phone they're always shown), with their space kept so nothing shifts when they appear;
+  - a read-out is never wider than the chart minus the price scale: long values **wrap onto the next line** (every value
+    stays readable), and the read-outs on the candles stack under each other without overlapping;
+  - it follows the chart's width (a narrower window, a grid's chart, the phone).
+
+Tests
+- `tests/legend_flow.js` (new, 12 checks): two scripts with 24 values each (on the candles and in their own pane) and a
+  short one, on a 1000 px window, a 760 px one and a phone: no read-out past the price scale, long values wrapped, the eye
+  and ✕ inside the chart, the buttons right after the name, no overlap; the eye hides and shows each by a real click,
+  and by a tap on the phone.
+
 ## v0.30.2 — 3 Nov 2026 — No false data warning or extra candle before the open
 
 Fixed

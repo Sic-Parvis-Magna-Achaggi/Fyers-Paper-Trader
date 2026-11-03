@@ -287,20 +287,23 @@ a.btnlink{border:1px solid var(--line);border-radius:6px;padding:6px 12px;color:
 .pd-errline{background:rgba(226,72,61,.18)!important}
 .CodeMirror-dialog{background:var(--panel2);color:var(--text);border-color:var(--line)!important}
 .CodeMirror-dialog input{width:20em;padding:2px 6px;background:var(--bg)}
-.lgd.lind{pointer-events:auto}
+.lgd.lind{pointer-events:auto;white-space:normal}
+/* v0.30.3: an indicator's read-out never runs past the chart (max-width set in legendPlace): its buttons come right after
+   its name, like TradingView, and the values wrap onto the next line instead of pushing the buttons off-screen */
+.lgd .lname,.lgd .lacts{white-space:nowrap}
 .lgd .la,.lgdg .la{pointer-events:auto;cursor:pointer;color:var(--muted);padding:0 3px;border-radius:3px;font-family:var(--sans);display:inline-flex;align-items:center;vertical-align:middle;line-height:1.3}
 .lgd .la:hover,.lgdg .la:hover{color:var(--text);background:var(--panel2)}
-.lgd .lacts{display:none;margin-left:6px;gap:2px}
-.lgd.lind:hover .lacts,.lgd.off .lacts{display:inline-flex}
-.lgd.off .lacts .la:not(.leye){display:none}
-.lgd.lind:hover.off .lacts .la{display:inline-flex}
+.lgd .lacts{display:inline-flex;visibility:hidden;margin:0 4px 0 2px;gap:2px}
+.lgd.lind:hover .lacts,.lgd.off .lacts{visibility:visible}
+.lgd.off .lacts .la:not(.leye){visibility:hidden}
+.lgd.lind:hover.off .lacts .la{visibility:visible}
 .lgd .lchev{margin:0 3px 0 -3px;font-size:10px}
 .lgd .lname{cursor:pointer}
 .lgd.off .lname{opacity:.45}
 .lgd .leye.on{color:var(--warn)}
 .lgdg{position:absolute;z-index:5;font-size:11.5px;pointer-events:none;background:color-mix(in srgb,var(--bg) 70%,transparent);border-radius:4px}
 .lgdg .la{padding:0 6px}
-@media (hover:none){ .lgd .lacts{display:inline-flex} }
+@media (hover:none){ .lgd .lacts,.lgd.off .lacts .la{visibility:visible} }
 .pine-tbls{position:absolute;inset:0;pointer-events:none;z-index:4}
 .ptip{position:absolute;z-index:30;display:none;max-width:360px;white-space:pre-line;pointer-events:none;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 9px;font:12px/1.45 var(--sans);box-shadow:0 6px 20px rgba(0,0,0,.35)}
 .pine-tbls table.ptab{position:absolute;border-collapse:collapse;font-family:var(--sans)}
@@ -1443,7 +1446,11 @@ function legendPlace(){
   ps.forEach((pn, k) => { top[k] = y; y += pn.getHeight() + 1; });
   // indicators on the candles stack under the candle read-out, then the collapse arrow; the others sit at the top of their pane
   let yb = l0 ? l0.offsetTop + l0.offsetHeight + 2 : 24, n0 = 0;
+  // no read-out wider than the chart minus the price scale: long ones wrap (their buttons stay in reach)
+  let psw = 60; try{ psw = chart.priceScale("right").width() || 60; }catch(e){}
+  const maxW = l => Math.max(160, box.clientWidth - psw - l - 8) + "px";
   INDS.forEach((r, i) => { const el = $("#lgd" + (i + 1)); if(!el) return;
+    el.style.maxWidth = maxW(r.pane === 0 ? left0 : 8);
     if(r.pane === 0){ n0++; el.style.left = left0 + "px"; el.style.top = yb + "px"; if(el.style.display !== "none") yb += el.offsetHeight + 2; }
     else { el.style.left = "8px"; el.style.top = ((top[r.pane] || 0) + 5) + "px"; } });
   const g = $("#lgdG");
@@ -1493,12 +1500,18 @@ function legendFill(param){
     if(r.offTf && !isPine) vals = ` <span class="lk">hidden on this timeframe</span>`;
     const chev = r.pane > 0 ? `<span class="la lchev" data-la="min" data-id="${id}" title="${min ? "Show values" : "Hide values"}">${min ? "▸" : "▾"}</span>` : "";
     el.classList.toggle("off", hid);
-    el.innerHTML = chev + `<span class="lname" data-id="${id}" title="Double-click for settings">${name}</span>` + (r.offTf ? vals : hid || min ? "" : vals)
+    // name, then its buttons (eye, settings, source, remove), then the values - like TradingView (v0.30.3: the buttons
+    // were after the values, so a long row pushed them off-screen)
+    el.innerHTML = chev + `<span class="lname" data-id="${id}" title="Double-click for settings">${name}</span>`
       + `<span class="lacts"><span class="la leye${hid ? " on" : ""}" data-la="eye" data-id="${id}" title="${hid ? "Show" : "Hide"}">${hid ? EYE_OFF : EYE}</span>`
       + `<span class="la" data-la="set" data-id="${id}" title="Settings">⚙</span>`
       + (isPine ? `<span class="la" data-la="src" data-id="${id}" title="Source code">{ }</span>` : "")
-      + `<span class="la" data-la="del" data-id="${id}" title="Remove">✕</span></span>`;
+      + `<span class="la" data-la="del" data-id="${id}" title="Remove">✕</span></span>`
+      + `<span class="lvals">${r.offTf ? vals : hid || min ? "" : vals}</span>`;
   });
+  // a read-out on the candles that wrapped onto more / fewer lines: re-stack the ones under it now (not at the next second)
+  const hs = INDS.map((r, i) => r.pane === 0 ? (($("#lgd" + (i + 1)) || {}).offsetHeight || 0) : 0).join(",");
+  if(hs !== legendFill.hs){ legendFill.hs = hs; setTimeout(legendPlace, 0); }
   const g = $("#lgdG");
   if(g){ g.innerHTML = gmin ? `<span class="la" data-la="group">▸ ${n0} indicator${n0 === 1 ? "" : "s"}</span>` : `<span class="la" data-la="group" title="Collapse the indicators on the candles">▴</span>`;
     if(g.dataset.min !== String(gmin)){ g.dataset.min = String(gmin); setTimeout(legendPlace, 0); } }

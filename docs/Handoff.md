@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 3 Nov 2026, version **0.30.2**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 3 Nov 2026, version **0.30.3**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -92,6 +92,15 @@ the daytime. (Roadmap follow-up.)
 automatic pictures off itself (other suites turn them on).
 `indicator_settings_flow.js`'s "at the start of a contract's history it stops asking" failed once in 2 runs on 1 Nov
 (v0.22.0; passed on re-run, 37/37). Same advice.
+
+## Indicator read-outs (v0.30.3)
+
+`legendFill()` (index.html) builds each `.lgd.lind` row as chevron + `.lname` + `.lacts` (eye, ⚙, { }, ✕) + `.lvals`.
+The buttons sit after the name (TradingView's order) and use `visibility` (not `display`) so their space is kept and
+nothing reflows on hover; `@media (hover:none)` shows them. `legendPlace()` (also every second) sets each row's
+`max-width` to the chart width minus the right price scale and the row's left offset; `.lgd.lind` wraps
+(`white-space: normal`; `.lname` / `.lacts` stay on one line). `legendFill` re-runs `legendPlace` when a candle-pane row's
+height changes (wrapping), so rows on the candles never overlap. Test: `tests/legend_flow.js`.
 
 ## Trade replay (v0.29.0, roadmap 4c)
 

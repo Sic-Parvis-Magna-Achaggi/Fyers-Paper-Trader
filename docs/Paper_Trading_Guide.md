@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.30.2)
+# Paper and live trading: how it works (v0.30.3)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -432,7 +432,7 @@ Turn it on or off in Chart settings (⚙).
 - **Save** (Ctrl+S) puts it in your library on the server; edit the name and Save to rename. **Save as** makes a copy. **Delete** removes it (and takes it off the chart).
 - **Add to chart** (Ctrl+Enter). When the script is already on the chart, the button says **Update on chart**. Saving also updates the chart.
 - **ƒx → My scripts** lists your library: **+ Add** puts a script on the chart, **{ }** opens it in the editor. You can add the same script twice with different inputs.
-- On the chart, each script's read-out shows its values for the bar under the cursor. Point at a read-out for its buttons:
+- On the chart, each script's read-out shows its values for the bar under the cursor. A read-out never runs past the price scale: a script with many values wraps them onto more lines. Point at a read-out for its buttons, right after its name (on the phone they're always shown):
   - **👁** hides the indicator, or shows it again (a hidden script stops running);
   - **⚙** opens its settings (or double-click the name): see *Indicator settings* below;
   - **{ }** opens the code;
