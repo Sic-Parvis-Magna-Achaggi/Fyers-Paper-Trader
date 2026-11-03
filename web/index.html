@@ -1864,8 +1864,9 @@ function mktClosedNow(){
   const ts = Date.now() / 1000 + IST, day = Math.floor(ts / 86400) * 86400, dow = new Date(day * 1000).getUTCDay(), [s0, s1] = sessRange();
   return dow === 0 || dow === 6 || ts < day + s0 * 60 || ts >= day + s1 * 60;
 }
-// rows: Fyers' candles [t, o, h, l, c, v] (t in UTC seconds); t: Fyers' live figures (ltp, o, h, l, vol);
-// o: {tick, closed, today (IST day number), mult, lot, live (the chart's last bar, IST-shifted time)}. -> [[what, candles, live]]
+// rows: Fyers' candles [t, o, h, l, c, v] (t in UTC seconds); t: Fyers' live figures (ltp, o, h, l, vol, pc = previous close);
+// o: {tick, closed, today (IST day number), preopen (a weekday, in the 30 min before the session opens), mult, lot,
+// live (the chart's last bar, IST-shifted time)}. -> [[what, candles, live]]
 function dcIssues(rows, t, o){
   const out = [];
   if(!rows || !rows.length || !t || !(t.h > 0) || !(t.l > 0)) return out;
@@ -1877,6 +1878,21 @@ function dcIssues(rows, t, o){
   if(o.live && Math.floor(o.live.time / 86400) === lastDay){ hi = Math.max(hi, o.live.high); lo = Math.min(lo, o.live.low); }   // ticks since the last fetch
   const op = day[0][1], cl = day[day.length - 1][4], vol = day.reduce((s, r) => s + (+r[5] || 0), 0);
   const tick = o.tick || 0.05, tol = Math.max(10 * tick, (t.ltp || cl) * 0.005), f = v => fmt(v, tick);
+  // v0.30.2 (owner, 3 Nov, NIFTY at 09:14: "Day open 23,222.30 vs 23,582.25" and so on): with the market closed, Fyers'
+  // live figures can already be for a LATER day than the candles' last one - NSE's pre-open (09:00-09:15) sets today's
+  // open / high / low / last before today's first candle exists. Fyers' previous close says which day they are: it is
+  // the close of the day before theirs. Closer to the candles' last close than to the day before's = a later day.
+  if(lastDay < o.today){
+    const before = rows.filter(r => dayOf(r[0]) < lastDay), pcl = before.length ? before[before.length - 1][4] : null;
+    const later = t.pc > 0 ? (pcl == null ? Math.abs(t.pc - cl) <= tol : Math.abs(t.pc - cl) < Math.abs(t.pc - pcl)) : null;
+    if(later === true || (later === null && o.preopen)){
+      if(o.preopen) return out;                               // today's pre-open: today's candles start at the open
+      // a later day has traded and the candles don't have it (history incomplete)
+      const ds = d => new Date(d * 86400000).toLocaleDateString("en-IN", {timeZone: "UTC", weekday: "short", day: "numeric", month: "short"});
+      out.push(["Latest day", ds(lastDay), `a later day (its previous close ${f(t.pc)} = ${ds(lastDay)}'s close)`]);
+      return out;
+    }
+  }
   if(t.o > 0 && Math.abs(op - t.o) > tol) out.push(["Day open", f(op), f(t.o)]);
   if(Math.abs(hi - t.h) > tol) out.push(["Day high", f(hi), f(t.h)]);
   if(Math.abs(lo - t.l) > tol) out.push(["Day low", f(lo), f(t.l)]);
@@ -1894,8 +1910,10 @@ function dataCheck(force, tk){
   if(!force && Date.now() - dcAt < 5000) return;
   dcAt = Date.now();
   const r = sym[cur.s] || {};
+  const now = Date.now() / 1000 + IST, mod = now - Math.floor(now / 86400) * 86400, dow = new Date(Math.floor(now / 86400) * 86400000).getUTCDay();
+  const s0 = sessRange()[0] * 60, preopen = dow > 0 && dow < 6 && mod < s0 && mod >= s0 - 1800;
   const iss = chartCfg().dataCheck === false || !HROWS.length ? [] : dcIssues(HROWS, tk || last[cur.s], {tick: cur.tick, closed: mktClosedNow(),
-    today: Math.floor((Date.now() / 1000 + IST) / 86400), mult: r.mult || cur.mult || 1, lot: r.lot || cur.lot || 1, live: RAW[RAW.length - 1]});
+    today: Math.floor(now / 86400), preopen, mult: r.mult || cur.mult || 1, lot: r.lot || cur.lot || 1, live: RAW[RAW.length - 1]});
   dcShow(iss);
 }
 function dcShow(iss){
@@ -1907,7 +1925,7 @@ function dcShow(iss){
   const html = `<b>These candles disagree with Fyers' live figures for the same day</b>
     <table><tr><th></th><th>Candles</th><th>Fyers live</th></tr>${iss.map(x => `<tr><td>${esc(x[0])}</td><td>${esc(x[1])}</td><td>${esc(x[2])}</td></tr>`).join("")}</table>
     <p>The candles are Fyers' history; the live figures come from its price feed. When they disagree, Fyers' history is
-    incomplete or was changed (as GOLDPETAL's 30 Oct was). Trading isn't affected: fills, stops and P&L use the live
+    incomplete or wrong for that day (try Load again). Trading isn't affected: fills, stops and P&L use the live
     prices. Indicators and Pine scripts read the candles, so treat them with care until this clears.</p>
     <p><button class="sm" id="dcLoad">Load again</button> <button class="sm" id="dcHide">Close</button> <span>Off in Chart settings.</span></p>`;
   const was = b && b.classList.contains("hide");
@@ -2152,6 +2170,10 @@ let curPlan = null, histRetry = 0, volData = {};   // volData: volume per bar on
 function liveBar(t){
   if(!series || !t.ltp || !curPlan) return;
   const tt = Number(t.t) || Math.floor(Date.now()/1000), ts = tt + IST;
+  // v0.30.2 (owner, 3 Nov: NIFTY 15m showed a 09:00 candle at 23,582.25 at 09:14): a price before the session opens
+  // (NSE's pre-open, 09:00-09:15) gets no intraday candle of its own - Fyers' history has none, and the session's first
+  // candle carries the opening price. The bid / ask / last lines still move; daily and longer candles take it as today's.
+  if(curPlan.t.min && ts - Math.floor(ts / 86400) * 86400 < sessStart() * 60) return;
   let b = bucket(ts, curPlan);
   // native intraday bars: follow Fyers' own bar alignment (the last bar loaded) within the same day
   if(!curPlan.agg && curPlan.t.min && lastBar && Math.floor(lastBar.time / 86400) === Math.floor(ts / 86400) && ts >= lastBar.time)

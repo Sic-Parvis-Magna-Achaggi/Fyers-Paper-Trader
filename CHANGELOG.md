@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.30.2 — 3 Nov 2026 — No false data warning or extra candle before the open
+
+Fixed
+- **A false "Candles don't match Fyers' live figures" warning before the open** (owner, 3 Nov, NIFTY 50 at 09:14:
+  candles' day open 23,222.30 / high 23,440.80 / low 23,207.05 / last 23,440.80 against Fyers live 23,582.25 for all
+  four). The candles were Monday's, which were right; the live figures were already Tuesday's, from NSE's pre-open
+  (09:00-09:15). With the market closed, the check assumed Fyers' live figures belong to the candles' last day. Now it
+  uses Fyers' previous close to work out which day they belong to (it's the close of the day before theirs):
+  - live figures for a later day, during the 30 minutes before the open: nothing to compare until today's candles arrive;
+  - live figures for a later day at any other time (that day traded but the candles don't have it): a new
+    **Latest day** warning, saying the history is missing a day (before, that showed as a confusing open / high / low list);
+  - live figures for the candles' own day (an evening, a weekend, the morning before the pre-open): compared as before.
+  Without a previous close from Fyers, the 30 minutes before the open are skipped and other times compared as before.
+- **The pre-open price drew a candle of its own** on intraday charts (the tall 09:00 candle at 23,582.25 on NIFTY 15m,
+  which Fyers' history doesn't have and which went away on reload). A price before the session opens no longer makes
+  an intraday candle; the bid / ask / last lines still show it, the session's first candle starts at the open, and a daily
+  candle still takes it as today's.
+
+Changed
+- The warning's text no longer cites GOLDPETAL's 30 Oct (that was the continuous series, fixed in v0.30.1).
+
+Tests
+- `tests/navigation_flow.js` (41 checks): pre-open figures with and without a previous close give no warning; a later day
+  missing from the candles is flagged; the day after (weekend) still compares the candles' own day and flags a bad one;
+  no previous close outside the pre-open compares as before; a price before the session opens makes no candle and the
+  first one after the open does.
+
 ## v0.30.1 — 2 Nov 2026 — Futures and options charts show the contract itself (continuous data off)
 
 Fixed

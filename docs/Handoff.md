@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 2 Nov 2026, version **0.30.1**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 3 Nov 2026, version **0.30.2**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -419,6 +419,14 @@ socket's `quote` block (`ltq`, `vtt_diff`, msg.proto) is filled per trade on NIF
   `#dcPill` note and `#dcBox` at the chart's bottom). Needs the day's high and low from Fyers (socket, or polled quotes:
   `open_price` / `high_price` / `low_price` / `prev_close_price` in `feed._poll()`: those key names are Fyers' documented
   quote fields but not yet seen on this server). `mktClosedNow()`: weekends and outside `sessRange()` (no holidays).
+  **v0.30.2:** with the market closed and the candles' last day before today, `dcIssues` works out which day Fyers'
+  live figures belong to from `t.pc` (Fyers' previous close = the close of the day before theirs; nearer the candles' last
+  close than the day before's = a later day): a later day during `o.preopen` (a weekday, the 30 min before `sessRange()`'s
+  start, set in `dataCheck`) -> nothing; a later day otherwise -> "Latest day" (history missing a day); else compared as
+  before. No `pc`: pre-open skipped, else as before. `liveBar()` returns early for intraday plans when the tick is before
+  `sessStart()` (no pre-open candle; the bid / ask / last lines still move). Found 3 Nov at 09:14 on NIFTY 50.
+  Test-kit note: the mock's ticks run round the clock, so between 00:00 and 09:00 IST they now make no intraday candles
+  (MCX's session starts 09:00); suites that wait for live candles may behave differently if run then (not tried yet).
   The mock sends no day open / high / low (its random walk doesn't follow its candles). To confirm on real Fyers: no false
   warnings in a normal session (NSE's official close vs LTP after 15:30 is the likeliest; tolerance 0.5%).
 - **v0.30.1: every history request sends `cont_flag=0`** (`fyers_link.history_range`). Fyers' API gives its continuous

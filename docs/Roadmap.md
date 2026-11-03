@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 2 Nov 2026 (v0.30.1). This is the one task list for the project.
+Updated 3 Nov 2026 (v0.30.2). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -257,6 +257,7 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Done
 
+- [x] **v0.30.2** (3 Nov): before the open, no false "candles don't match" warning (Fyers' live figures are already today's pre-open ones; the check now works out their day from Fyers' previous close; a day missing from the candles is flagged as **Latest day**) and no extra pre-open candle on intraday charts (reported 3 Nov, NIFTY 50 at 09:14).
 - [x] **v0.30.1** (2 Nov): futures and options charts show the contract itself: every history request asks Fyers for continuous data off (cont_flag=0; Fyers' API gives the continuous series otherwise, so GOLDPETAL NOV's 30 Oct was the expiring OCT contract); saved futures / options candles reloaded once; v0.20.7's "Fyers rewrote the day" corrected.
 - [x] **v0.30.0** (2 Nov): the option chain's header stays at the top (underlying, expiry, ATM on one row; only the strikes scroll; opens at the nearest strike only on open); ＋ / ★ beside every CE / PE to put it in any list; a watchlist row's ⋯ / right-click / phone swipe to move it to another list or remove it (item 13). Also recorded: the 2 Nov order-flow check and the footprint parked.
 - [x] **v0.29.0** (2 Nov): the trade replay (item 4c): each trade's chart set-up recorded at entry and exit (indicators with their settings, Pine code, drawings), ▶ On chart in the Journal and History with the trade and the stop's path drawn, ▶ Play to watch it as it played out; every stop / target move recorded (older trades from the account's log); automatic pictures off.

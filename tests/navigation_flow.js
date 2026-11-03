@@ -123,6 +123,7 @@ let br;
     const rows = noTradeDrop(HROWS), dayOf = x => Math.floor((x + IST) / 86400), ld = dayOf(rows[rows.length - 1][0]);
     const day = rows.filter(r => dayOf(r[0]) === ld);
     const D = {o: day[0][1], h: Math.max(...day.map(r => r[2])), l: Math.min(...day.map(r => r[3])), c: day[day.length - 1][4], v: day.reduce((s, r) => s + r[5], 0)};
+    const prior = rows.filter(r => dayOf(r[0]) < ld), prevC = prior[prior.length - 1][4];
     const base = {tick: 1, closed: true, today: ld, mult: 100, lot: 1, live: null};
     const good = {s: cur.s, ltp: D.c, o: D.o, h: D.h, l: D.l, vol: D.v};
     const run = (t, o) => dcIssues(HROWS, t, {...base, ...o}).map(x => x[0]);
@@ -133,13 +134,40 @@ let br;
       units: run({...good, vol: D.v * 100}),
       openNoToday: run({...good, ltp: D.c * 0.9}, {closed: false, today: ld + 1}),
       index: run({...good, vol: undefined}),
-      noFigures: run({s: cur.s, ltp: D.c * 0.9})};
+      noFigures: run({s: cur.s, ltp: D.c * 0.9}),
+      // v0.30.2 (owner, 3 Nov, NIFTY at 09:14): before the open, Fyers' figures can be TODAY's pre-open ones
+      pre: (() => { const X = Math.round(D.c * 1.006), P = {s: cur.s, ltp: X, o: X, h: X, l: X};
+        return {withPc: run({...P, pc: D.c}, {today: ld + 1, preopen: true}), noPc: run(P, {today: ld + 1, preopen: true}),
+                missing: run({...P, pc: D.c}, {today: ld + 2, preopen: false}),
+                weekendGood: run({...good, pc: prevC}, {today: ld + 1}),
+                weekendBad: run({...good, pc: prevC, ltp: Math.round(D.c * 0.983), o: Math.round(D.o * 1.011), l: Math.round(D.l * 0.975)}, {today: ld + 1}),
+                noPcAfterHours: run({...good, ltp: Math.round(D.c * 0.983)}, {today: ld + 1})}; })()};
   });
   ok(dc.good.length === 0 && dc.near.length === 0, `figures that match the candles (or within 0.5% / 10 ticks, volume within 5x) give no warning (${JSON.stringify(dc.near)})`);
   ok(["Day open", "Day low", "Last price", "Day volume"].every(k => dc.friday.includes(k)), `a Friday-like day is flagged: ${dc.friday.join(", ")}`);
   ok(dc.units.length === 0, "a volume 100x the candles' on a ×100 contract is a unit difference, not an error");
   ok(dc.openNoToday.length === 0 && dc.noFigures.length === 0 && !dc.index.includes("Day volume"),
      "nothing to compare while the market is open and today's candles aren't in, without Fyers' day figures, or volume on an index");
+  ok(dc.pre.withPc.length === 0 && dc.pre.noPc.length === 0,
+     `before the open, today's pre-open figures (previous close = the candles' last close) aren't compared with yesterday's candles (${JSON.stringify(dc.pre)})`);
+  ok(dc.pre.missing.length === 1 && dc.pre.missing[0] === "Latest day", `a later day that traded but isn't in the candles is flagged as missing (${dc.pre.missing})`);
+  ok(dc.pre.weekendGood.length === 0 && ["Day open", "Day low", "Last price"].every(k => dc.pre.weekendBad.includes(k)),
+     `the day after (weekend): figures of the candles' own day (previous close = the day before's) are still compared: good ones pass, a Friday-like day is flagged (${dc.pre.weekendBad})`);
+  ok(dc.pre.noPcAfterHours.includes("Last price"), "without a previous close, outside the pre-open, the check compares as before");
+  // the pre-open price gets no intraday candle of its own (it did: a 09:00 candle on NIFTY 15m at 09:14)
+  const po = await pg.evaluate(() => {
+    const keepRAW = RAW.slice(), keepLast = lastBar, keepVol = volCum, today = Math.floor((Date.now() / 1000 + IST) / 86400);
+    while(RAW.length && Math.floor(RAW[RAW.length - 1].time / 86400) >= today) RAW.pop();
+    lastBar = RAW[RAW.length - 1]; dispSet();                     // the chart as it was before today's first tick
+    const n = RAW.length, t0 = today * 86400 - IST + sessStart() * 60;
+    liveBar({s: cur.s, ltp: 7777, t: t0 - 600});
+    const before = RAW.length === n && !RAW.some(b => b.close === 7777);
+    liveBar({s: cur.s, ltp: 7777, t: t0 + 60});
+    const after = RAW.length === n + 1 && RAW[RAW.length - 1].close === 7777;
+    RAW.length = 0; RAW.push(...keepRAW); lastBar = keepLast; volCum = keepVol; dispSet();
+    return {before, after};
+  });
+  ok(po.before && po.after, `a price before the session opens makes no candle; the first one after the open does (${JSON.stringify(po)})`);
   ok(!(await pg.isVisible("#dcPill")), "the test server sends no day figures, so no warning on its own charts");
   await pg.evaluate(D => dataCheck(true, {s: cur.s, ltp: Math.round(D.c * 0.983), o: Math.round(D.o * 1.011), h: D.h, l: Math.round(D.l * 0.975), vol: D.v * 300}), dc.D);
   // (dataCheck works out "market closed" from the clock: open hours give "Last price" only after the close)
