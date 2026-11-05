@@ -27,6 +27,11 @@ let br;
   await row.locator('[data-a="mode"]').click();
   await pg.waitForSelector("#liveDlg:not(.hide)");
   await pg.screenshot({ path: SHOT + "live_01_dialog.png" });
+  // v0.31.0: the IP to whitelist is this server's own (FYERS_OUT_IP, from /etc/fyers/server.conf), never a fixed one
+  const dlgText = await pg.textContent("#liveDlg"), outIp = process.env.FYERS_OUT_IP || "";
+  ok(outIp ? dlgText.includes("this server's own IP " + outIp) : /this server's own public IP \(to see it, run/.test(dlgText),
+     "the dialog names this server's IP to whitelist: " + (outIp || "(none set: the general wording)"));
+  ok(!dlgText.includes("134.209.159.171") || outIp === "134.209.159.171", "no other server's IP in the dialog");
   await pg.fill("#ldConfirm", "WRONG1"); await pg.click("#ldGo");
   await pg.waitForFunction(() => document.querySelector("#ldErr").textContent.length > 0 || !document.querySelector("#codeAsk.hide") && document.querySelector("#codeAsk"));
   ok(/client ID/.test(await pg.textContent("#ldErr")), "a wrong client ID is refused: " + await pg.textContent("#ldErr"));

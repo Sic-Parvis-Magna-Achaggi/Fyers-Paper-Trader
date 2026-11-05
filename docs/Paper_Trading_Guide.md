@@ -24,9 +24,9 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
 
 ## Live trading (the admin only)
 
-An account can be **Paper** or **Live**. A Live account uses the same ticket, chart tool, rules, guards, BE, trailing and targets as paper, but its orders go to Fyers on your own login, from the server's own IP **134.209.159.171**.
+An account can be **Paper** or **Live**. A Live account uses the same ticket, chart tool, rules, guards, BE, trailing and targets as paper, but its orders go to Fyers on your own login, from the server's own IP (the Turn on LIVE dialog shows it; on the owner's server, **134.209.159.171**).
 
-**Before the first live trade:** whitelist **134.209.159.171** in your Fyers API app (not 68.183.245.178) and give the app order permission. Then test with **1 lot on MCX**.
+**Before the first live trade:** whitelist the server's own IP in your Fyers API app and give the app order permission. On the owner's server that's **134.209.159.171** (not 68.183.245.178); on another server, the IP the dialog and `sudo fyers-status` show. Then test with **1 lot on MCX**.
 
 **Turning it on:** Account page → *Your accounts* → **Turn on LIVE** on an account with no positions or orders. Type your Fyers client ID (shown in the dialog) and a fresh 2FA code. Its paper trades are archived on the server and it starts a fresh ledger at the capital you type (that's what the % rules use), so paper results and real money never mix. One Live account per Fyers login. **Back to Paper** works the same way (flat first). Both are in the security log.
 

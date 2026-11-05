@@ -243,7 +243,14 @@ def state(request: Request):
         out["redirect_uri"] = _redirect_uri(request)
         out["feed"] = r.feed.status()
         out["accounts"] = r.account_list()
+        out["server"] = {"out_ip": _out_ip()}
     return out
+
+
+def _out_ip() -> str:
+    """The IP Fyers sees this server's orders come from (FYERS_OUT_IP in /etc/fyers/server.conf, set by install.sh)."""
+    ip = os.environ.get("FYERS_OUT_IP", "").strip()
+    return ip if re.fullmatch(r"\d{1,3}(\.\d{1,3}){3}", ip) else ""
 
 
 # ------------------------------------------------------------------ login: password, then a 2FA code

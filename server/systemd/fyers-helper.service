@@ -9,6 +9,7 @@ Group=helper
 WorkingDirectory=/home/helper/app
 Environment=FYERS_HELPER_DATA=/home/helper/data
 Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/etc/fyers/server.conf
 ExecStart=/home/helper/venv/bin/uvicorn helper.app:app --host 127.0.0.1 --port 8000 --no-server-header
 Restart=always
 RestartSec=3

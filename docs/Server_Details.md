@@ -12,7 +12,8 @@
 | Swap | 1 GB |
 | Service user | `helper`; read-only GitHub deploy key in `/home/helper/.ssh/deploy_key` |
 | Console access | DigitalOcean web console (Droplet → Web Console). SSH key `fyers-helper-claude` is installed for root |
-| First-boot script | `server/startup.sh` |
+| First-boot script | `server/startup.sh` (the 30 Oct version; since v0.31.0 it also finishes the install on a new server, any Linux: `New_Server_Guide.md`) |
+| This server's settings | `/etc/fyers/server.conf` (v0.31.0): `FYERS_HOST=68-183-245-178.sslip.io`, `FYERS_OUT_IP=134.209.159.171` |
 
 ## For go-live
 

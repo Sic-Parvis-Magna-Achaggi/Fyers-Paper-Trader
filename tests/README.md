@@ -16,12 +16,14 @@ python3 tests/journal_test.py                         # the journal: the server'
 python3 tests/jshots_test.py                          # journal pictures: the server's drawing, entry / exit on paper engines, labels, the Telegram copy (fake Telegram on :8771)
 python3 tests/jreview_test.py                         # journal v0.28.0: weekly review + its Telegram summary, CSV, backup and restore (fake Telegram on :8772)
 python3 tests/candles_test.py                         # saved candles: exact contract (cont_flag=0 on every request), clean-out, a day fetched again replaces it
+bash tests/server_conf_test.sh                        # each server's own settings (address, outgoing IP, branch): fake DigitalOcean metadata + "what's my IP"; safe anywhere
+FYERS_TEST_CONTAINER=1 bash tests/server_flow.sh      # a new server's first install + updates (startup.sh's scripts, update.sh) on a local "GitHub"; ONLY in a throwaway container, as root
 python3 tests/replay_test.py                          # trade replay: the stop's path, entry / exit set-ups (order's chart, layouts), code + drawings as then, old trades from the log, net ₹
 
 python3 tests/make_old_data.py /tmp/fyers_test        # fresh v0.12-style data, admin password OldPass12345
 FYERS_HELPER_DATA=/tmp/fyers_test python3 tests/mock_server.py &   # the app on http://localhost:8766
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/security_flow.js      # upgrade login, 2FA, step-up, users, accounts
-FYERS_HELPER_DATA=/tmp/fyers_test node tests/live_flow.js          # Live on (client ID + 2FA), a trade, its Fyers stop, kill switch, back to Paper
+FYERS_HELPER_DATA=/tmp/fyers_test node tests/live_flow.js          # Live on (client ID + 2FA), a trade, its Fyers stop, kill switch, back to Paper; with FYERS_OUT_IP=203.0.113.7 on both mock_server.py and the test: the dialog names that IP
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/charttypes_flow.js    # every chart type with Volume + 2 Pine scripts lined up, live ticks
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/pine_compat_flow.js   # the Pine battery (tests/pine_compat.js) on every chart type; the P&F toolkit
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/legend_flow.js            # indicator read-outs with many values: inside the chart, wrapped, buttons after the name and clickable (desktop, narrow, phone)

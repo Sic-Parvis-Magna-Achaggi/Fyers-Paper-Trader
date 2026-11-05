@@ -127,9 +127,10 @@ function liveModeDialog(a){
   let m = $("#liveDlg");
   if(!m){ m = document.createElement("div"); m.id = "liveDlg"; document.body.append(m); }
   const cid = ((S.fyers || {}).client_id) || "";
+  const ip = ((S.server || {}).out_ip) || "";
   m.className = "modalwrap";
   m.innerHTML = `<div class="ca ${toLive ? "livecard" : ""}"><b>${toLive ? "Turn on LIVE trading" : "Back to Paper"} · ${esc(a.name)}</b>
-    ${toLive ? `<p class="help">Orders from this account will go to Fyers on your login (${esc(cid || "log in to Fyers first")}), from the server's own IP 134.209.159.171 - it must be whitelisted in your Fyers API app with order permission.</p>
+    ${toLive ? `<p class="help">Orders from this account will go to Fyers on your login (${esc(cid || "log in to Fyers first")}), from ${ip ? `this server's own IP <b class="mono">${esc(ip)}</b>` : "this server's own public IP (to see it, run  curl -4 ifconfig.me  on the server)"} - it must be whitelisted in your Fyers API app with order permission.</p>
       <p class="help">The account must be flat. Its paper trades are archived on the server and it starts a fresh ledger at the capital below (used for the % rules). Test with 1 lot on MCX first.</p>`
       : `<p class="help">The account must be flat. Its live trades are archived on the server and it starts a fresh paper ledger.</p>`}
     <label>Capital for the rules ₹</label><input id="ldCap" class="mono" inputmode="decimal" value="${a.capital || 25000}">

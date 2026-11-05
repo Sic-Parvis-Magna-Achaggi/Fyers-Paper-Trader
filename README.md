@@ -6,6 +6,19 @@ It runs on our own server and serves its own page, so there is nothing to instal
 
 **Address:** https://68-183-245-178.sslip.io
 
+**Your own server:** anyone can run their own copy on any Linux server (DigitalOcean, AWS, Hetzner, Oracle, a VPS...),
+for example to trade live from their own static IP. One script sets it all up: see
+[docs/New_Server_Guide.md](docs/New_Server_Guide.md).
+
+## Version 0.31.0: a second server for a friend
+
+- **One script sets up a new server**, on any Linux server: paste `server/startup.sh` into the provider's start-up box
+  (or run it over SSH) with the repo's name; add the key it shows to GitHub; the install finishes by itself.
+  Steps: `docs/New_Server_Guide.md`.
+- Each server keeps **its own address, outgoing IP and branch** (`/etc/fyers/server.conf`); a server can follow a
+  `stable` branch.
+- The Live dialog names **this server's own IP** to whitelist at Fyers.
+
 ## Version 0.30.0: option chain and watchlists
 
 - **The option chain's header stays at the top:** underlying, expiry and ATM on one slim row; only the strikes scroll.
@@ -37,7 +50,7 @@ It runs on our own server and serves its own page, so there is nothing to instal
 
 ## Version 0.14.0: live trading (the admin only)
 
-- **Turn an account Live** (Account page): orders go to Fyers on your login, from the server's IP 134.209.159.171 (whitelist it in your Fyers API app first).
+- **Turn an account Live** (Account page): orders go to Fyers on your login, from the server's own IP (the dialog shows it; this server's is 134.209.159.171): whitelist it in your Fyers API app first.
 - **A real stop at Fyers from the moment a trade opens;** trailing and BE move that same order. Targets stay on the server, and there's never more than one exit order at Fyers.
 - **Red LIVE badge, KILL switch,** and the Fyers stop shown on every position. Test with 1 lot on MCX first.
 
@@ -100,12 +113,14 @@ Next: the journal in the app, with Telegram screenshots.
 | `tests/` | The test kit (fake Fyers feed, route check, engine and browser tests); not used on the server. See `tests/README.md` |
 | `helper/` | The Python server (FastAPI). `app.py` has the routes; `fyers_link.py` handles Fyers login and data; `feed.py` handles live prices; `symbols.py` handles the contract list; `users.py` handles users, 2FA, sessions, encryption and the security log; `rt.py` runs each user's Fyers link, price feed and paper accounts; `paper.py` is the paper engine; `charges.py` holds every charge; `journal.py` is the trade journal and `jshots.py` its pictures (drawn with Pillow, fonts in `fonts/`: DejaVu Sans Mono, its own licence) |
 | `web/` | The page (`index.html`), the trade panel (`paper.js`), the phone layout (`mobile.js`, `mobile.css`), Pine Script (`pine.js`, `pine_worker.js`) and bundled libraries in `vendor/`: Lightweight Charts (Apache-2.0), PineTS (AGPL-3.0), CodeMirror 5 (MIT) |
-| `server/` | Install and auto-update scripts, the service files and the Caddy config |
-| `docs/` | Project brief, server details, setup guide |
+| `server/` | `startup.sh` sets up a new server (any Linux); `install.sh` installs / refreshes the app; `update.sh` takes new versions every minute; `serverconf.sh` keeps each server's own address, outgoing IP and branch in `/etc/fyers/server.conf`; the service files and the Caddy config |
+| `docs/` | Project brief, server details, setup guide, new server guide |
 
 ## Updating
 
 Upload the new files to this repo. The server picks them up within a minute. See `docs/Server_Setup_Guide.md`.
+A friend's server takes them too: straight from this repo, its `stable` branch, or their own fork or copy
+(`docs/New_Server_Guide.md`).
 
 ## Security
 

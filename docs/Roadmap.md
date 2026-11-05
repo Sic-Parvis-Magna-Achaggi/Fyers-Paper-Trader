@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 3 Nov 2026 (v0.30.3). This is the one task list for the project.
+Updated 5 Nov 2026 (v0.31.0). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -218,6 +218,20 @@ v0.24.0 / v0.24.1); Telegram (3, done in v0.25.0) and the journal (4) next.
       with **Move** to another list in one tap, ticks to keep it in several lists, and Remove. On the phone the row shows ⋯
       (× moved into the swipe and the picker). *(v0.30.0)*
 
+14. [x] **A second server for a friend** (asked 5 Nov 2026: "Option B" - his own server, so he can trade live from his
+    own static IP; "This has to work for any linux server. Whether it is digital ocean or otherwise"): shipped in
+    **v0.31.0**. Steps: `docs/New_Server_Guide.md`.
+    - [x] One script does everything, on any Linux server with systemd (apt or dnf systems), at any provider: pasted into
+      the provider's start-up box (one line to change: the repo) or run over SSH. It installs the server, makes its
+      read-only deploy key, shows it (`sudo fyers-status`) with where to add it on GitHub, waits for access, then clones
+      and installs by itself, and then shows the address and setup code. *(v0.31.0)*
+    - [x] Any repo: the owner's (a second deploy key on it), the friend's fork, or his own copy. An optional branch to
+      follow (e.g. `stable`), so the owner can choose which releases reach that server. *(v0.31.0)*
+    - [x] Each server keeps its own address, outgoing IP and branch in `/etc/fyers/server.conf` (not in Git), so an
+      update never points one server at the other's address. *(v0.31.0)*
+    - [x] The Live dialog names the server's own outgoing IP, not the owner's 134.209.159.171. *(v0.31.0)*
+    - [ ] The friend's first real boot (untested on a real droplet until he does it).
+
 ## Rules that shape live trading and other users (checked 30 Oct 2026)
 
 Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers' rules in force from 1 Apr 2026.
@@ -227,7 +241,8 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
   - A friend is not eligible.
 - **Third-party platforms may route orders only if empanelled** and hosted inside the broker's own systems.
   - So on this server: other users get paper trading with prices from their own Fyers app. Live trading is for the owner only.
-  - A friend who wants live trading runs their own copy of the app on their own server and static IP.
+  - A friend who wants live trading runs their own copy of the app on their own server and static IP (v0.31.0:
+    `docs/New_Server_Guide.md`, any Linux server).
 - **Whitelist the droplet's own IP, 134.209.159.171.** Outgoing traffic from a DigitalOcean droplet uses that IP, not the reserved 68.183.245.178.
 - **Live mode limits:**
   - at most 10 orders per second per client, modifications included (so trailing must be paced);
@@ -257,6 +272,7 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Done
 
+- [x] **v0.31.0** (5 Nov): a second server for a friend, on any Linux server (item 14): `server/startup.sh` sets it all up and finishes the install once its deploy key is on GitHub; `sudo fyers-status`; any repo (owner's, fork, own copy) and an optional `stable` branch; each server's own address / outgoing IP / branch in `/etc/fyers/server.conf`; the Live dialog names the server's own IP; `docs/New_Server_Guide.md`.
 - [x] **v0.30.3** (3 Nov): an indicator's buttons (👁 ⚙ { } ✕) come right after its name and its values wrap within the chart, so a script with many values (MultiPivot) never pushes them off the screen (asked 3 Nov).
 - [x] **v0.30.2** (3 Nov): before the open, no false "candles don't match" warning (Fyers' live figures are already today's pre-open ones; the check now works out their day from Fyers' previous close; a day missing from the candles is flagged as **Latest day**) and no extra pre-open candle on intraday charts (reported 3 Nov, NIFTY 50 at 09:14).
 - [x] **v0.30.1** (2 Nov): futures and options charts show the contract itself: every history request asks Fyers for continuous data off (cont_flag=0; Fyers' API gives the continuous series otherwise, so GOLDPETAL NOV's 30 Oct was the expiring OCT contract); saved futures / options candles reloaded once; v0.20.7's "Fyers rewrote the day" corrected.

@@ -1,5 +1,60 @@
 # Changelog
 
+## v0.31.0 — 5 Nov 2026 — A second server for a friend, on any Linux server
+
+Added
+- **One script sets up a new server** (asked 5 Nov, "Option B"), on any Linux server with systemd: Ubuntu / Debian (apt)
+  or Rocky / Alma / RHEL / Fedora / Oracle Linux / Amazon Linux (dnf), at any provider or at home.
+  `server/startup.sh` goes into the provider's start-up box (DigitalOcean's Initialization scripts, AWS user data,
+  Hetzner cloud config, ...) or runs over SSH (`sudo bash startup.sh owner/name [branch] [domain]`).
+  - **Installs:** packages, Python 3.10+ (a newer one added where the system's is older), Caddy (its own repo, the
+    distribution's, or the official download), the firewall (ufw, firewalld, or Oracle Cloud's iptables rules; the SSH
+    port in use stays open), swap on small servers, IST.
+  - **Waits for GitHub:** makes the read-only deploy key, checks every 30 s whether GitHub accepts it, then clones and
+    runs `install.sh` by itself.
+  - **`sudo fyers-status`** (shown when root logs in; `--wait` to watch) says where it is: the key to add with the link
+    to the repo's Deploy keys page, then the address and setup code, and the IP to whitelist at Fyers.
+- **Any repo:** the owner's (a second deploy key on it), a fork, or the friend's own copy, and an optional branch to follow
+  (e.g. `stable`, so the owner chooses which releases reach that server). Steps for each: `docs/New_Server_Guide.md`.
+- **Each server's own settings** in `/etc/fyers/server.conf` (not in Git): address, outgoing IP, branch, repo, Python.
+  - **Missing values are worked out:** the address is kept from the Caddyfile in use (the owner's server keeps
+    `68-183-245-178.sslip.io`), else a DigitalOcean reserved IP, else the public IP as the internet sees it, as
+    `<ip>.sslip.io`. The outgoing IP is the public IP as the internet sees it.
+  - **The file is read, never run:** only known keys and safe values.
+
+Changed
+- **`install.sh` no longer falls back to the owner's address.** Before, every update on another server would have pointed
+  its HTTPS at `68-183-245-178.sslip.io`.
+- **The Turn on LIVE dialog names this server's own IP to whitelist** (from `FYERS_OUT_IP`), no longer the owner's
+  134.209.159.171 on every server. If the IP isn't known, it says how to find it.
+- **`update.sh` follows `FYERS_BRANCH` when set.** A branch missing on GitHub is reported and nothing is taken (before, a
+  wrong branch name would still have run `install.sh`).
+- **`install.sh` on RHEL-family systems:** picks a Python 3.10+ for the venv, labels the venv's programs for SELinux, and
+  starts Caddy if it isn't running.
+
+Fixed
+- Found in testing this release: on a fresh server the Caddy package's default Caddyfile (no address in it) would have
+  stopped `install.sh` silently under `set -euo pipefail`.
+
+Tests
+- `tests/server_conf_test.sh` (new, 16 checks, safe anywhere): each server's settings against a fake DigitalOcean metadata
+  service and a fake "what's my IP":
+  - the owner's server keeps its address;
+  - a DigitalOcean reserved IP; any other provider; bad and private lookups skipped;
+  - own domain; what the first-boot script writes is filled in;
+  - commands in the file never run; a bad branch refused; Windows line endings;
+  - all under `set -euo pipefail`, as `install.sh` runs.
+- `tests/server_flow.sh` (new, 25 checks, a throwaway container only): the scripts `startup.sh` writes and `update.sh`,
+  against a local repo standing in for GitHub:
+  - waiting for the key (the key and the link shown), cloning as `helper`, install, the setup code and IP shown;
+  - updates on main; following `stable` and its move; a missing branch takes nothing; a new server cloning `stable`;
+  - a failed install shown and retried.
+- `tests/live_flow.js`: the dialog names the server's IP (`FYERS_OUT_IP` set) or gives the general wording (not set),
+  never another server's IP. 24 checks, run both ways.
+- By hand in an Ubuntu 24.04 container: the real `startup.sh`, with only systemd, the firewall and the Caddy download
+  stood in, then the real `install.sh` (settings written, Caddyfile with the address, services, venv with
+  requirements.txt).
+
 ## v0.30.3 — 3 Nov 2026 — Indicator buttons always in reach
 
 Fixed

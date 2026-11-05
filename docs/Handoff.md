@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 3 Nov 2026, version **0.30.3**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 5 Nov 2026, version **0.31.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -92,6 +92,49 @@ the daytime. (Roadmap follow-up.)
 automatic pictures off itself (other suites turn them on).
 `indicator_settings_flow.js`'s "at the start of a contract's history it stops asking" failed once in 2 runs on 1 Nov
 (v0.22.0; passed on re-run, 37/37). Same advice.
+
+## Servers: the owner's and new ones (v0.31.0, roadmap 14)
+
+- **Each server's own settings:** `/etc/fyers/server.conf` (not in Git): `FYERS_HOST`, `FYERS_OUT_IP`, `FYERS_BRANCH`,
+  `FYERS_REPO`, `FYERS_PYTHON`.
+  - **`server/serverconf.sh`** (sourced by install.sh and update.sh) reads the file as data, never sourced: known keys,
+    validated values. `conf_resolve` fills gaps in this order: environment > file > Caddyfile's address > DigitalOcean
+    reserved IP (metadata) > public IP (`FYERS_IPLOOKUP`: ipify, ifconfig.me, icanhazip; then the route's source
+    address if public) as `<ip>.sslip.io`. The outgoing IP is the public IP lookup.
+  - **Strict shell:** must stay safe under `set -euo pipefail` (a failing `grep` in a `$(...)` once stopped install.sh
+    silently).
+  - **`install.sh`** writes the file (`conf_write`) and uses `C_HOST` for the Caddyfile. It has no fallback address any
+    more.
+  - **The helper** gets the values through `EnvironmentFile=-/etc/fyers/server.conf` in `fyers-helper.service`.
+    `/api/state` gives `server.out_ip` (logged in only), which `web/live.js`'s Turn on LIVE dialog shows; without it,
+    general wording.
+- **`server/update.sh`:** follows `origin/$FYERS_BRANCH` when set (`rev-parse --verify`; a missing branch takes nothing),
+  else `origin/HEAD`.
+- **`server/startup.sh`:** a new server, any Linux with systemd, apt or dnf. User data or `sudo bash startup.sh
+  owner/name [branch] [host]`.
+  - **Installs:** packages, a Python 3.10+, Caddy (cloudsmith repo / distro / copr / GitHub download), the firewall
+    (ufw with the live SSH ports, firewalld, or Oracle's netfilter-persistent rules), swap if under 2 GB and none, IST,
+    the `helper` user and its deploy key.
+  - **Then:** writes `/etc/fyers/server.conf` (repo, branch, host, python) and three things of its own (heredocs inside
+    startup.sh, so they exist before the repo can be cloned):
+    - `/usr/local/sbin/fyers-firstinstall` + `fyers-firstinstall.timer` (every 30 s: `git ls-remote` with the key; once
+      accepted, clone (as helper, `-b` the branch) and `install.sh`, then the timer switches itself off; a failed
+      install is retried);
+    - `/usr/local/bin/fyers-status` (states in `/var/lib/fyers-setup/state`: booting, bootfailed, waiting, installing,
+      failed, done; `--wait` redraws only when the step changes);
+    - `/etc/profile.d/zz-fyers-status.sh` (root sees the status at login; sudo users a one-line hint).
+  - **By hand:** a run over SSH ends in `fyers-status --wait`.
+- **The owner's server:** unchanged by startup.sh (it only runs on new servers). Its first update to v0.31.0 wrote its
+  server.conf (address kept from the Caddyfile; outgoing IP looked up, expected 134.209.159.171).
+- **Tests:**
+  - `tests/server_conf_test.sh` (safe anywhere).
+  - `tests/server_flow.sh` (a throwaway container only: it creates the helper user).
+  - `live_flow.js` with and without `FYERS_OUT_IP`.
+  - Not tested: a real boot at a provider (cloud-init, real systemd, Caddy's certificate, firewalld / SELinux on a
+    RHEL-family server). The friend's first boot is the first real run (roadmap 14's open item).
+- **User-facing steps:** `docs/New_Server_Guide.md`: the 3 ways to get the code (the owner's repo with a second deploy
+  key, a fork + Sync fork, or an own copy filled with `tools/github_upload.html`), providers' start-up boxes and
+  firewalls, `stable` for the owner, backups, troubleshooting.
 
 ## Indicator read-outs (v0.30.3)
 
@@ -500,6 +543,8 @@ indicator option to add (not built).
 
 ## Next job
 
+0. Roadmap 14 (v0.31.0): the friend's first real server set-up with `docs/New_Server_Guide.md`. Fix whatever it shows.
+   On the owner's server, after the update: `cat /etc/fyers/server.conf` should show his address and 134.209.159.171.
 1. The owner's first real trade (Monday at the earliest): whitelist 134.209.159.171 (order permission), turn on
    Live, 1 lot on MCX. Fix whatever that shows.
 2. Compare the app's charges with what Fyers deducted (roadmap item 1, last part).
