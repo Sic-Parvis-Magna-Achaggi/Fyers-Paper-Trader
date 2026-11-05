@@ -169,11 +169,16 @@ def _urt(request: Request):
     return u, rt.get(u["uid"])
 
 
-def _eng(request: Request, b: dict | None = None):
-    """The paper account this request is about: the X-Acct header (the page's account switcher)."""
+def _eng(request: Request, b: dict | None = None, write: bool = False):
+    """The account this request is about: the X-Acct header (the page's account switcher, or the Live account on the Live
+    side). Changing anything on the Live account needs this login on the Live side (the switch at the top left); reading
+    it doesn't, and the kill switch never does."""
     u, r = _urt(request)
     aid = request.headers.get("x-acct") or (b or {}).get("acct") or request.query_params.get("acct")
-    return r.engine(aid)
+    e = r.engine(aid)
+    if write and getattr(e, "mode", "paper") == "live" and users.session_side(_tok(request)) != "live":
+        raise HTTPException(403, "this page is on Paper - switch to Live (top left) to trade on your Fyers account")
+    return e
 
 
 def _admin(request: Request) -> dict:
@@ -244,6 +249,9 @@ def state(request: Request):
         out["feed"] = r.feed.status()
         out["accounts"] = r.account_list()
         out["server"] = {"out_ip": _out_ip()}
+        out["side"] = u.get("side", "paper")
+        lr = r.live_row() if u.get("role") == "admin" else None
+        out["live"] = {"id": rt.LIVE_ID, "name": lr.get("name"), "client_id": lr.get("client_id")} if lr else None
     return out
 
 
@@ -508,13 +516,30 @@ async def accounts_update(request: Request):
 
 @app.post("/api/accounts/mode")
 async def accounts_mode(request: Request):
-    """Paper <-> Live. Live: the admin only, Fyers logged in today, the Fyers client ID typed to confirm, and a fresh
-    2FA code. The account must be flat; its trades so far are archived and it starts a fresh ledger."""
+    """Before v0.33.0: a paper account switched to Live. Paper accounts have no Live option any more (roadmap 16); the
+    route stays so an old page gets a clear answer."""
+    _same_origin(request)
+    u, r = _urt(request)
+    try:
+        r.set_mode("", "live")
+    except Refused as e:
+        return _err(e)
+    return _err("no change")
+
+
+@app.post("/api/side")
+async def side_switch(request: Request):
+    """The Paper / Live switch at the top left (roadmap 16, v0.33.0). Live: the admin only, Fyers logged in today, the
+    Fyers client ID typed to confirm, and a fresh 2FA code; the Live account (the Fyers account itself) is made the first
+    time. Back to Paper: one click. Per login (each browser / phone confirms for itself). It only decides where this
+    login's new orders go: the server manages Live trades whichever side the page is on."""
     _same_origin(request)
     u, r = _urt(request)
     b = await _body(request)
-    mode = str(b.get("mode") or "")
-    if mode == "live":
+    side = str(b.get("side") or "")
+    if side not in ("paper", "live"):
+        return _err("side: paper or live")
+    if side == "live":
         if u["role"] != "admin":
             return _err("Live trading is for the admin only (SEBI / Fyers static-IP rules)", 403)
         st = await asyncio.get_running_loop().run_in_executor(None, r.link.status)
@@ -523,23 +548,43 @@ async def accounts_mode(request: Request):
         if str(b.get("confirm") or "").strip().upper() != str(st["client_id"]).upper():
             return _err(f"type your Fyers client ID ({st['client_id']}) exactly to confirm")
         _stepped(request)
+        try:
+            r.ensure_live(st["client_id"])
+        except Refused as e:
+            return _err(e)
+        e = r.live_engine()
+        if e is not None and not e._F():                   # its real balance before the page shows it
+            try:
+                raw = await asyncio.get_running_loop().run_in_executor(None, e.broker.funds)
+                e._apply_funds(raw)
+                e.save()
+            except Exception as ex:
+                log.warning("Fyers funds on switching to Live: %s", ex)
     try:
-        cap = float(b.get("capital") or 0) or None
-        a = r.set_mode(str(b.get("id") or ""), mode, cap)
-    except Refused as e:
-        return _err(e)
-    except (TypeError, ValueError):
-        return _err("enter the capital in rupees")
-    users.audit(u["uid"], f"LIVE {'ON' if mode == 'live' else 'off'}", a["name"], _ip(request))
-    log.warning("Account %s (%s) is now %s", a["name"], u["username"], mode.upper())
-    return {"ok": True, "account": a, "accounts": r.account_list()}
+        users.set_side(_tok(request), side)
+    except ValueError as e:
+        return _err(e, 401)
+    users.audit(u["uid"], f"page side: {side.upper()}", "", _ip(request))
+    if side == "live":
+        log.warning("%s switched a page to LIVE", u["username"])
+    sess = (users.check(_tok(request)) or {}).get("session")
+    for c in list(r.feed.clients):                     # this login's other pages (tabs, grid charts) follow
+        if sess and getattr(c, "sess", None) == sess:
+            r.feed._offer(c, {"side": side})
+    lr = r.live_row()
+    return {"ok": True, "side": side, "accounts": r.account_list(),
+            "live": {"id": rt.LIVE_ID, "name": lr.get("name"), "client_id": lr.get("client_id")} if lr else None}
 
 
 # ------------------------------------------------------------------ live accounts (real orders at Fyers)
-def _live(request: Request, b: dict | None = None):
-    e = _eng(request, b)
-    if getattr(e, "mode", "paper") != "live":
-        raise HTTPException(400, "this is a paper account")
+def _live(request: Request, b: dict | None = None, write: bool = False):
+    """The Live account (the admin's Fyers account), whichever account the page shows."""
+    u, r = _urt(request)
+    e = r.live_engine()
+    if e is None:
+        raise HTTPException(400, "there's no Live account (switch to Live at the top left first)")
+    if write and users.session_side(_tok(request)) != "live":
+        raise HTTPException(403, "this page is on Paper - switch to Live (top left) first")
     return e
 
 
@@ -547,11 +592,14 @@ def _live(request: Request, b: dict | None = None):
 async def live_status(request: Request, funds: int = 0):
     e = _live(request)
     out = {"ok": True, "live": e.live_status()}
-    if funds:
+    if funds:                                          # read Fyers' funds now (they're also read every minute)
         try:
-            out["funds"] = await asyncio.get_running_loop().run_in_executor(None, e.broker.funds)
+            raw = await asyncio.get_running_loop().run_in_executor(None, e.broker.funds)
+            e._apply_funds(raw)
+            e.save()
         except Exception as ex:
             out["funds_error"] = str(ex)
+        out["funds"] = e.funds_view()
     return out
 
 
@@ -572,7 +620,7 @@ async def live_resume(request: Request):
     _same_origin(request)
     u = _user(request)
     b = await _body(request)
-    e = _live(request, b)
+    e = _live(request, b, write=True)
     _stepped(request)                     # turning trading back on after the kill switch needs a fresh 2FA code
     e.resume()
     users.audit(u["uid"], "live trading resumed", e.name, _ip(request))
@@ -935,7 +983,7 @@ def _ok(engine, extra=None):
 async def _paper(request: Request, fn):
     _same_origin(request)
     b = await _body(request)
-    engine = _eng(request, b)
+    engine = _eng(request, b, write=True)
     try:
         res = fn(engine, b)
     except Refused as e:
@@ -978,7 +1026,7 @@ async def paper_preview(request: Request):
 async def paper_place(request: Request):
     _same_origin(request)
     b = await _body(request)
-    engine = _eng(request, b)
+    engine = _eng(request, b, write=True)
     await _prefetch_margin(engine, b)
     u, r = _urt(request)
     aid = next((k for k, v in r.engines.items() if v is engine), "")
@@ -1096,7 +1144,7 @@ async def paper_csv(request: Request):
     w = csv.writer(f)
     cols = ["id", "symbol", "side", "product", "lots", "qty", "avg_entry", "exit", "opened_ist", "closed_ist", "reason",
             "first_sl", "sl", "tp", "gross", "brokerage", "exchange", "clearing", "ctt_stt", "stamp", "sebi", "ipft",
-            "gst", "dp", "charges_total", "net", "init_risk", "r", "best", "worst", "balance_after"]
+            "gst", "dp", "charges_total", "net", "init_risk", "r", "best", "worst", "balance_after", "placed_in"]
     w.writerow(cols)
     fmt = lambda ts: time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
     for h in engine.history:
@@ -1105,7 +1153,7 @@ async def paper_csv(request: Request):
                     h["exit"], fmt(h["opened"]), fmt(h["closed"]), h["reason"], h["first_sl"], h["sl"], h["tp"],
                     h["gross"], c["brokerage"], c["exchange"], c["clearing"], c["tax"], c["stamp"], c["sebi"],
                     c["ipft"], c["gst"], c.get("dp", 0), c["total"], h["net"], h["init_risk"], h["r"], h["best"], h["worst"],
-                    h["balance_after"]])
+                    h["balance_after"], "Fyers" if h.get("src") == "fyers" else "app"])
     from fastapi.responses import Response
     name = "".join(ch for ch in (engine.name or "paper") if ch.isalnum() or ch in "-_") or "paper"
     return Response(f.getvalue(), media_type="text/csv",
@@ -1679,6 +1727,7 @@ async def ws(socket: WebSocket):
     r = rt.get(u["uid"])
     feed = r.feed
     client = feed.add()
+    client.sess = u.get("session")                 # (the Paper / Live switch is per login: its pages follow it)
 
     async def reader():
         while True:

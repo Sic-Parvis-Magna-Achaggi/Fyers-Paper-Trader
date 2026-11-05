@@ -20,16 +20,22 @@ from . import rt, store, symbols, telegram
 log = logging.getLogger("alerts")
 HB = "watch.json"
 WD = "watchdog.json"
-SKIP = ("stream", "halted")
+SKIP = ("stream", "halted", "nosl_hold")      # (delivery holdings without a stop: shown on the page, no Telegram message)
 _state: dict = {}                  # (uid, account id, key) -> {"since", "sent", "text", "kind"}
 _now = time.time                   # tests swap these
 _ist = lambda ts=None: dt.datetime.fromtimestamp(ts if ts is not None else _now(), telegram.IST)
 
 
 # ---------------------------------------------------------------- the heartbeat
+def watched(e) -> list:
+    """The positions the watchdog looks after: every live trade, except delivery holdings with no stop (shares simply held
+    in the demat, v0.33.0) - they'd make every restart look like an outage, and the outside heartbeat never pause."""
+    return [p for p in e.positions if not (p.get("holding") and p.get("sl") is None and p.get("floor") is None)]
+
+
 def acct_view(e) -> dict:
     pos = []
-    for p in e.positions:
+    for p in watched(e):
         lot = (symbols.get(p["s"]) or {}).get("lot") or 1
         pos.append({"s": p["s"], "short": e.short(p["s"]), "side": p["side"], "lots": p["qty"] // lot, "qty": p["qty"],
                     "avg": p.get("avg"), "sl": p.get("sl"), "tp": p.get("tp"), "stop_px": p.get("stop_px"),
@@ -41,7 +47,7 @@ def acct_view(e) -> dict:
 def live_now() -> dict:
     out = {}
     for urt in list(rt.RT.values()):
-        accts = [acct_view(e) for e in urt.live_engines() if e.positions or e.orders]
+        accts = [acct_view(e) for e in urt.live_engines() if watched(e) or e.orders]
         if accts:
             out[urt.uid] = {"name": urt.label, "live": accts}
     return out
@@ -73,7 +79,7 @@ def problems(urt, e) -> list:
             continue                                   # goes in by itself when it trades (no login: the login alert says it)
         out.append((key, text, "warn"))
     A = telegram.load(urt.uid)["alerts"]
-    for p in e.positions:
+    for p in watched(e):
         s = p["s"]
         last = urt.feed.last_at.get(s)
         if not last or not telegram.market_open(s, t) or _ist(last).date() != t.date():
@@ -96,7 +102,7 @@ def check(loop=None) -> None:
             continue
         A = s["alerts"]
         for aid, e in list(urt.engines.items()):
-            if getattr(e, "mode", "paper") != "live" or not (e.positions or e.orders):
+            if getattr(e, "mode", "paper") != "live" or not (watched(e) or e.orders):
                 continue
             for key, text, kind in problems(urt, e):
                 if not A.get(kind):

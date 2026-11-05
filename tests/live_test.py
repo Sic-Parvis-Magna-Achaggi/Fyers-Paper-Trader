@@ -69,6 +69,8 @@ def make(folder, fb, link=None):
     e.rules.update(size=1000000, risk_cap_pct=0, max_margin_pct=0, daily_pct=0, max_pct=0, max_open_risk_pct=0,
                    live_chase_sec=0.4, sq_before_min=5)
     e.acct.update(start=1000000, peak=1000000)
+    fb.fund["eq"]["start"] = 1000000.0                   # v0.33.0: the Live account's balance is Fyers' own funds
+    e._apply_funds(fb.funds())
     loop = asyncio.get_running_loop()
     fb.emit = lambda row: loop.call_soon_threadsafe(e.on_update, norm_order(row))
     e.start(loop)

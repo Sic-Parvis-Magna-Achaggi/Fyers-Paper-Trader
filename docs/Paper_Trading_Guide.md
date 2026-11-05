@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.32.0)
+# Paper and live trading: how it works (v0.33.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -7,7 +7,7 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
 - **Login** is your username and password, then a 6-digit code from your authenticator app (Google Authenticator, Microsoft Authenticator, Authy or similar). Lost your phone? Type one of your recovery codes instead of the app code; each works once.
 - **First login** (and the first login after this update, as user **admin** with your old page password): you scan a QR code into the app, type the code it shows, and save the 10 recovery codes shown once.
 - **Settings → Security:** change your name or password, get new recovery codes, move 2FA to a new phone, see every device you're logged in on (log any out, or everywhere else), and recent activity.
-- **A fresh code is asked again** (valid 5 minutes) for sensitive actions: adding or changing users, new recovery codes, moving 2FA, editing charge rates, turning an account Live, Resume after the kill switch.
+- **A fresh code is asked again** (valid 5 minutes) for sensitive actions: adding or changing users, new recovery codes, moving 2FA, editing charge rates, switching a page to Live, Resume after the kill switch.
 - **Lockout:** 5 wrong passwords or codes lock that user for 15 minutes. Sessions end after 48 hours without use and after 7 days at most.
 - **Users (admin only, Settings → Users):** add a user with a temporary password. They choose their own password and set up 2FA at first login, then enter their own Fyers app in their Settings for prices. You can disable / enable a user, reset their 2FA (lost phone) or give them a new temporary password. Other users are paper-only; live trading is the admin's only.
 - **Watchlists:** several named lists. At the top of the Watchlist tab (phone: Quotes › Watchlist) pick a list; **＋** makes a new one; **⋯** renames, moves up / down or deletes it (tap Delete twice; the last list can't be deleted). Up to 10 lists of 30 contracts. **+** in Find adds to the list on screen. **Changing a contract's lists:** ⋯ on its row (or right-click the row; on a phone, swipe the row left for **Lists · Remove**) opens a picker with every list: a tick shows each list it's in, and tapping a list adds it there or takes it out (so it can sit in several lists); **Move** puts it in that list and takes it out of this one in one tap; **Remove from …** takes it off the list on screen. On a phone a tap on a swiped-open row just closes it. Only the list on screen streams prices (with your chart and your trades). Saved on the server, so every device has the same lists.
@@ -16,7 +16,7 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
 
 ## Paper accounts
 
-- **The switcher** at the top shows the account you're looking at and its balance. Pick another to switch; the whole app (chart lines, ticket, Trades, History, Account, Log) follows it.
+- **The switcher** at the top shows the account you're looking at and its balance. Pick another to switch; the whole app (chart lines, ticket, Trades, History, Account, Log) follows it. It lists your paper accounts; Live isn't one of them (below).
 - **+ New account…** (in the switcher, or the Account page): a name, starting capital, and default rules or a copy of another account's rules and trailing.
 - Each account has its own balance, rules, trailing defaults, positions, orders and history. All of them keep running on the server (stops, targets, trailing, square-off), whichever one you're looking at.
 - **Rename, archive, restore** on the Account page. Archiving needs the account flat (no positions or orders) and keeps its trades. You always keep at least one account.
@@ -24,13 +24,38 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
 
 ## Live trading (the admin only)
 
-An account can be **Paper** or **Live**. A Live account uses the same ticket, chart tool, rules, guards, BE, trailing and targets as paper, but its orders go to Fyers on your own login, from the server's own IP (the Turn on LIVE dialog shows it; on the owner's server, **134.209.159.171**).
+**Live is your Fyers account itself, not a paper account** (v0.33.0). Paper accounts are simulations with their own made-up capital and never touch Fyers; they have no Live option. There is one **Live account**: your Fyers account, named by its client ID (e.g. *XT0001*). It uses the same ticket, chart tool, rules, guards, BE, trailing and targets as paper, but every order is real, sent to Fyers on your own login from the server's own IP (the switch's dialog shows it; on the owner's server, **134.209.159.171**).
 
 **Before the first live trade:** whitelist the server's own IP in your Fyers API app and give the app order permission. On the owner's server that's **134.209.159.171** (not 68.183.245.178); on another server, the IP the dialog and `sudo fyers-status` show. Then test with **1 lot on MCX**.
 
-**Turning it on:** Account page → *Your accounts* → **Turn on LIVE** on an account with no positions or orders. Type your Fyers client ID (shown in the dialog) and a fresh 2FA code. Its paper trades are archived on the server and it starts a fresh ledger at the capital you type (that's what the % rules use), so paper results and real money never mix. One Live account per Fyers login. **Back to Paper** works the same way (flat first). Both are in the security log.
+**The PAPER / LIVE switch** at the top left, next to "Trade Manager" (phone: the first button in the top bar). **PAPER is green, LIVE is red.** Only the admin sees it.
 
-**You'll see:** a red **LIVE** badge and a **KILL** button in the top bar, a red line under the top bar, **LIVE** on the PLACE button, "● LIVE" in the account switcher, and under every position where its stop is at Fyers.
+- **To Live:** tap LIVE, type your Fyers client ID (shown in the dialog) and a fresh 2FA code. You need today's Fyers login. The first time, this makes the Live account. The page then shows your Fyers account and every order you place is real.
+- **Back to Paper:** one click. The account switcher lists your paper accounts again and BUY / SELL / PLACE are paper.
+- **Each browser or phone switches for itself** (the switch belongs to that login). The server refuses any change to the Live account from a page on Paper (the kill switch always works).
+- **The switch only decides where this page's new orders go.** The server keeps managing your live trades all the time, whichever side any page is on: stops, trailing, BE, targets, intraday square-off, the expiry exit, Telegram alerts.
+- Both directions are in the security log.
+
+**You'll see on Live:** the switch's red LIVE, a **KILL** button and a red line under the top bar, **LIVE** on the PLACE button, "● XT0001 · ₹balance" in the account switcher (locked), and under every position where its stop is at Fyers.
+
+**Money: Fyers' own funds**
+
+- **Balance, margin in use and free funds come from Fyers** (its funds, read every minute and a few seconds after every fill; *Read funds now* on the Account page). Balance = Fyers' balance at the start of its day + money moved in / out today + today's closed trades **net of every charge** (the app's figures, like the rest of the app; Fyers deducts its real charges overnight, so the next day's start corrects any difference). Equity adds the open trades' net P&L.
+- **Both Fyers ledgers** (capital and commodity) count. Free margin for an MCX order is the commodity ledger's available balance (the capital ledger's if Fyers keeps one ledger for both); for NSE / BSE the capital ledger's.
+- **The % rules** (daily loss, max loss, buffer, risk %, risk cap, margin use, open risk) count from these real figures. **The daily loss counts from today's start as Fyers reports it** (until today's funds are read after the daily login, the app's own estimate of last night's close). **No typed capital:** the account size for the % rules is your Fyers balance at the start of the day you first switched to Live (plus money moved in that day).
+- **Money moved in or out is never a profit or a loss:** the account size, today's start and the highest balance move by the amount, so a deposit doesn't loosen your daily limit and a withdrawal doesn't trip it. (LiveTrader 1.18 keeps a prop account's size fixed on a payout; here it moves, so money taken out of your own account isn't counted as a loss.)
+- Until Fyers' funds have been read once, new live orders wait ("reading your Fyers funds first"), so nothing is ever sized from a made-up balance.
+
+**Trades placed straight in Fyers** (the Fyers app or web, another platform) are shown and managed like the app's own, from Fyers' order updates (and its order and position books as the fallback):
+
+- **Opened, added to, part closed, closed** in Fyers: the position here follows, at Fyers' prices, each marked **From Fyers** (positions), **Placed in Fyers** (orders) and **Fyers** (History, CSV *placed_in*, the journal's CSV *Placed in*). A change seen only in Fyers' position book (its order update missed) is booked after two readings 3 s apart, with nothing of the app's in flight on that contract, at the price it implies (marked as an estimate).
+- **Managed like the app's:** SL / TP lines, BE, BE-T, TRAIL, ✕, Close all, the kill switch, the guards, intraday square-off, the expiry exit, Telegram alerts, net ₹ / R after all charges, the journal.
+- **A stop placed in Fyers is adopted** as that trade's stop: trailing and BE move that same order, keeping its own type (an SL-M you placed stays SL-M), so there's never a second exit order at Fyers. Its first stop sets 1R. If you cancel it in Fyers, the app puts its own stop back.
+- **A pending order placed in Fyers** shows on the chart and in Orders: move it (its type kept; a stop-limit keeps its trigger-to-limit gap) or cancel it here. An SL / TP you give it here goes on the trade when it fills.
+- **A trade placed in Fyers without a stop** is flagged red: **NO STOP AT FYERS**, on the position, the Trades page, a **NO STOP** button on its entry line, the phone's sheet and the warnings under the top bar. Tap **Place my stop** to put your default stop at Fyers: the stop distance remembered for that contract (the tool's last one), else the tool's default (0.3% of the price, at least 10 ticks), from the entry, or from the price if the entry's is already passed. Nothing is placed until you tap. BE, BE-T and TRAIL work once it has a stop (its first stop sets 1R).
+- **Two exit orders in Fyers** (you placed a limit exit while the trade's stop is there): a warning, as both could fill and leave you holding the opposite position. Cancel one.
+- **Delivery holdings** (shares in your demat from earlier days) are Live trades too, at their cost price: P&L after all charges (with the DP charge on the sell), SL / TP, BE, BE-T, TRAIL, ✕ to sell, the no-stop flag and Place my stop. **They're never squared off**, and **Close all and the kill switch keep them** (sell one with its own ✕). Selling shares through the API needs your Fyers account's authorisation for selling from the demat (CDSL DDPI, or the daily eDIS / TPIN); without it Fyers refuses the stop or sell and its reason shows on the holding. Holdings without a stop are one line under the top bar (no Telegram message each).
+- **Fyers logged in as another client** than the Live account's: nothing new is placed, with a warning.
 
 **How a live trade runs**
 
@@ -58,9 +83,9 @@ An account can be **Paper** or **Live**. A Live account uses the same ticket, ch
 - **"CHECK FYERS" warnings** appear when only you can sort something out in Fyers (for example an app order that filled after the app had stopped tracking it). They stay until you press **Resync with Fyers**.
 - **Delivery (CNC) shares:** a stop that sells delivery shares needs your Fyers authorisation to sell from your demat (TPIN / DDPI), as for any sell of shares you hold.
 
-**Kill switch** (KILL in the top bar, or the Account page): cancels every order and closes every position at Fyers on your login, the app's trades **and any others**, then pauses new entries until you press **Resume** on the Account page (Resume asks for a fresh 2FA code). Stops keep working meanwhile, and an entry that fills during it is closed too. KILL asks once to confirm (no 2FA code, so it's quick).
+**Kill switch** (KILL in the top bar, or the Account page): cancels every order and closes every position at Fyers on your login, the app's trades **and any others**, then pauses new entries until you press **Resume** on the Account page (Resume asks for a fresh 2FA code). Stops keep working meanwhile; an entry that fills during it is closed too, and an order placed in Fyers during it is cancelled. Delivery holdings from earlier days are kept (with their stops). KILL asks once to confirm (no 2FA code, so it's quick).
 
-**Account page (Live):** whether you're logged in to Fyers, whether order updates are connected (if not, the app reads the order book every 5 seconds), your Fyers funds, **Resync with Fyers** (re-reads Fyers and puts every stop where it should be), Resume and the kill switch.
+**Account page (Live):** your Fyers account and its client ID; whether you're logged in to Fyers, whether order updates are connected (if not, the app reads the order book every 5 seconds); Fyers' funds (start of the day, money in / out today, today's trades net, balance, equity, margin in use, available, the account size for the % rules, each ledger); **Resync with Fyers** (re-reads Fyers and puts every stop where it should be), **Read funds now**, Resume and the kill switch. No reset (its trades are real), and the account size in the rules comes from Fyers.
 
 **Telegram alerts** (Settings › Telegram alerts, the admin): a message on your phone when the server stops looking after a live trade. Only while a Live account has a position or an order at Fyers.
 
@@ -237,7 +262,7 @@ Phones get their own layout, like MT5's app (a desktop browser never does). **Mo
 - **History tab:** Today, 7 days, 30 days or All, with net P&L, win rate, profit factor, average R and charges. Tap a trade for every charge. The full History page (equity curve, filters) is linked at the bottom.
 - **More tab:** Journal; Account, rules and charges; switch account; trades table; order book; log; settings (Fyers app, security, users, reset); theme; desktop layout; log out.
 - **Full screen:** ⛶ in the chart's toolbar, or turn the phone sideways on the Chart tab. Only the chart and the SELL / BUY bar stay. ✕ (or turning it back upright) returns.
-- **Live account:** a red LIVE badge and **KILL** in the top bar, live warnings under it, LIVE on the PLACE button (and on the bubble's), and the stop at Fyers on each position.
+- **Live (the admin):** the first button in the top bar is the PAPER / LIVE switch (green / red; tap to switch, Live asks for the client ID and a 2FA code). On Live: **KILL** in the top bar, live warnings under it, LIVE on the PLACE button (and on the bubble's), the stop at Fyers on each position, and **NO STOP · Place my stop** in the sheet of a trade placed in Fyers without one.
 
 ## The long / short tool on the chart (like the MT5 EA)
 
@@ -587,8 +612,8 @@ When BE-T has already moved the stop to break-even, a Trail SL of N R behind the
 
 ## Records
 
-- **History:** every closed trade, with the exit reason (tp, sl, be, trail sl, manual, square-off, expiry; live also kill, and "closed at Fyers" for a position closed outside the app). Tap a trade for its full charge breakdown, first stop, risk, and best / worst price.
-- **Download CSV:** one row per trade, with every charge in its own column.
+- **History:** every closed trade, with the exit reason (tp, sl, be, trail sl, manual, square-off, expiry; live also kill, "closed in Fyers" for a close made in Fyers, and "closed at Fyers" for a position closed while the app was away). Trades placed in Fyers carry a **Fyers** tag. Tap a trade for its full charge breakdown, first stop, risk, and best / worst price.
+- **Download CSV:** one row per trade, with every charge in its own column, and *placed_in* (app / Fyers).
 - Trades are stored on the server in `/home/helper/data/u/<user>/a/<account>/paper_trades.json`. **Reset** archives them and starts that account again.
 
 ## Not yet

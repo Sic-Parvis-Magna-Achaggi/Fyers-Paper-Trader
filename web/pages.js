@@ -269,7 +269,7 @@ function pgHistRender(){
       <th class="r">Held</th><th class="r">Gross</th><th class="r">Charges</th><th class="r">Net</th><th class="r">R</th><th class="r">Balance</th></tr></thead><tbody>`
     + list.map((h, i) => { const tk = tkOf(h.s);
       return `<tr class="hr" data-i="${i}"><td class="mono sm">${istTime(h.closed)}</td><td class="mono">${esc(short(h.s))}</td><td><b class="${h.side > 0 ? "up" : "down"}">${h.side > 0 ? "L" : "S"}</b></td>
-      <td class="r">${h.lots}</td><td class="r mono">${fmt(h.avg, tk)}</td><td class="r mono">${fmt(h.exit, tk)}</td><td><span class="tag">${esc(h.reason)}</span></td>
+      <td class="r">${h.lots}</td><td class="r mono">${fmt(h.avg, tk)}</td><td class="r mono">${fmt(h.exit, tk)}</td><td><span class="tag">${esc(h.reason)}</span>${h.src === "fyers" ? ' <span class="tag" title="Placed in Fyers (not from this app)">Fyers</span>' : ""}</td>
       <td class="r sm">${durTxt(h.closed - h.opened)}</td><td class="r mono">${rs(h.gross)}</td><td class="r mono">${rs(h.charges.total)}</td><td class="r mono"><b class="${cls(h.net)}">${rs(h.net)}</b></td>
       <td class="r mono">${h.r != null ? `<span class="${cls(h.r)}">${h.r > 0 ? "+" : ""}${h.r}R</span>` : "–"}</td><td class="r mono">${h.balance_after != null ? rs(h.balance_after) : "–"}</td></tr>`; }).join("") + `</tbody>`
     : `<tr><td class="empty">No closed trades in this period.</td></tr>`;
@@ -381,10 +381,10 @@ function pgBookStats(s){
 function pgAccount(){
   const box = pgq("#pg_account"); if(!box || !P.snap) return;
   const a = P.snap.acct, r = P.snap.rules, t = P.snap.trail;
-  const an = ((S.accounts || []).find(x => x.id === ACCT) || {}).name || "Paper account";
+  const an = ((S.accounts || []).find(x => x.id === ACCT) || {}).name || "Paper account", lv = a.kind === "live";
   box.innerHTML = `<div class="pg-head"><h2>${esc(an)}</h2><span class="tag">PAPER</span><span class="sp"></span></div>
     <div class="pg-cards" id="pgAcctCards2"></div>
-    <div class="pg-cards">${[["Started with", rs(a.start)], ["Highest balance", rs(a.peak)], ["Daily floor", a.daily_floor != null ? rs(a.daily_floor) : "off"], ["Max-loss floor", a.max_floor != null ? `${rs(a.max_floor)} <span class="muted">(${esc(r.max_mode)})</span>` : "off"],
+    <div class="pg-cards">${[[lv ? "Account size (from Fyers)" : "Started with", rs(lv ? a.size : a.start)], ["Highest balance", rs(a.peak)], ["Daily floor", a.daily_floor != null ? rs(a.daily_floor) : "off"], ["Max-loss floor", a.max_floor != null ? `${rs(a.max_floor)} <span class="muted">(${esc(r.max_mode)})</span>` : "off"],
       ["Closed trades", a.trades], ["Net, all time", `<span class="${cls(a.net_total)}">${rs(a.net_total)}</span>`], ["Charges, all time", rs(a.charges_total)],
       ["Win rate / PF", `${a.win_rate != null ? a.win_rate + "%" : "–"} / ${a.pf ?? "–"}`]].map(([k, v]) => `<div class="pgc"><span>${k}</span><b>${v}</b></div>`).join("")}</div>
     <div class="pg-card" id="acctMgr"></div>

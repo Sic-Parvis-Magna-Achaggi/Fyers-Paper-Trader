@@ -587,6 +587,17 @@ button.place.live,#tool .tp.live{outline:2px solid var(--down);outline-offset:2p
 .modalwrap .ca{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px;width:100%;max-width:440px}
 .modalwrap .btns button{flex:1}
 .arow .mode-live{color:var(--down);font-weight:600}
+/* the PAPER / LIVE switch at the top left (v0.33.0): Paper green, Live red */
+.sidesw{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;margin-left:-4px;flex:none}
+.sidesw button{border:0;border-radius:0;padding:3px 10px;font-weight:700;font-size:12px;letter-spacing:.05em;background:transparent;color:var(--muted)}
+.sidesw button+button{border-left:1px solid var(--line)}
+.sidesw button[data-s="paper"].on{background:var(--up);color:#fff}
+.sidesw button[data-s="live"].on{background:var(--down);color:#fff}
+.sidesw.live{border-color:var(--down)}
+button.nsl{background:var(--down);border-color:var(--down);color:#fff;font-weight:700}
+.pbar button.nsl{padding:1px 6px;font-size:11px}
+.fyline .nsl{margin-left:6px;padding:1px 8px}
+input.ro{opacity:.75;cursor:not-allowed}
 #codeAsk{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
 #codeAsk.hide{display:none}
 #codeAsk .ca{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px;width:100%;max-width:340px}
@@ -996,6 +1007,7 @@ function connectWS(){
     if(m.journal && typeof jnPush === "function") jnPush();
     if(m.jshot && typeof jsShotReq === "function") jsShotReq(m.jshot);
     if(m.charges && (S.user || {}).role === "admin"){ chargePill(m.charges); toast("Fyers' charges page has changed: review it on the Account page"); }
+    if(m.side && typeof sideFromServer === "function") sideFromServer(m.side);   // this login's Paper / Live switch, from another page
   };
   ws.onclose = ev => {
     ws = null;

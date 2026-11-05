@@ -416,7 +416,25 @@ def check(tok: str):
     out = public(u, s["uid"])
     out["step_up"] = s.get("step_up", 0) > now
     out["session"] = h[:12]
+    out["side"] = "live" if s.get("side") == "live" and u.get("role") == "admin" else "paper"
     return out
+
+
+def set_side(tok: str, side: str) -> None:
+    """The Paper / Live switch at the top left (v0.33.0): which side this login's pages trade on. Kept per session
+    (each browser / phone confirms Live for itself); the app checks the client ID and a fresh 2FA code first."""
+    with _lock:
+        d = _load()
+        s = d["sessions"].get(_h(tok or ""))
+        if not s:
+            raise ValueError("log in again")
+        s["side"] = "live" if side == "live" else "paper"
+        _save(d)
+
+
+def session_side(tok: str) -> str:
+    s = _load()["sessions"].get(_h(tok or ""))
+    return "live" if s and s.get("side") == "live" else "paper"
 
 
 def set_ua(tok: str, ua: str):

@@ -12,7 +12,11 @@ order on the opposite side of the net position). Any moment that happens is reco
 
 Switches for tests: refuse_next (place), fail_modify (modify), unsure_next (place goes through but the answer is lost),
 down (every call times out), refuse_market (market orders refused, like MCX options), mpp_hold (market orders sit
-pending, like Fyers' price protection holding them back)."""
+pending, like Fyers' price protection holding them back).
+
+v0.33.0 (the Live account is the Fyers account): `fund` (Fyers' funds, both ledgers, as the funds API's titles),
+`hold` (demat holdings rows), `edis` (False: a sell from the demat is refused, as without DDPI / eDIS), the position
+book's average prices, and `outside(...)`: an order placed straight in Fyers (no app tag), as the Fyers app would."""
 import itertools
 import threading
 import time
@@ -27,7 +31,7 @@ class FakeBroker:
         self.book = {}                  # id -> Fyers-style row
         self.net = {}                     # (symbol, product) -> net qty
         self.px = {}                      # symbol -> (ltp, bid, ask)
-        self.ids = itertools.count(26110100000001)
+        self.ids = itertools.count(int(time.time() * 1000) * 10)   # unique across runs, as Fyers' ids are (a restarted mock must not reuse an id the app has seen)
         self.lock = threading.RLock()
         self.emit = None                  # callback(row) - the order-update socket
         self.calls = []                   # (time, method, order id)
@@ -39,6 +43,11 @@ class FakeBroker:
         self.refuse_market = False
         self.mpp_hold = False
         self.socket = True                # False: updates are not pushed (the app must read the order book)
+        self.avg = {}                     # (symbol, product) -> average price of the net position
+        self.hold = []                    # holdings rows: symbol, quantity, remainingQuantity, costPrice, holdingType
+        self.edis = True                  # False: CNC sells beyond today's buys are refused (no DDPI / eDIS)
+        self.fund = {"eq": {"start": 100000.0, "transfer": 0.0, "used": 0.0, "realized": 0.0, "collateral": 0.0},
+                     "co": {"start": 0.0, "transfer": 0.0, "used": 0.0, "realized": 0.0, "collateral": 0.0}}
 
     # ------------------------------------------------------------ helpers
     def _emit(self, o):
@@ -60,7 +69,15 @@ class FakeBroker:
         avg = (o["tradedPrice"] * o["filledQty"] + price * left) / o["qty"] if o["filledQty"] else price
         o.update(status=2, filledQty=o["qty"], remainingQuantity=0, tradedPrice=round(avg, 4))
         k = (o["symbol"], o["productType"])
-        self.net[k] = self.net.get(k, 0) + o["side"] * left
+        q0 = self.net.get(k, 0)
+        q1 = q0 + o["side"] * left
+        if q0 == 0 or (q0 > 0) != (q1 > 0) and q1:       # a new position (or flipped): its own price
+            self.avg[k] = price
+        elif abs(q1) > abs(q0):                          # added to: the average moves
+            self.avg[k] = (self.avg.get(k, price) * abs(q0) + price * left) / abs(q1)
+        if q1 == 0:
+            self.avg.pop(k, None)
+        self.net[k] = q1
         self._emit(o)
 
     def _try(self, o):
@@ -126,6 +143,10 @@ class FakeBroker:
                 raise BrokerRefused("SL-M orders are not allowed for this instrument")
             if typ == 2 and self.refuse_market:
                 raise BrokerRefused("Market orders are not allowed for this contract")
+            if body["productType"] == "CNC" and side < 0 and not self.edis:
+                held = sum(int(h.get("quantity") or 0) for h in self.hold if h["symbol"] == sym)
+                if held and self.net.get((sym, "CNC"), 0) <= 0:
+                    raise BrokerRefused("Sell from demat not authorised: complete eDIS / TPIN or set up DDPI")
             ltp = (self.px.get(sym) or (0, 0, 0))[0]
             if typ in (3, 4) and ltp and side * (body["stopPrice"] - ltp) <= 0:
                 raise BrokerRefused("Trigger price should be " + ("above" if side > 0 else "below") + " LTP")
@@ -205,15 +226,35 @@ class FakeBroker:
     def positions(self):
         with self.lock:
             self._gate("positions")
-            return [{"symbol": s, "productType": p, "netQty": q} for (s, p), q in self.net.items() if q]
+            return [{"symbol": s, "productType": p, "netQty": q, "netAvg": round(self.avg.get((s, p), 0), 2),
+                     "buyAvg": round(self.avg.get((s, p), 0), 2) if q > 0 else 0, "sellAvg": round(self.avg.get((s, p), 0), 2) if q < 0 else 0}
+                    for (s, p), q in self.net.items() if q]
 
     def holdings(self):
         with self.lock:
             self._gate("holdings")
-            return []
+            return [dict(h) for h in self.hold]
 
     def funds(self):
-        return {"available": 100000.0, "total": 100000.0, "used": 0.0}
+        """As FyersBroker.funds() returns it (helper.broker.parse_funds of Fyers' rows)."""
+        with self.lock:
+            self._gate("funds")
+            out = {}
+            for led, f in self.fund.items():
+                d = dict(f)
+                d["total"] = round(d["start"] + d["transfer"] + d.get("realized", 0), 2)
+                d["clear"] = d["total"]
+                d["available"] = round(d["total"] - d["used"], 2)
+                d.setdefault("receivables", 0.0)
+                d.setdefault("adhoc", 0.0)
+                out[led] = d
+            return out
+
+    # ------------------------------------------------------------ the Fyers app (orders placed outside the app)
+    def outside(self, sym, qty, side, typ=2, product="INTRADAY", limit=0.0, stop=0.0):
+        """An order placed straight in Fyers (its app, web, another platform): no app tag. Returns its id."""
+        return self.place({"symbol": sym, "qty": qty, "side": side, "type": typ, "productType": product,
+                           "limitPrice": limit, "stopPrice": stop, "orderTag": ""})
 
     # ------------------------------------------------------------ for tests
     def open_orders(self, sym=None):

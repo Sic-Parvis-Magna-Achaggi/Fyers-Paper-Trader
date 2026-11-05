@@ -117,13 +117,14 @@ function mTopBar(){
   const pages = typeof PG !== "undefined" && PG.page !== "chart";
   mq("#mBack").classList.toggle("hide", !pages);
   mq("#mAcct").classList.toggle("hide", pages);
-  const a = (acctList() || []).find(x => x.id === ACCT), sn = P.snap;
+  const a = (typeof acctById === "function" ? acctById(ACCT) : null) || (acctList() || []).find(x => x.id === ACCT), sn = P.snap;
   mq("#mAcct b").textContent = a ? a.name : "Account";
   mq("#mAcct span").textContent = sn ? rs(sn.acct.equity) : "";
   const live = typeof liveOn === "function" && liveOn();
   mq("#mLive").classList.toggle("hide", !live);
   mq("#mKill").classList.toggle("hide", !live);
   document.body.classList.toggle("is-live", live);
+  if(typeof sideRender === "function") sideRender();
   mSymBar();
   mWarnings();
 }
@@ -421,6 +422,7 @@ function mPosSheet(id){
     <div class="mtog"><span>BE-T: stop to BE + costs at</span><input id="mpBeR" inputmode="decimal" value="${tr.be_r ?? 1}"><button id="mpBe" data-t="be_on">${tr.be_on ? "ON" : "off"}</button></div>
     <div class="mtog"><span>TRAIL: trail the stop from</span><input id="mpSlR" inputmode="decimal" value="${tr.sl_r ?? 1}"><button id="mpTr" data-t="sl_on">${tr.sl_on ? "ON" : "off"}</button></div>
     <p class="help" data-f="trwho" style="margin:2px 0 6px"></p>
+    <div class="mbtns hide" data-f="mystop"><button id="mpMyStop" class="nsl" style="min-height:46px">NO STOP · Place my stop</button></div>
     <div class="mbtns"><button id="mpBeNow">BE now</button><button id="mpChart">Chart</button></div>
     <div class="mbtns"><button id="mpClose" class="danger" style="min-height:52px;font-weight:700">Close at market</button></div>`);
   const sh = mq("#mSheet");
@@ -450,6 +452,7 @@ function mPosSheet(id){
     sh.querySelector(inp).onchange = () => { const v = num(sh.querySelector(inp).value); if(v > 0) papi("pos_trail", {id, [rk]: v}); };
   }
   sh.querySelector("#mpBeNow").onclick = () => papi("be", {id});
+  sh.querySelector("#mpMyStop").onclick = () => { if(typeof placeMyStop === "function") placeMyStop(id); };
   sh.querySelector("#mpChart").onclick = () => { const q = mPos(id); if(!q) return; const s = q.basis === "underlying" ? q.ref : q.s; mClose(); mShow("chart");
     if(!cur || cur.s !== s){ const r = sym[s]; if(r) openSymbol(r); else openBySymbol(s); } };
   sh.querySelector("#mpClose").onclick = async e => {
@@ -473,6 +476,9 @@ function mPosFill(force){
   f("attp").textContent = p.at_tp != null ? e + rsS(p.at_tp) : ""; f("attp").className = cls(p.at_tp);
   const fy = f("fy");
   if(typeof liveOn === "function" && liveOn()){ const s = fyStopText(p); fy.textContent = s.t; fy.className = "fy " + s.c; } else fy.textContent = "";
+  const ms = sh.querySelector('[data-f="mystop"]');
+  if(ms){ const on = !!(p.nostop && typeof liveOn === "function" && liveOn()); ms.classList.toggle("hide", !on);
+    if(on && typeof myStopTitle === "function") sh.querySelector("#mpMyStop").title = myStopTitle(p); }
   const sl = sh.querySelector("#mpSl"), tp = sh.querySelector("#mpTp");
   if(force || !("sl" in M.draft)) setv(sl, "sl" in M.draft ? M.draft.sl : p.sl);
   if(force || !("tp" in M.draft)) setv(tp, "tp" in M.draft ? M.draft.tp : p.tp);
@@ -536,6 +542,14 @@ function mOrdFill(force){
 /* ---------------------------------------------------------------- account switcher */
 function mAcctSheet(){
   const list = acctList(), rsx = n => n == null ? "" : "₹" + Math.round(n).toLocaleString("en-IN");
+  if(typeof sideLive === "function" && sideLive()){           // the Live side: the Fyers account only (v0.33.0)
+    const a = acctById(ACCT) || {name: (S.live || {}).name};
+    const sh = mOpen("acct", `<div class="shead"><b>Your Fyers account</b><button data-x>✕</button></div>
+      <div class="mlist"><button disabled style="border-color:var(--down)"><span><b class="down">● LIVE</b> ${esc(a.name || "")}<br><small>balance ${rsx(a.balance)} · ${a.open || 0} open</small></span>✓</button>
+        <button data-p="1"><span>Back to Paper (your paper accounts)</span>›</button></div>`);
+    sh.querySelector("[data-p]").onclick = () => { mClose(); sideSet("paper"); setTimeout(mRefresh, 800); };
+    return;
+  }
   const sh = mOpen("acct", `<div class="shead"><b>Accounts</b><button data-x>✕</button></div>
     <div class="mlist">${list.map(a => `<button data-id="${a.id}" ${a.id === ACCT ? 'style="border-color:var(--accent)"' : ""}><span>${a.mode === "live" ? '<b class="down">● LIVE</b> ' : ""}${esc(a.name)}<br><small>balance ${rsx(a.balance)} · ${a.open || 0} open</small></span>${a.id === ACCT ? "✓" : ""}</button>`).join("")}
       <button data-m="1"><span>New or manage accounts…</span>›</button></div>`);
@@ -624,7 +638,7 @@ async function mHistory(reload){
     </div></div>
     ${rows.length ? rows.map((h, i) => `<div class="mhist" data-i="${i}">
       <div class="r1"><span class="side ${h.side > 0 ? "up" : "down"}">${h.side > 0 ? "L" : "S"}</span><span class="sym">${esc(short(h.s))}</span><b class="${cls(h.net)} mono">${rs(h.net)}</b></div>
-      <div class="r2">${istTime(h.closed)} · ${h.lots} lot · ${h.avg} → ${h.exit} · ${esc(h.reason)}${h.r != null ? ` · ${h.r > 0 ? "+" : ""}${h.r}R` : ""}</div>
+      <div class="r2">${istTime(h.closed)} · ${h.lots} lot · ${h.avg} → ${h.exit} · ${esc(h.reason)}${h.r != null ? ` · ${h.r > 0 ? "+" : ""}${h.r}R` : ""}${h.src === "fyers" ? " · placed in Fyers" : ""}</div>
       <div class="bd ${M.histOpen[h.closed + h.s] ? "" : "hide"}"></div></div>`).join("") : `<div class="mempty">No closed trades in this period.</div>`}
     <p class="help" style="text-align:center"><a href="/api/paper/history.csv">Download CSV</a> · <a href="#" id="mhFull">Full history page (equity curve, filters)</a></p>`;
   box.querySelectorAll("#mhDays button").forEach(b => b.onclick = () => { M.histDays = +b.dataset.d; mHistory(true); });

@@ -451,6 +451,8 @@ class Journal:
                     t["claimedAt"] = t["created"]       # trades from before the journal count as claimed (Octagon)
                 self.d["trades"][key] = t
             t["parts"].append(rec["id"])
+            if rec.get("src") == "fyers":                # placed in Fyers, not from the app (v0.33.0)
+                t["outside"] = True
             t["closes"].append({"id": rec["id"], "t": rec.get("closed"), "qty": rec.get("qty"), "exit": rec.get("exit"),
                                 "net": rec.get("net"), "gross": rec.get("gross"),
                                 "charges": (rec.get("charges") or {}).get("total"), "init_risk": rec.get("init_risk"),
@@ -488,6 +490,8 @@ class Journal:
             if not t:
                 t = self._new(key, aid, acct_name, mode, e_base, {**pos, "day": day})
                 self.d["trades"][key] = t
+            if pos.get("outside"):
+                t["outside"] = True
             if t["closes"]:                              # partly closed already: the closes carry the money
                 t["status"] = "open"
                 t["open_qty"] = pos.get("qty")
@@ -749,7 +753,7 @@ class Journal:
                 "Removed from journal"] + [f"P{p['n']} {p['title']}" for p in pil] + [
                 "Clean octagon", "Breaches", "Direction", "Pillar 1 checks", "Wait state", "Execution", "Execution faults",
                 "Zen Temple", "Target", "Mind running numbers", "Payout pressure", "Market regime", "Bias", "KE", "Setup",
-                "Plan", "Review / lesson", "Did right", "Did wrong", "Claimed", "Pictures", "Trade id"]
+                "Plan", "Review / lesson", "Did right", "Did wrong", "Claimed", "Pictures", "Trade id", "Placed in"]
         out = io.StringIO()
         w = csv.writer(out, lineterminator="\r\n")
         w.writerow(head)
@@ -776,7 +780,8 @@ class Journal:
                     t.get("target", ""), "Yes" if t.get("numberRunning") else "", "Yes" if t.get("payoutPressure") else "",
                     t.get("regime", ""), "" if t.get("bias") is None else t["bias"], "" if t.get("ke") is None else t["ke"],
                     ", ".join(t.get("setup") or []), t.get("notes", ""), t.get("review", ""), t.get("rvRight", ""),
-                    t.get("rvWrong", ""), "Yes" if t.get("claimedAt") else "", len(t.get("shots") or []), t["id"]])
+                    t.get("rvWrong", ""), "Yes" if t.get("claimedAt") else "", len(t.get("shots") or []), t["id"],
+                    "Fyers" if t.get("outside") else "app"])
         return "\ufeff" + out.getvalue()
 
     def backup_zip(self, path: str) -> dict:

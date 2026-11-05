@@ -1,11 +1,14 @@
 # Roadmap: the task list
 
-Updated 5 Nov 2026 (v0.32.0). This is the one task list for the project.
+Updated 5 Nov 2026 (v0.33.0). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
 
 ## Next, in this order
+
+**Order change (owner, 5 Nov 2026):** item 16 (the Live account is the Fyers account) is built next, before item 1's
+first real trade. Built in **v0.33.0**: item 1's first real trade is now made on the new Live account.
 
 **Order change (owner, 2 Nov 2026):** the footprint (item 2) is parked after the order-flow check ("Let's park it for now").
 
@@ -28,7 +31,7 @@ ahead of 3-6.
    - [x] **Overnight (Carry / NRML) positions:** after the daily Fyers login, once the contract trades, a fresh stop at the trailed level, after checking Fyers still has the position (if not: recorded as "closed at Fyers" with a warning). Until then a warning shows. *(v0.14.0)*
    - [x] Fyers rules: under 10 orders a second and 200 a minute, modifications included (the helper queues at 4/s, 120/min); market orders become market-price-protection orders; no after-market orders; daily Fyers login. Fyers triggers stops on the last traded price, so live exits can differ by a tick from paper's bid / ask rule. *(v0.14.0)*
    - [x] Safeguards: a typed confirmation of the Fyers client ID plus a fresh 2FA code to turn Live on; a red LIVE badge everywhere; a kill switch (cancel everything, close everything at Fyers, then pause until Resume); all of it in the security log. *(v0.14.0)*
-   - [ ] **First real trade (the owner):** whitelist the droplet's own IP **134.209.159.171** in the Fyers API app with order permission, turn on Live, and test with 1 lot on MCX: entry, the stop at Fyers, a trail move, BE, a close with ✕, and the kill switch. Report anything odd with a screenshot.
+   - [ ] **First real trade (the owner):** whitelist the droplet's own IP **134.209.159.171** in the Fyers API app with order permission, switch the page to LIVE (top left, v0.33.0), and test with 1 lot on MCX: entry, the stop at Fyers, a trail move, BE, a close with ✕, and the kill switch. Then one trade placed in the Fyers app (its NO STOP flag, Place my stop) and one with a stop placed in Fyers (adopted). Report anything odd with a screenshot.
    - [ ] Then: compare the app's charges with the charges Fyers actually deducted, and flag any gap.
 2. [ ] **Candle types and order flow** (moved up 31 Oct 2026). Candle types done in **v0.15.0**, Point & Figure in **v0.16.0**; the footprint is **parked** (owner, 2 Nov 2026) after the order-flow check showed Fyers' feed merges trades.
    - [x] Heikin-Ashi, Renko, range bars, line break, plus hollow candles, bars, line and area. Indicators (Volume, built-ins, your Pine scripts) work on every type, on the bars the chart shows, as on TradingView (asked 31 Oct 2026). *(v0.15.0)*
@@ -243,6 +246,63 @@ v0.24.0 / v0.24.1); Telegram (3, done in v0.25.0) and the journal (4) next.
     - [ ] Owner's choice: unlocked, should the target stay where it is when the stop moves (LiveTrader), or keep following
       the R until it's dragged (the app today)?
 
+16. [x] **The Live account is the Fyers account, not a paper account switched to Live** (owner, 5 Nov 2026: "since Live
+    trading is directly on the broker, why should we have Live options for paper accounts. Paper accounts are
+    different"): shipped in **v0.33.0**. Design agreed 5 Nov 2026 (the owner's answers are marked). **Order (owner, 5 Nov
+    2026):** next, before item 1's first real trade, so that trade is made on the new Live account.
+    - [x] **Two kinds of account:** *(v0.33.0)*
+      - **Paper accounts:** simulations, as many as you like, each with its own made-up capital. They never touch
+        Fyers and have **no Live option at all** (the Account page's "Turn on LIVE" goes).
+      - **One Live account:** the admin's Fyers account itself (named by the Fyers client ID). It isn't converted from
+        a paper account and is never switched "back to Paper". Live stays the admin's only.
+    - [x] **Paper / Live toggle at the top left, next to "Trade Manager"** (owner's answer 3): **Paper = green**, **Live =
+      red**. Admin only; other users see no toggle. *(v0.33.0)*
+      - **It's the safety switch.** Turning Live on asks for the Fyers client ID typed and a fresh 2FA code (as turning
+        an account Live does today). Back to Paper is one click. (Built per login: each browser / phone confirms for
+        itself; the server refuses Live changes from a page on Paper, the kill switch excepted.)
+      - **What it switches:** which side the page trades on. On Paper, the account switcher lists the paper accounts and
+        BUY / SELL / PLACE are paper. On Live, the page shows the Live account and every order is real (the red LIVE
+        switch, LIVE on PLACE, the kill switch, as now).
+      - **It never stops the server managing Live trades** (owner's answer): with the toggle on Paper, the server still
+        watches the real positions (stops, trailing, BE, targets, square-off, alerts). The toggle only decides where the
+        page's new orders go. It also shows in the phone's top bar.
+    - [x] **Balance: the real Fyers balance** (owner's answer 1). The Live account's balance, equity, margin and free funds
+      come from Fyers' funds (both ledgers). *(v0.33.0)*
+      - **% rules** (daily loss, max loss, risk %, risk cap, margin use, open risk) count from those real figures: the
+        daily loss from the day's starting balance as Fyers reports it.
+      - **No typed "capital for the rules"** on the Live account (the size: the Fyers balance on the day Live was first
+        switched on, plus money moved since).
+      - **Money in and out:** a deposit or withdrawal isn't a loss or a profit (as LiveTrader 1.18's balance
+        operations; here the size moves by it too, as it's your own account, not a prop account).
+    - [x] **Every trade on the Fyers account is shown and managed** (owner's answer 2): placed from this app or straight in
+      Fyers (the Fyers app, web, another platform). *(v0.33.0)*
+      - **Read from Fyers** (its order updates, which don't count against the API limits, plus the order and position
+        books as a fallback): positions, pending orders, fills, adds and partial exits made outside the app. Each one is
+        tagged "from Fyers" when it didn't come from the app.
+      - **Managed like the app's own:** SL / TP lines, BE, BE-T, TRAIL, ✕ close, the kill switch, the guards, intraday
+        square-off, Telegram alerts, net ₹ / R after all charges, the journal.
+      - **A stop placed in Fyers is adopted** as the trade's stop: that same order is moved by trailing / BE (its type
+        kept), so there's never a second exit order at Fyers (the rule from item 1). Its first stop sets 1R.
+      - **A pending order placed in Fyers** shows on the chart; you can move or cancel it here.
+    - [x] **Records:** History, the journal (an account named by the client ID, as the brief says) and CSV hold every Live
+      trade, the outside ones too, marked as such. *(v0.33.0)*
+    - [x] **Today's Live accounts:** an account switched Live under the old design goes back to Paper on the upgrade, its live
+      trades archived. Any real position it has is picked up by the new Live account from Fyers anyway. *(v0.33.0)*
+    - [x] **A trade placed in Fyers without a stop** (owner's answer): flagged red ("no stop at Fyers"), with a one-tap button
+      that places your default stop (the stop distance remembered for that contract, else the tool's default) at Fyers.
+      Nothing is placed without the tap. BE / BE-T / TRAIL start once it has a stop (its first stop sets 1R). *(v0.33.0)*
+    - [x] **Delivery holdings** (owner's answer: **shown and managed**): each holding is a Live trade like the others: P&L
+      after all charges, SL / TP, BE, BE-T, TRAIL, ✕ to sell, the no-stop flag and its one-tap stop. *(v0.33.0)*
+      - **Never squared off:** they're delivery. (Built: Close all and the kill switch keep them too; ✕ sells one.)
+      - **Selling shares through the API needs your Fyers account's authorisation** for selling from the demat (CDSL
+        DDPI or the daily eDIS / TPIN). Without it, Fyers refuses the stop or sell order, and the app shows Fyers' reason
+        on the holding.
+    - [ ] **To confirm on the real Fyers account** (with item 1's first real trade): the funds titles and both ledgers'
+      figures; "Fund Transfer" for a deposit / withdrawal; the holdings' `quantity` (start of day) next to today's CNC
+      position; outside orders arriving on the order socket; an SL-M placed in Fyers moved by the app; a real eDIS refusal.
+    - [ ] **Owner's choice (judgement calls made in v0.33.0, each one switch away):** Close all and the kill switch keep
+      delivery holdings; money moved in or out moves the account size too (LiveTrader keeps a prop account's size).
+
 ## Rules that shape live trading and other users (checked 30 Oct 2026)
 
 Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers' rules in force from 1 Apr 2026.
@@ -283,6 +343,7 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Done
 
+- [x] **v0.33.0** (5 Nov): the Live account is your Fyers account (item 16): the PAPER / LIVE switch at the top left (green / red, client ID + 2FA, per login, the server refusing Live changes from a Paper page); Fyers' own funds for the balance and every % rule (money in / out never a profit or a loss); every trade on the Fyers account shown and managed (placed here or in Fyers; a Fyers stop adopted; no stop: the red flag and Place my stop); delivery holdings (never squared off); old Live accounts back to Paper.
 - [x] **v0.32.0** (5 Nov): LiveTrader 1.24's changes (item 15): the RR box and lock under BUY / SELL (also the ticket and the phone; the stop for a moved target worked out net of all charges at the sized lots, with a message when the rules or the charges stop it); per-trade trailing like 1.24 (a typed R switches it on, the panel takes the trades back, own / as-the-panel, BE-T done); the tool gap.
 - [x] **v0.31.0** (5 Nov): a second server for a friend, on any Linux server (item 14): `server/startup.sh` sets it all up and finishes the install once its deploy key is on GitHub; `sudo fyers-status`; any repo (owner's, fork, own copy) and an optional `stable` branch; each server's own address / outgoing IP / branch in `/etc/fyers/server.conf`; the Live dialog names the server's own IP; `docs/New_Server_Guide.md`.
 - [x] **v0.30.3** (3 Nov): an indicator's buttons (👁 ⚙ { } ✕) come right after its name and its values wrap within the chart, so a script with many values (MultiPivot) never pushes them off the screen (asked 3 Nov).

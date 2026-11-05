@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 5 Nov 2026, version **0.32.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 5 Nov 2026, version **0.33.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -24,9 +24,9 @@ and roadmap updated too.
 - `helper/users.py`: users, 2FA (TOTP + recovery codes), sessions, lockout, AES-GCM seal / unseal of secrets
   (`data/secret.key`), the security log (`data/audit.jsonl`), and the console rescue
   (`python -m helper.users rescue admin`).
-- `helper/rt.py`: per user, the Fyers link, the price feed and the accounts (one `Paper` engine each, or a
-  `LiveEngine` for the admin's Live account, plus that user's Fyers order-update socket). `set_mode()` switches an
-  account Paper <-> Live. Data: `data/u/<user>/` and `data/u/<user>/a/<account>/` (a Live account keeps its Fyers
+- `helper/rt.py`: per user, the Fyers link, the price feed and the accounts (one `Paper` engine each, plus for the
+  admin the one `LiveEngine`, `rt.LIVE_ID` = "live", the Fyers account itself, and that user's Fyers order-update
+  socket). v0.33.0: `ensure_live()` makes it; `set_mode()` only refuses (paper accounts have no Live option). Data: `data/u/<user>/` and `data/u/<user>/a/<account>/` (a Live account keeps its Fyers
   order ids under `"live"` in `paper.json`). `rt.make_broker` / `rt.make_stream` are what the tests swap for fakes.
 - `helper/live.py`: `LiveEngine(Paper)`: the paper engine's rules, sizing, guards, BE, trailing and targets, with
   real orders. Entries fill from Fyers' reports; a stop-limit at Fyers from the start that `_a_sync` moves; exits via
@@ -53,9 +53,9 @@ and roadmap updated too.
   History, Book, Account, Log pages), `web/pine.js` + `web/pine_worker.js` (Pine Script, PineTS), `web/indset.js`
   (every indicator's settings dialog: Inputs / Style / Visibility; `indVisOn()` decides visibility by timeframe),
   `web/pine_libs/` (Pine libraries built into the app: `TradingView_ta.pine`), `web/security.js`
-  (login gates, 2FA set-up, step-up, Security and Users settings, account switcher), `web/live.js` (LIVE badge, KILL,
-  live warnings, the Fyers stop on each position, the Live card, the Paper <-> Live dialog; it wraps paperUpdate,
-  renderPlan, pgPositions and pgAccount).
+  (login gates, 2FA set-up, step-up, Security and Users settings, account switcher), `web/live.js` (the PAPER / LIVE switch,
+  KILL, live warnings, the Fyers stop on each position, NO STOP + Place my stop, the Live card with Fyers' funds; it
+  wraps paperUpdate, renderPlan, pgPositions, pgAccount, posBars and renderRules).
 - `web/mobile.js` + `web/mobile.css`: the phone layout (body class `mob`, chosen by `mWant()`: width <= 760 or a
   touch screen under 500 px, or the `ftm.layout` override in localStorage). Loaded after the page's inline script; it
   wraps onTick, openSymbol, feedPill, setFull, pgShow, openDrawer, refreshState, paperUpdate, renderTicket and
@@ -85,6 +85,12 @@ runs on 1 Nov, on v0.20.2 code too). Cause not found; it's a test-kit issue so f
 00:00 UTC, real Fyers at IST midnight). Re-run it if it fails; worth a proper look when touching Go to.
 `live_flow.js`'s "history: the trade, closed by the kill switch" failed once in 4 runs on 1 Nov (passed on re-run):
 probably the history read before the kill switch's close was booked. Same advice.
+`chain_lists_flow.js`'s "expiries offered" and the next check fail since early Nov (5 Nov: on v0.32.0 too): the test
+contract list in `tests/fixtures/` was saved 30 Oct and most of its option expiries have passed. Refresh the fixtures (a new
+symbol master) to fix it.
+The Live account is one account for every run (v0.33.0): `live_flow.js` and `telegram_flow.js` turn its daily / max loss off
+while they trade (and put them back), or earlier runs' losses today block their orders. The fake Fyers' order ids are unique
+per run (the app remembers handled ids, as for real Fyers).
 `jinsights_flow.js`'s three Copy for Gemini checks (today / this week) fail when run between midnight and the account's
 reset hour (2 Nov, 01:00 IST: trades belong to the previous trading day, Gemini's "today" is the calendar day). Run it in
 the daytime. (Roadmap follow-up.)
@@ -92,6 +98,95 @@ the daytime. (Roadmap follow-up.)
 automatic pictures off itself (other suites turn them on).
 `indicator_settings_flow.js`'s "at the start of a contract's history it stops asking" failed once in 2 runs on 1 Nov
 (v0.22.0; passed on re-run, 37/37). Same advice.
+
+## The Live account is the Fyers account (v0.33.0, roadmap 16)
+
+- **Accounts (`helper/rt.py`):** `LIVE_ID` = "live" (`u/<admin>/a/live/`), the row `{id, name: client ID, mode: "live", kind:
+  "live", client_id}` in accounts.json.
+  - **Made** by `ensure_live(client_id)` (refuses a different client ID than the row's, and anyone but the admin).
+  - **Opened** by `_open()` only for the admin (a live row in a user's file is ignored), with `client_id`.
+  - **`paper_ids()`** is what every "first account" / "keep one" / "20 at most" rule counts; `engine(unknown)` never
+    returns the Live one.
+  - **`_migrate_live()`** (in `__init__`): any `mode: "live"` account that isn't `LIVE_ID` goes back to Paper: history
+    archived as `paper_trades_until_<date>_live.json`, positions / orders dropped, a fresh ledger at its capital, the old
+    `live` part of paper.json gone.
+  - `account_list()` marks the Live row `mode: "live"` and gives no balance before Fyers' funds are read.
+- **The switch (per login):** `users` sessions carry `side` (`set_side`, `session_side`; `check()` returns `side`,
+  admin only). `POST /api/side` {side, confirm}: Live = admin + today's Fyers login + client ID typed + step-up
+  (`_stepped`), then `ensure_live` and a first funds read; it sends `{"side"}` to that session's other sockets
+  (`client.sess` set in `/ws`), whose pages call `sideFromServer` -> `refreshState`. `/api/state` gives `side` and `live`
+  {id, name, client_id}.
+- **Enforced on the server:** `_eng(request, b, write=True)` (every `_paper()` route and `/api/paper/place`) refuses a
+  Live-account request from a session on Paper (HTTP 403). `_live()` (the `/api/live/*` routes) always uses
+  `r.live_engine()`; resume needs the Live side, kill never does. `/api/accounts/mode` stays (it refuses).
+- **Money (`helper/live.py`):**
+  - **Funds:** `L["funds"]` = `{eq, co, at, date, t0}` from `FyersBroker.funds()` (`broker.parse_funds`: rows by title ->
+    `FUND_KEYS`, both ledgers). `_a_funds` runs every `FUNDS_SEC` (60) / `IDLE_SEC` (300 with nothing open and no market
+    hours) and 3 s after every fill (`_jn` override). `_apply_funds()` does the rest.
+  - **Size and money moved:** the first read sets `acct.size` (start + today's transfer), `live_v`, `since`. Later, a
+    change in the day's "Fund Transfer" (`acct.transfers[date]`) moves `size` and `peak` by it. `rules.size` mirrors
+    `size` (`set_rules` drops a typed size).
+  - **Today's start:** `day.start_bal` is replaced by Fyers' start once its funds for the trading day's calendar date
+    arrive (`day.fy`). `_transfer_today()` adds that day's transfer to the daily floor's base (`floors()` override).
+  - **Figures:** `balance()` = both ledgers' start + transfer + `_net_since(F.t0)` (closed trades' net since IST midnight
+    of the funds' date); `margin_used()` = Fyers' used; `free_margin(row)` = the commodity ledger's available for MCX
+    (the capital ledger's if the commodity ledger is empty), else the capital ledger's.
+  - **Before the first read:** `plan()` blocks.
+- **Trades placed outside the app:**
+  - **`on_update`:** an order id / tag the app doesn't know goes to `_outside(u)` (only after `L["base"]`: the first full
+    read). Its new fill quantity (`L["xfilled"][oid]`, kept across restarts) goes to `_outside_fill`, which opens / adds
+    with `fill()` (`pos.outside`, `how` "Fyers (…)") or closes against the position (`_split` + `Paper.close` reason
+    "closed in Fyers"; past flat: the rest opens the other way).
+  - **Still pending:** a stop (type 3 / 4) against a position with no Fyers stop -> `_adopt_stop` (kind "stop",
+    `stop_type`, `stop_adopted`; with no sl / first_sl it sets them and `init_risk`). Anything else -> `_adopt_order`: an
+    order with `outside`, `oid`, `fy_type`, `fy_limit`, kind "xorder" -> `_u_xorder`.
+  - **`_claim_stops(pos)`** turns an outside stop shown as an order into the stop once its position appears. During the
+    kill switch an adopted order is cancelled and an adopted position closed.
+  - **`_a_entry_mod`:** an outside order keeps its Fyers type; an SL-L keeps its trigger-to-limit gap. `_a_sync`'s modify
+    keeps `stop_type` (SL-M -> no limit); a stop the app places resets it to SL-L.
+- **The books:**
+  - **`_a_poll`:** reads every row now. The first read (`L["base"]` unset) records finished orders as done and their
+    fills as booked (no replay), then adopts still-pending outside orders.
+  - **`_a_fysync`** (every `FYSYNC_SEC` = 30): `_a_poll` first (the order book explains what it can, exactly), then
+    `positions` and, every `HOLD_SEC` / when a CNC position is open, `holdings`.
+    - **Fyers' quantity per (symbol, product)** = netQty, plus for CNC the holding's `quantity` (start of day).
+      `_fyers_position` was fixed the same way.
+    - **A difference:** acted on only when read twice >= 2.9 s apart (`self._mm`) and `_busy()` is false (exiting, a stop
+      in transit or pending tag, a fill within `FILL_LAG_SEC` (60), an app order on it, a kill order in flight). Then
+      `_reconcile` (adopt at netAvg / costPrice with `holding`; add at the implied price; part close / close at the mark;
+      each marked an estimate).
+- **Holdings:** `pos.holding`. `close_all()` and `kill()` skip them; square-off never touches CNC. `live_problems()` gives
+  one "nosl_hold" line for holdings without a stop (`alerts.SKIP` has it: no Telegram message) and "nosl:<id>" for any
+  other trade without one. `alerts.watched(e)` leaves out holdings with no stop (heartbeat, feed alerts, the watchdog).
+- **Booked-order memory:** `L["done"]` / `L["xfilled"]` keep everything in today's Fyers order book (pruned hourly to the
+  ids that book still lists; an empty answer prunes nothing), so no order in it is booked twice.
+- **`_other_client()`:** Fyers' cached profile `fy_id` vs `client_id` -> a warning and `plan()` blocked.
+- **Page:**
+  - **security.js:** `acctList()` = paper accounts only; `sideLive()`, `acctById()`, `acctReload()`. `acctSetup()` puts
+    `ACCT` = live id on the Live side (switcher locked, "● XT0001 · ₹balance"); localStorage keeps the last paper account.
+  - **live.js:** `sideRender()` (`#sideSw` after `.brand`; phone `#mSide` before `#mAcct`, `#mLive` gets `keephide`),
+    `sideClick` / `sideDialog` / `sideSet` / `sideApply` / `sideFromServer`; `liveBadge` hidden while the switch shows.
+    - **Positions:** `fyStopText()` prefixes From Fyers / Holding and says NO STOP for `p.nostop`. `fyLine()` (rebuilt only
+      when its text changes) adds the Place my stop button. `liveBars()` adds the red NO STOP button to the entry line's
+      bar.
+    - **Place my stop:** `myStop(p)` = prefs `sl_dist[(u || s) + (":OPT")]` (as `distKey()` with own-price stops), else
+      `max(10 ticks, 0.3%)`, from the avg, or from the mark if passed; `placeMyStop()` sends it as `modify` sl.
+    - **Account page:** `liveCard()` shows `P.snap.fyfunds` (`funds_view()`); `liveRules()` makes the size read-only.
+  - **mobile.js:** `#mpMyStop` in the position sheet; `mTopBar()` calls `sideRender()`.
+- **Paper engine changes (`helper/paper.py`):** `free_margin(row)` (used by `plan()` and the snapshot); `modify_pos`: a
+  trade's first stop sets `first_sl` / `init_risk`, skips the widening guards and isn't `own_stop`; history records carry
+  `src: "fyers"` / `holding`. CSVs: History `placed_in`, journal `Placed in` (journal trades `outside`).
+- **Tests:**
+  - `tests/live_account_test.py` (engine + rt). FakeBroker additions: `fund`, `hold`, `edis`, the position book's
+    `netAvg`, `outside()`.
+  - `tests/mock_server.py`: `POST /_mock/outside`, `GET /_mock/book`.
+  - `tests/live_flow.js` rewritten. `live_test.py`'s `make()` reads the fake funds first (as the switch does).
+- **Not seen for real yet** (roadmap 16's open item):
+  - **Funds:** Fyers' titles and both ledgers; whether "Fund Transfer" is signed for withdrawals and resets daily.
+  - **Holdings:** `quantity` vs `remainingQuantity` next to a CNC position the same day.
+  - **Outside orders:** whether they come on the order socket with an empty `orderTag`; an SL-M placed in Fyers moved by
+    the app (type 3 kept); Fyers' real eDIS refusal text.
+  - **Carried F&O:** whether netAvg for carried positions is the real average or yesterday's settlement (MTM).
 
 ## LiveTrader 1.24: RR lock, per-trade trailing, tool gap (v0.32.0, roadmap 15)
 
@@ -144,7 +239,7 @@ The EA in this project is now 1.24 (from 1.21). Its three changes, as built here
   - **`install.sh`** writes the file (`conf_write`) and uses `C_HOST` for the Caddyfile. It has no fallback address any
     more.
   - **The helper** gets the values through `EnvironmentFile=-/etc/fyers/server.conf` in `fyers-helper.service`.
-    `/api/state` gives `server.out_ip` (logged in only), which `web/live.js`'s Turn on LIVE dialog shows; without it,
+    `/api/state` gives `server.out_ip` (logged in only), which `web/live.js`'s switch-to-LIVE dialog shows; without it,
     general wording.
 - **`server/update.sh`:** follows `origin/$FYERS_BRANCH` when set (`rev-parse --verify`; a missing branch takes nothing),
   else `origin/HEAD`.
@@ -581,12 +676,21 @@ indicator option to add (not built).
 
 ## Next job
 
+**Roadmap 16 shipped in v0.33.0** (the Live account is the Fyers account). Next, the owner:
+- **Updates the server** and switches a page to LIVE (top left): the Account page's Live card should show his real Fyers
+  funds (start of the day, available, each ledger), and every position, order and holding already in his Fyers account
+  should appear, marked From Fyers / Holding, with NO STOP where there's none.
+- **Answers roadmap 16's two judgement calls** (holdings kept by Close all / the kill switch; money moved in or out moving
+  the account size).
+- **Makes item 1's first real trade on it** (below).
+
 0a. Roadmap 15 (v0.32.0): the owner tries the RR lock and the entry line's R boxes on real Fyers, and answers the
    unlocked-target question in the roadmap.
 0. Roadmap 14 (v0.31.0): the friend's first real server set-up with `docs/New_Server_Guide.md`. Fix whatever it shows.
    On the owner's server, after the update: `cat /etc/fyers/server.conf` should show his address and 134.209.159.171.
-1. The owner's first real trade (Monday at the earliest): whitelist 134.209.159.171 (order permission), turn on
-   Live, 1 lot on MCX. Fix whatever that shows.
+1. The owner's first real trade (Monday at the earliest): whitelist 134.209.159.171 (order permission), switch to
+   LIVE (top left), 1 lot on MCX; then a trade placed in the Fyers app (NO STOP, Place my stop) and one with its own
+   stop placed in Fyers (adopted). Fix whatever that shows (roadmap 16's "to confirm" list).
 2. Compare the app's charges with what Fyers deducted (roadmap item 1, last part).
 3. v0.30.1 (2 Nov): history asks Fyers for continuous data off (cont_flag=0); the owner checks GOLDPETAL NOV's 30 Oct
    on 15m in the app after the update (should match Fyers' chart with Continuous Futures off: low ~13,700, close ~13,960).

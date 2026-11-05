@@ -191,16 +191,40 @@ async function usersRender(){
 function tempPw(){ const a = "abcdefghjkmnpqrstuvwxyz", A = a.toUpperCase(), d = "23456789", r = n => crypto.getRandomValues(new Uint32Array(1))[0] % n;
   const pick = s => s[r(s.length)]; let p = pick(A) + pick(a) + pick(d); while(p.length < 12) p += pick(a + A + d); return p.split("").sort(() => r(3) - 1).join(""); }
 
-/* ------------------------------------------------------------------ paper accounts: the switcher and the Account page's list */
+/* ------------------------------------------------------------------ accounts: the switcher and the Account page's list.
+   v0.33.0: paper accounts on the Paper side; on the Live side (the switch at the top left, live.js) only the Live
+   account, the admin's Fyers account itself. ACCT is the account the page shows (X-Acct); localStorage keeps the last
+   paper account only. */
 let ACCT = null;
 try{ ACCT = localStorage.getItem("ftm.acct") || null; }catch(e){}
-function acctList(){ return (S && S.accounts || []).filter(a => !a.archived); }
+function acctList(){ return (S && S.accounts || []).filter(a => !a.archived && a.mode !== "live"); }
+function sideLive(){ return !!(S && S.side === "live" && S.live && S.user && S.user.role === "admin"); }
+function acctById(id){ return ((S && S.accounts) || []).find(a => a.id === id); }
+function acctReload(){
+  if(typeof P !== "undefined"){ P.snap = null; P.posKey = P.ordKey = ""; P.ticketLoaded = false; }
+  if(typeof PG !== "undefined"){ PG.hist = null; PG.logs = null; PG.posKey = PG.ordKey = null; }
+  if(ws && ws.readyState === 1) ws.send(JSON.stringify({acct: ACCT}));
+  api("/api/paper").then(j => { if(j.paper){ paperUpdate(j.paper); if(typeof pagesPaper === "function") pagesPaper([]); } if(typeof PG !== "undefined" && PG.page !== "chart") pgShow(PG.page, true); });
+}
 function acctSetup(){
-  const list = acctList();
-  if(!list.find(a => a.id === ACCT)) ACCT = list.length ? list[0].id : null;
+  const list = acctList(), before = ACCT, live = sideLive();
+  if(live) ACCT = S.live.id;
+  else if(!list.find(a => a.id === ACCT)){
+    let saved = null; try{ saved = localStorage.getItem("ftm.acct"); }catch(e){}
+    ACCT = list.find(a => a.id === saved) ? saved : (list.length ? list[0].id : null);
+  }
+  if(before && ACCT !== before && typeof P !== "undefined" && P.snap) acctReload();   // (at start-up the boot loads it)
+  if(typeof sideRender === "function") sideRender();
   const sel = sq("#acctSel"); if(!sel) return;
   const rsx = n => n == null ? "" : " · ₹" + Math.round(n).toLocaleString("en-IN");
-  sel.innerHTML = list.map(a => `<option value="${a.id}" ${a.id === ACCT ? "selected" : ""}>${a.mode === "live" ? "● LIVE · " : ""}${sesc(a.name)}${rsx(a.balance)}</option>`).join("")
+  if(live){
+    const a = acctById(ACCT) || {name: S.live.name};
+    sel.innerHTML = `<option value="${ACCT}" selected>● ${sesc(a.name || "Fyers")}${rsx(a.balance)}</option>`;
+    sel.disabled = true; sel.title = "Your Fyers account itself. Back to your paper accounts: PAPER at the top left";
+    sel.onchange = null; return;
+  }
+  sel.disabled = false; sel.title = "Paper account";
+  sel.innerHTML = list.map(a => `<option value="${a.id}" ${a.id === ACCT ? "selected" : ""}>${sesc(a.name)}${rsx(a.balance)}</option>`).join("")
     + `<option value="+new">+ New account…</option><option value="+manage">Manage accounts…</option>`;
   sel.onchange = () => {
     const v = sel.value;
@@ -209,22 +233,21 @@ function acctSetup(){
   };
 }
 function acctSwitch(id){
-  if(!id || id === ACCT) return;
+  if(!id || id === ACCT || sideLive()) return;              // (on the Live side the page shows the Live account only)
+  const a = acctList().find(x => x.id === id); if(!a) return;
   ACCT = id; try{ localStorage.setItem("ftm.acct", id); }catch(e){}
-  if(typeof P !== "undefined"){ P.snap = null; P.posKey = P.ordKey = ""; P.ticketLoaded = false; }
-  if(typeof PG !== "undefined"){ PG.hist = null; PG.logs = null; PG.posKey = PG.ordKey = null; }
-  if(ws && ws.readyState === 1) ws.send(JSON.stringify({acct: ACCT}));
-  api("/api/paper").then(j => { if(j.paper){ paperUpdate(j.paper); if(typeof pagesPaper === "function") pagesPaper([]); } if(PG.page !== "chart") pgShow(PG.page, true); });
-  const a = acctList().find(x => x.id === id); if(a) toast("Account: " + a.name);
+  acctReload();
+  toast("Account: " + a.name);
 }
 async function acctRefresh(){ const j = await api("/api/accounts"); if(j.ok){ S.accounts = j.accounts; acctSetup(); } return j; }
 function acctMgrRender(){
   const box = sq("#acctMgr"); if(!box) return;
-  const all = (S && S.accounts) || [], rsx = n => n == null ? "–" : "₹" + Math.round(n).toLocaleString("en-IN");
-  box.innerHTML = `<h3 class="pg-h3" style="margin-top:0">Your accounts</h3>
+  const all = ((S && S.accounts) || []).filter(a => a.mode !== "live"), rsx = n => n == null ? "–" : "₹" + Math.round(n).toLocaleString("en-IN");
+  const lv = S && S.user && S.user.role === "admin" ? `<p class="help">Live trading isn't a paper account: it's your Fyers account itself${S.live ? ` (<b class="mono">${sesc(S.live.name)}</b>)` : ""}, switched with <b>PAPER / LIVE</b> at the top left.</p>` : "";
+  box.innerHTML = `<h3 class="pg-h3" style="margin-top:0">Your paper accounts</h3>${lv}
     <div class="alist">${all.map(a => `<div class="arow ${a.archived ? "arch" : ""}" data-id="${a.id}"><div><b>${sesc(a.name)}</b> ${a.id === ACCT ? '<span class="tag">showing</span>' : ""}${a.archived ? '<span class="tag">archived</span>' : ""}
-        <div class="muted sm">${a.archived ? "" : `balance ${rsx(a.balance)} · equity ${rsx(a.equity)} · ${a.open || 0} open, ${a.orders || 0} orders · `}started with ${rsx(a.capital)} · ${a.mode === "live" ? '<span class="mode-live">LIVE at Fyers</span>' : "Paper"}</div></div>
-      <div class="ubtns">${a.archived ? `<button class="sm" data-a="restore">Restore</button>` : `${a.id === ACCT ? "" : `<button class="sm" data-a="show">Show</button>`}<button class="sm" data-a="rename">Rename</button>${a.mode === "live" ? `<button class="sm" data-a="mode">Back to Paper</button>` : (S.user && S.user.role === "admin" && !all.some(x => x.mode === "live" && !x.archived) ? `<button class="sm danger" data-a="mode">Turn on LIVE</button>` : "")}<button class="sm" data-a="archive">Archive</button>`}</div></div>`).join("")}</div>
+        <div class="muted sm">${a.archived ? "" : `balance ${rsx(a.balance)} · equity ${rsx(a.equity)} · ${a.open || 0} open, ${a.orders || 0} orders · `}started with ${rsx(a.capital)} · Paper</div></div>
+      <div class="ubtns">${a.archived ? `<button class="sm" data-a="restore">Restore</button>` : `${a.id === ACCT ? "" : `<button class="sm" data-a="show">Show</button>`}<button class="sm" data-a="rename">Rename</button><button class="sm" data-a="archive">Archive</button>`}</div></div>`).join("")}</div>
     <h4>New account</h4>
     <div class="f2"><div><label>Name</label><input id="naName" placeholder="e.g. NIFTY options" autocomplete="off"></div><div><label>Starting capital ₹</label><input id="naCap" class="mono" value="25000" inputmode="decimal"></div></div>
     <label>Rules and trailing</label><select id="naCopy"><option value="">Defaults</option>${all.filter(a => !a.archived).map(a => `<option value="${a.id}">Copy from ${sesc(a.name)}</option>`).join("")}</select>
@@ -238,7 +261,6 @@ function acctMgrRender(){
   box.querySelectorAll(".arow [data-a]").forEach(b => b.onclick = async () => {
     const id = b.closest(".arow").dataset.id, a = all.find(x => x.id === id), act = b.dataset.a;
     if(act === "show"){ acctSwitch(id); return; }
-    if(act === "mode"){ liveModeDialog(a); return; }
     let body = {id};
     if(act === "rename"){ const n = prompt("New name:", a.name); if(!n) return; body.name = n; }
     if(act === "archive"){ if(!confirm(`Archive "${a.name}"? Its trades are kept; you can restore it later.`)) return; body.archived = true; }

@@ -321,6 +321,10 @@ class Paper:
     def margin_used(self) -> float:
         return round(sum(p.get("margin", 0) for p in self.positions) + sum(o.get("margin", 0) for o in self.orders), 2)
 
+    def free_margin(self, row=None) -> float:
+        """Money free for a new order's margin (the Live account: Fyers' available balance for that ledger)."""
+        return round(self.equity() - self.margin_used(), 2)
+
     # ------------------------------------------------------------ margin
     def margin_per_lot(self, row, side, product, price) -> tuple:
         """(rupees per lot, source). Option buys need the premium; the rest asks Fyers (cached 10 min)."""
@@ -471,7 +475,7 @@ class Paper:
         if mpl:
             eq = self.equity()
             used = self.margin_used()
-            free = eq - used
+            free = self.free_margin(row)
             if R["max_margin_pct"]:
                 room = min(bal, eq) * R["max_margin_pct"] / 100 - used
                 if lots * mpl > room:
@@ -711,6 +715,7 @@ class Paper:
             "gross": round(g, 2), "charges": allc, "net": net, "init_risk": pos["init_risk"],
             "r": round(net / pos["init_risk"], 2) if pos["init_risk"] else None,
             "balance_after": bal, "day": self.trading_day(pos["opened"]),
+            **({"src": "fyers"} if pos.get("outside") else {}), **({"holding": True} if pos.get("holding") else {}),
             "path": (pos.get("path") or [[pos["opened"], pos.get("first_sl"), pos.get("tp"), "open"]]) + (
                 [[now(), pos.get("sl"), pos.get("tp"), pos.pop("_pk", None) or "edit"]]
                 if pos.get("path") and (pos.get("sl"), pos.get("tp")) != tuple(pos["path"][-1][1:3]) else []),
@@ -770,11 +775,19 @@ class Paper:
                 sl = charges.round_tick(float(sl), btick)
                 if udir * (bpx - sl) <= 0:
                     raise Refused("that stop is already through the market - use X to close instead")
+                first = pos.get("sl") is None and pos.get("floor") is None and pos.get("first_sl") is None
                 old_risk = self.pos_risk(pos)
                 old = pos["sl"]
                 pos["sl"] = sl
                 new_risk = self.pos_risk(pos)
-                if new_risk > old_risk + 0.01:            # widening: check the guards like a new trade
+                if first:
+                    # a trade with no stop yet (placed in Fyers without one, v0.33.0): its first stop sets 1R. A stop
+                    # only ever lowers the risk of a trade that had none, so the widening guards don't apply.
+                    pos["first_sl"] = sl
+                    pos["init_risk"] = round(new_risk, 2)
+                    pos["_pk"] = "edit"
+                    msgs.append(f"first stop {sl} (1R)")
+                elif new_risk > old_risk + 0.01:            # widening: check the guards like a new trade
                     f = self.floors()
                     worst = self.balance() - self.open_risk()
                     cap = self.balance() * self.rules["risk_cap_pct"] / 100 if self.rules["risk_cap_pct"] else None
@@ -787,9 +800,10 @@ class Paper:
                     if why:
                         pos["sl"] = old
                         raise Refused(why)
-                pos["own_stop"] = True
-                pos["trail"] = False
-                msgs.append(f"SL {sl}")
+                if not first:
+                    pos["own_stop"] = True
+                    pos["trail"] = False
+                    msgs.append(f"SL {sl}")
         if tp != "keep":
             if tp is None:
                 pos["tp"] = None
@@ -1155,7 +1169,7 @@ class Paper:
             "realized_today": round(sum(h["net"] for h in today), 2),
             "charges_today": round(sum(h["charges"]["total"] for h in today), 2),
             "trades_today": self.day.get("trades", 0),
-            "margin_used": self.margin_used(), "free": round(eq - self.margin_used(), 2),
+            "margin_used": self.margin_used(), "free": self.free_margin(),
             "open_risk": self.open_risk(),
             "day_room": round(min(bal, eq) - (f["daily"] + f["buffer"]), 2) if f["daily"] is not None else None,
             "max_room": round(min(bal, eq) - (f["max"] + f["buffer"]), 2) if f["max"] is not None else None,

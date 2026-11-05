@@ -115,17 +115,31 @@ class FyersBroker:
         return self._call("GET", "/holdings", wait=20).get("holdings") or []
 
     def funds(self) -> dict:
-        rows = self._call("GET", "/funds", wait=20).get("fund_limit") or []
-        out = {}
-        for r in rows:
-            t = (r.get("title") or "").lower()
-            if "available" in t:
-                out["available"] = r.get("equityAmount")
-            elif "total balance" in t:
-                out["total"] = r.get("equityAmount")
-            elif "utilized" in t or "used" in t:
-                out["used"] = r.get("equityAmount")
-        return out
+        """Fyers' funds, both ledgers: {"eq": {...}, "co": {...}} with keys from FUND_KEYS (total, used, clear, realized,
+        collateral, transfer, receivables, adhoc, start, available). Rows are matched by title, as Fyers' docs advise."""
+        return parse_funds(self._call("GET", "/funds", wait=20).get("fund_limit") or [])
+
+
+FUND_KEYS = {"total balance": "total", "utilized amount": "used", "clear balance": "clear",
+             "realized profit and loss": "realized", "collaterals": "collateral", "fund transfer": "transfer",
+             "receivables": "receivables", "adhoc limit": "adhoc", "limit at start of the day": "start",
+             "available balance": "available"}
+
+
+def parse_funds(rows: list) -> dict:
+    out = {"eq": {}, "co": {}}
+    for r in rows or []:
+        k = FUND_KEYS.get((r.get("title") or "").strip().lower())
+        if not k:
+            continue
+        for led, f in (("eq", "equityAmount"), ("co", "commodityAmount")):
+            try:
+                out[led][k] = round(float(r.get(f) or 0), 2)
+            except (TypeError, ValueError):
+                out[led][k] = 0.0
+    if not out["eq"] and not out["co"]:
+        raise BrokerUnsure("Fyers sent no funds figures")
+    return out
 
 
 def norm_order(o: dict) -> dict:

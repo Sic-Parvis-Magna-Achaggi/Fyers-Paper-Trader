@@ -141,6 +141,7 @@ def tick_feed(feed):
 threading.Thread(target=ticker, daemon=True).start()
 import uvicorn  # noqa: E402
 from helper.app import app  # noqa: E402
+from fastapi import Request  # noqa: E402
 
 
 def caddy_headers() -> dict:
@@ -176,6 +177,24 @@ async def _caddy(request, call_next):
 async def _mock_allday(on: int = 0):
     ALLDAY[0] = bool(on)
     return {"ok": True, "allday": ALLDAY[0]}
+
+
+@app.post("/_mock/outside")
+async def _mock_outside(request: Request):
+    """An order placed straight in Fyers (its app, web, another platform), as the fake Fyers sees it (live_flow.js)."""
+    b = await request.json()
+    try:
+        oid = FB.outside(b["s"], int(b["qty"]), int(b["side"]), int(b.get("type", 2)), b.get("product", "INTRADAY"),
+                         float(b.get("limit") or 0), float(b.get("stop") or 0))
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    return {"ok": True, "id": oid}
+
+
+@app.get("/_mock/book")
+async def _mock_book():
+    """The fake Fyers' order book, net positions and funds."""
+    return {"book": list(FB.book.values()), "net": [[s, p, q] for (s, p), q in FB.net.items()], "violations": FB.violations}
 
 
 uvicorn.run(app, host="127.0.0.1", port=8766, log_level="warning")

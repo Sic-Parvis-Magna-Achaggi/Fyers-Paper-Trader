@@ -18,6 +18,7 @@ from .paper import DEFAULT_RULES, Paper, Refused
 
 log = logging.getLogger("rt")
 RT: dict = {}                  # uid -> UserRT
+LIVE_ID = "live"               # the Live account: the admin's Fyers account itself (v0.33.0), u/<admin>/a/live/
 _loop = None
 on_engine_change = None        # app callback(user_rt, account_id, event)
 
@@ -36,10 +37,11 @@ class UserRT:
         self.loop = None
         self.feed.extra = self.watch_symbols
         self.feed.on_tick = self.on_tick
+        self._migrate_live()
         for a in self.accounts():
             if not a.get("archived"):
                 self._open(a)
-        if not self.engines:                       # a new user starts with one paper account
+        if not self.paper_ids():                   # a new user starts with one paper account
             self.create_account("Paper", DEFAULT_RULES["size"])
 
     # ------------------------------------------------------------ accounts
@@ -49,10 +51,47 @@ class UserRT:
     def _save_accounts(self, lst):
         store.save(self.dir + "accounts.json", {"accounts": lst})
 
+    def paper_ids(self) -> list:
+        return [a["id"] for a in self.accounts() if not a.get("archived") and a["id"] != LIVE_ID and a["id"] in self.engines]
+
+    def _migrate_live(self):
+        """v0.33.0: Live is no longer a paper account switched to Live. An account switched Live under the old design
+        goes back to Paper: its live trades are archived on the server and it starts a fresh paper ledger. Any real
+        position it had is picked up by the new Live account from Fyers (the real server had no live trade yet)."""
+        lst = self.accounts()
+        changed = False
+        for a in lst:
+            if a.get("mode") == "live" and a["id"] != LIVE_ID:
+                folder = f"{self.dir}a/{a['id']}/"
+                e = Paper(folder, self.link, a.get("name", ""))
+                n_pos, n_ord = len(e.positions), len(e.orders)
+                if e.history:
+                    store.save(folder + f"paper_trades_until_{time.strftime('%Y%m%d_%H%M%S')}_live.json", e.history)
+                e.history = []
+                e.save_history()
+                cap = float(a.get("capital") or e.rules.get("size") or DEFAULT_RULES["size"])
+                e.positions, e.orders, e.day = [], [], {}
+                e.acct = {"start": cap, "realized": 0.0, "peak": cap, "created": time.time(), "cycle": e.acct.get("cycle", 1) + 1}
+                e.rules["size"] = cap
+                store.save(folder + "paper_rules.json", e.rules)
+                e.event("v0.33.0: this account is Paper again (Live is now your Fyers account itself, switched at the top "
+                        "left). Its live trades are archived on the server" + (f"; {n_pos} position(s) and {n_ord} order(s) "
+                        "were dropped here - the Live account reads them from Fyers" if n_pos or n_ord else "") + ".", "warn")
+                e.save()                                   # (paper.json is rewritten without the old "live" part)
+                a["mode"] = "paper"
+                a["capital"] = cap
+                changed = True
+                users.audit(self.uid, "account back to Paper (v0.33.0)", a.get("name", ""))
+                log.warning("[%s] %s: switched Live under the old design - now Paper again", self.label, a.get("name"))
+        if changed:
+            self._save_accounts(lst)
+
     def _open(self, a: dict) -> Paper:
         folder = f"{self.dir}a/{a['id']}/"
-        if a.get("mode") == "live" and self.role == "admin":
-            e = LiveEngine(folder, self.link, a.get("name", ""), broker=make_broker(self.link))
+        if a["id"] == LIVE_ID:
+            if self.role != "admin":
+                return None
+            e = LiveEngine(folder, self.link, a.get("name", ""), broker=make_broker(self.link), client_id=a.get("client_id"))
         else:
             e = Paper(folder, self.link, a.get("name", ""))
         e.on_change = lambda ev, aid=a["id"]: on_engine_change and on_engine_change(self, aid, ev)
@@ -109,66 +148,62 @@ class UserRT:
             e.start(loop)
 
     def set_mode(self, aid: str, mode: str, capital: float | None = None) -> dict:
-        """Switch an account between Paper and Live (the app checks the admin, the typed client ID and the 2FA code).
-        The account must be flat. Its trades so far are archived (kept on the server) and it starts a fresh ledger,
-        so paper results and real money never mix."""
-        if mode not in ("paper", "live"):
-            raise Refused("mode: paper or live")
+        """Before v0.33.0 a paper account could be switched to Live. Live is now the Fyers account itself (ensure_live),
+        switched with the Paper / Live toggle at the top left; paper accounts have no Live option at all."""
+        raise Refused("paper accounts have no Live option any more: Live is your Fyers account itself - use the Paper / "
+                      "Live switch at the top left")
+
+    # ------------------------------------------------------------ the Live account (the admin's Fyers account)
+    def live_engine(self):
+        e = self.engines.get(LIVE_ID)
+        return e if isinstance(e, LiveEngine) else None
+
+    def live_row(self):
+        return next((a for a in self.accounts() if a["id"] == LIVE_ID), None)
+
+    def ensure_live(self, client_id: str) -> dict:
+        """The Live account, made the first time the admin switches to Live (the app has checked the typed client ID and
+        a fresh 2FA code). From then on it runs all the time, whichever side the page is on."""
+        if self.role != "admin":
+            raise Refused("Live trading is for the admin only (SEBI / Fyers static-IP rules)")
+        client_id = str(client_id or "").strip().upper()
         lst = self.accounts()
-        a = next((x for x in lst if x["id"] == aid and not x.get("archived")), None)
+        a = next((x for x in lst if x["id"] == LIVE_ID), None)
+        if a and a.get("client_id") and client_id and a["client_id"] != client_id:
+            raise Refused(f"the Live account is Fyers client {a['client_id']}, but you're logged in to Fyers as {client_id} "
+                          f"- log in to Fyers as {a['client_id']}")
         if not a:
-            raise Refused("no such account")
-        if a.get("mode", "paper") == mode:
-            raise Refused(f"that account is already {mode.title()}")
-        if mode == "live":
-            if self.role != "admin":
-                raise Refused("Live trading is for the admin only (SEBI / Fyers static-IP rules)")
-            other = next((x for x in lst if x.get("mode") == "live" and not x.get("archived") and x["id"] != aid), None)
-            if other:
-                raise Refused(f'"{other["name"]}" is already Live - one Live account per Fyers login')
-        e = self.engines.get(aid)
-        if e and (e.positions or e.orders):
-            raise Refused("close its positions and cancel its orders first")
-        size = float(capital or (e.rules["size"] if e else DEFAULT_RULES["size"]))
-        if size <= 0:
-            raise Refused("capital must be above 0")
-        if e:
-            if isinstance(e, LiveEngine):
-                e.stop()
-            e.history_archive()
-            e.rules["size"] = size
-            store.save(e.dir + "paper_rules.json", e.rules)
-            e.acct = {"start": size, "realized": 0.0, "peak": size, "created": time.time(), "cycle": e.acct.get("cycle", 1) + 1}
-            e.day = {}
-            e.event(f"Switched to {mode.title()}: a fresh ledger at ₹{size:,.0f} (earlier trades archived on the server)")
-            e.save()
-        a["mode"] = mode
-        a["capital"] = size
-        self._save_accounts(lst)
-        self._open(a)
-        self.feed._resync()
-        users.audit(self.uid, f"account set to {mode}", f"{a['name']} (₹{size:,.0f})")
-        if on_engine_change:
-            on_engine_change(self, aid, f"{a['name']} is now {mode.title()}")
+            a = {"id": LIVE_ID, "name": client_id or "Live", "mode": "live", "kind": "live", "client_id": client_id,
+                 "created": time.time()}
+            lst.append(a)
+            self._save_accounts(lst)
+            users.audit(self.uid, "Live account created", client_id)
+        if LIVE_ID not in self.engines:
+            self._open(a)
+            self.feed._resync()
         return a
 
     def engine(self, aid: str | None) -> Paper:
         if aid and aid in self.engines:
             return self.engines[aid]
-        live = [a for a in self.accounts() if not a.get("archived")]
-        if not live:
+        ids = self.paper_ids()                       # an unknown account: the first paper account (never the Live one)
+        if not ids:
             self.create_account("Paper", DEFAULT_RULES["size"])
-            live = [a for a in self.accounts() if not a.get("archived")]
-        return self.engines[live[0]["id"]]
+            ids = self.paper_ids()
+        return self.engines[ids[0]]
 
     def account_list(self) -> list:
         out = []
         for a in self.accounts():
             e = self.engines.get(a["id"])
             row = dict(a)
-            row["mode"] = a.get("mode", "paper")
+            row["mode"] = "live" if a["id"] == LIVE_ID else "paper"
+            if a["id"] == LIVE_ID and not e:
+                continue
             if e:
                 row.update(balance=e.balance(), equity=e.equity(), open=len(e.positions), orders=len(e.orders))
+                if isinstance(e, LiveEngine) and not e._F():       # (no Fyers funds read yet: no made-up balance)
+                    row.update(balance=None, equity=None)
             out.append(row)
         return out
 
@@ -179,7 +214,7 @@ class UserRT:
         if capital <= 0:
             raise Refused("capital must be above 0")
         lst = self.accounts()
-        if len([a for a in lst if not a.get("archived")]) >= 20:
+        if len([a for a in lst if not a.get("archived") and a["id"] != LIVE_ID]) >= 20:
             raise Refused("20 accounts at most - archive one first")
         if any(a["name"].lower() == name.lower() and not a.get("archived") for a in lst):
             raise Refused(f'you already have an account called "{name}"')
@@ -204,6 +239,8 @@ class UserRT:
         a = next((x for x in lst if x["id"] == aid), None)
         if not a:
             raise Refused("no such account")
+        if aid == LIVE_ID:
+            raise Refused("the Live account is your Fyers account itself (named by its client ID): it can't be renamed or archived")
         if name is not None:
             name = name.strip()[:40]
             if not name:
@@ -218,8 +255,8 @@ class UserRT:
                 e = self.engines.get(aid)
                 if e and (e.positions or e.orders):
                     raise Refused("close its positions and cancel its orders first")
-                if len([x for x in lst if not x.get("archived")]) <= 1:
-                    raise Refused("keep at least one account")
+                if len([x for x in lst if not x.get("archived") and x["id"] != LIVE_ID]) <= 1:
+                    raise Refused("keep at least one paper account")
                 a["archived"] = time.time()
                 old = self.engines.pop(aid, None)
                 if isinstance(old, LiveEngine):

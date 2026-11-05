@@ -111,12 +111,14 @@ async function drawer(pg){
   ok(/Watchdog: running/.test(await pg.textContent("#tgWd")), "with the watchdog's status file fresh: 'Watchdog: running'");
   await pg.screenshot({ path: SHOT + "tg_03_ready.png" });
 
-  // ---- a Live account: the Live card's line, and the heartbeat
-  const mk = await pg.evaluate(() => api("/api/accounts/create", {body: {name: "TG Live", capital: 100000}}));
-  const aid = mk.account.id;
-  const lv = await pg.evaluate(id => api("/api/accounts/mode", {body: {id, mode: "live", confirm: "XT0001", capital: 100000}}), aid);
-  ok(lv.ok, "a Live account for the test" + (lv.ok ? "" : ": " + lv.error));
-  await pg.evaluate(id => acctSwitch(id), aid); await pg.waitForTimeout(1200);
+  // ---- the Live account (v0.33.0: the Fyers account itself, the PAPER / LIVE switch): the Live card's line, and the heartbeat
+  await pg.evaluate(() => { window.__lv = stepUp(() => api("/api/side", {body: {side: "live", confirm: "XT0001"}})).then(j => { if(j.ok) sideApply(j); return j; }); });
+  await codeIfAsked(pg);
+  const lv = await pg.evaluate(() => window.__lv);
+  ok(lv.ok, "this page on the Live side for the test" + (lv.ok ? "" : ": " + lv.error));
+  await pg.waitForTimeout(1200);
+  // the Live account is one account for every run (v0.33.0): earlier tests' losses today mustn't trip its loss limits here
+  const rules0 = await pg.evaluate(async () => { const r = P.snap.rules; await papi("rules", {daily_pct: 0, max_pct: 0}); return {daily_pct: r.daily_pct, max_pct: r.max_pct}; });
   await pg.click('#nav button[data-pg="account"]'); await pg.waitForSelector("#liveCard");
   await pg.waitForFunction(() => (document.querySelector("#lvTg") || {}).textContent && document.querySelector("#lvTg").textContent !== "…", null, { timeout: 8000 });
   ok(/^on$/.test((await pg.textContent("#lvTg")).trim()), "Live card: 'Telegram alerts: on'");
@@ -167,13 +169,14 @@ async function drawer(pg){
   ok((await get(8768, "/_sent")).filter(m => /isn't responding/.test(m.text)).length === 1, "repeat 0: only one 'not responding' message");
   wd.kill(); tg2.kill(); wd = tg2 = null;
 
-  // ---- clean up: close, back to Paper, archive; then remove Telegram
+  // ---- clean up: close, back to Paper; then remove Telegram
   await pg.waitForTimeout(1500);
   await pg.evaluate(() => papi("close_all", {}));
   await pg.waitForFunction(() => !P.snap.positions.length, null, { timeout: 15000 }).catch(() => {});
-  const back2 = await pg.evaluate(id => api("/api/accounts/mode", {body: {id, mode: "paper"}}), aid);
-  const arch = await pg.evaluate(id => api("/api/accounts/update", {body: {id, archived: true}}), aid);
-  ok(back2.ok && arch.ok, "test account back to Paper and archived" + (back2.ok ? "" : ": " + back2.error) + (arch.ok ? "" : ": " + arch.error));
+  await pg.evaluate(r => papi("rules", r), rules0);
+  const back2 = await pg.evaluate(() => sideSet("paper"));
+  await pg.waitForFunction(() => !liveOn(), null, { timeout: 8000 }).catch(() => {});
+  ok(back2.ok && !(await pg.evaluate(() => liveOn())), "this page back on the Paper side" + (back2.ok ? "" : ": " + back2.error));
   await drawer(pg);
   await pg.click("#tgDel"); await codeIfAsked(pg);
   await pg.waitForFunction(() => /Not set up yet/.test(document.querySelector("#tgBox").textContent), null, { timeout: 8000 }).catch(() => {});

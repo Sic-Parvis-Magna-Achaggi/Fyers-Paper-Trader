@@ -7,6 +7,7 @@ Needs Python with requirements.txt installed, Node with Playwright, and Chromium
 python3 tests/routes_check.py                         # every API route still exists
 python3 tests/squareoff_test.py                       # square-off engine test (no browser)
 python3 tests/live_test.py                            # live engine against the fake Fyers order API (no browser, ~2 min)
+python3 tests/live_account_test.py                    # v0.33.0: the Live account is the Fyers account: Fyers' funds (size, daily floor, money in / out), trades placed in Fyers (opened, added, part closed, a Fyers stop adopted, pending orders moved / cancelled, the books' fallback, no double booking), holdings, rt.py (old Live accounts back to Paper) (~2 min)
 node tests/ctype_test.js                              # chart types (Heikin-Ashi, Renko, range, line break, P&F) with worked numbers
 python3 tests/feedcheck_test.py                       # the order-flow check's counting (exact / merged trades)
 python3 tests/feed_test.py                            # the price feed: 40 a page, at most 95 with trades first, polls of 50
@@ -25,7 +26,7 @@ python3 tests/make_old_data.py /tmp/fyers_test        # fresh v0.12-style data, 
 FYERS_HELPER_DATA=/tmp/fyers_test python3 tests/mock_server.py &   # the app on http://localhost:8766
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/security_flow.js      # upgrade login, 2FA, step-up, users, accounts
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/rr_lock_flow.js      # RR box + padlock under BUY / SELL, locked drags (target <-> stop), the rules' message, tool gap, the entry line's R boxes, the phone's padlock (a fresh account each run, archived after)
-FYERS_HELPER_DATA=/tmp/fyers_test node tests/live_flow.js          # Live on (client ID + 2FA), a trade, its Fyers stop, kill switch, back to Paper; with FYERS_OUT_IP=203.0.113.7 on both mock_server.py and the test: the dialog names that IP
+FYERS_HELPER_DATA=/tmp/fyers_test node tests/live_flow.js          # the PAPER / LIVE switch (client ID + 2FA, per login, 403 from a Paper page), the Live card's Fyers funds, a trade, a trade placed in Fyers (NO STOP, Place my stop), a Fyers limit cancelled here, the phone, kill switch, back to Paper; with FYERS_OUT_IP=203.0.113.7 on both mock_server.py and the test: the dialog names that IP
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/charttypes_flow.js    # every chart type with Volume + 2 Pine scripts lined up, live ticks
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/pine_compat_flow.js   # the Pine battery (tests/pine_compat.js) on every chart type; the P&F toolkit
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/legend_flow.js            # indicator read-outs with many values: inside the chart, wrapped, buttons after the name and clickable (desktop, narrow, phone)
@@ -53,10 +54,12 @@ tests see the real rules (v0.28.1: Caddy's frame header broke multi-chart grids 
 `fake_telegram.py` is a fake Telegram Bot API and Healthchecks.io (`mock_server.py` starts it on :8767; `/_sent` lists the
 messages, `/_docs` the documents sent (journal pictures), `/_deleted` the deleted messages). Tokens starting `1234567:` are good.
 
-`fake_broker.py` is a fake Fyers order API (place / modify / cancel / order book / positions and order updates). It
+`fake_broker.py` is a fake Fyers order API (place / modify / cancel / order book / positions / holdings / funds and order
+updates; v0.33.0: `fund`, `hold`, `edis`, `outside()` for an order placed in the Fyers app). It
 follows the Fyers rules live mode relies on (stops trigger on the last price; no type change on MCX; no SL-M on
 options or BSE; a sell stop can't be at or above the last price) and records any moment two exit orders are open
-for one position. `mock_server.py` uses it, so Live accounts work in the browser tests without Fyers. The mock's contracts were
+for one position. `mock_server.py` uses it, so the Live account works in the browser tests without Fyers
+(`POST /_mock/outside` places an order "in the Fyers app", `GET /_mock/book` shows the fake order book). The mock's contracts were
 "listed" 200 days ago (FAKE_LISTED_DAYS): before that its history answers Fyers' `no_data`, as a real contract does.
 
 After `security_flow.js` the admin has 2FA. Other browser tests log in with `require("./login.js")(page)`, which

@@ -1,5 +1,75 @@
 # Changelog
 
+## v0.33.0 — 5 Nov 2026 — The Live account is your Fyers account
+
+Added
+- **One Live account: your Fyers account itself** (roadmap 16; owner, 5 Nov: "since Live trading is directly on the broker, why
+  should we have Live options for paper accounts. Paper accounts are different").
+  - **Named by the Fyers client ID**, the admin's only; made the first time you switch to Live, then it runs all the time.
+  - **Paper accounts have no Live option any more** ("Turn on LIVE" / "Back to Paper" are gone).
+- **PAPER / LIVE switch at the top left**, next to "Trade Manager" (phone: the first button in the top bar). Paper green, Live red.
+  - **To Live:** the Fyers client ID typed and a fresh 2FA code (as before). **Back to Paper:** one click.
+  - **Per login:** each browser or phone switches for itself; a login's other pages (tabs, grid charts) follow it.
+  - **On the server:** a page on Paper can't change anything on the Live account (HTTP 403); the kill switch always works.
+  - **It only decides where the page's new orders go:** the server manages Live trades whichever side any page is on.
+- **The real Fyers balance** (owner's answer 1).
+  - **Balance, margin in use and free funds come from Fyers' funds** (both ledgers), read every minute and after every fill.
+    Balance = Fyers' start of the day + money moved today + today's closed trades net of every charge.
+  - **The % rules count from them;** the daily loss from today's start as Fyers reports it. No typed capital: the size is the
+    Fyers balance on the day you first switched to Live.
+  - **Money in / out isn't a profit or a loss:** the size, today's start and the highest balance move by it.
+  - **New live orders wait until Fyers' funds have been read once** (nothing sized from a made-up balance).
+  - **Account page:** Fyers' funds (start, money moved, today's net, balance, equity, margin, available, size, each ledger) and
+    *Read funds now*. The size in the rules is shown, not typed.
+- **Every trade on the Fyers account is shown and managed** (owner's answer 2), placed here or straight in Fyers.
+  - **Opened, added to, part closed, closed or reversed in Fyers:** followed from the order updates at Fyers' prices.
+    Fallback: the order book, then the position book (a difference read twice, 3 s apart, nothing of the app's in flight).
+  - **Marked:** "From Fyers" (positions), "Placed in Fyers" (orders), "Fyers" (History, CSV `placed_in`, journal CSV
+    `Placed in`).
+  - **The first read of the account** adopts what's already there (positions, pending orders, their stops); earlier fills
+    and finished orders are never replayed. Nothing is booked twice, also after a restart.
+  - **A stop placed in Fyers is adopted as the trade's stop:** trailing and BE move that same order, keeping its type (SL-M
+    stays SL-M). Never two exit orders. Its first stop sets 1R.
+  - **A pending order placed in Fyers** shows on the chart and in Orders: move it (its type kept) or cancel it here.
+  - **No stop** (owner's answer): a red NO STOP AT FYERS flag (position, Trades page, the entry line's bar, the phone's
+    sheet, the warnings) and **Place my stop**: your remembered stop distance for that contract, else the tool's default,
+    placed at Fyers only when you tap. Its first stop sets 1R.
+  - **Delivery holdings** (owner's answer: shown and managed): Live trades at their cost price, never squared off. Close all
+    and the kill switch keep them; ✕ sells one. A sell refused for want of DDPI / eDIS shows Fyers' reason on the holding.
+  - **Fyers logged in as another client** than the Live account's: nothing new is placed, with a warning.
+- **Telegram alerts:** a delivery holding without a stop isn't a live trade to watch (no outage messages, the outside heartbeat
+  still pauses); one with a stop is.
+
+Changed
+- **An account switched Live under the old design goes back to Paper on the upgrade:** its live trades archived
+  (`paper_trades_until_<date>_live.json`), a fresh paper ledger at its capital, its live order ids dropped. Any real position
+  is read from Fyers by the new Live account (the real server had no live trade yet).
+- `/api/accounts/mode` stays, answering that paper accounts have no Live option. New route: `POST /api/side`.
+- **The kill switch also cancels an order placed in Fyers during it,** and never sends a second exit for a position it's
+  closing.
+- **The account switcher on Live:** "● XT0001 · ₹balance", locked; the separate LIVE badge isn't shown beside the switch.
+- **A trade with no stop:** its first stop (typed, Place my stop) sets 1R, and as it only lowers the risk, the widening checks
+  don't apply.
+- **Delivery quantity at Fyers:** the holding's start-of-day quantity plus today's position (today's sells were counted
+  twice before).
+
+Tests
+- `tests/live_account_test.py` (new, 71 checks, no browser):
+  - **Fyers' funds:** the size, the daily floor, both ledgers, money in and out, the next day; no orders before the first read.
+  - **Trades made in Fyers:** opened, added, part and fully closed, past flat; an adopted SL-M trailed as SL-M and closed
+    through; pending orders moved, filled, cancelled.
+  - **The books:** the first read with a stop already at Fyers, the position-book fallback, a restart.
+  - **Holdings** (no eDIS, then a stop; the watchdog ignores one without a stop), and `rt.py` (old Live accounts, the one
+    Live account, not the admin).
+- `tests/live_flow.js` rewritten (60 checks; also run twice more on used data with `FYERS_OUT_IP` set): the switch (colours, 2FA, per login, the server's 403), the Live card's funds,
+  a trade from the app, one placed in Fyers (NO STOP, Place my stop), a Fyers limit cancelled here, the phone, the kill
+  switch, back to Paper while the server keeps booking.
+- `live_test.py` (61, ALL PASSED: its kill-switch checks caught two races, fixed above), `alerts_test.py` (57),
+  `telegram_flow.js` (33: the switch; the Live account's loss limits off while it trades), `routes_check.py` (`/api/side`).
+- The fake Fyers' order ids are unique across runs, as Fyers' are (a restarted mock reused ids the app had seen).
+- The rest of the kit on fresh data, all passing except `chain_lists_flow.js`'s expiry checks (2): they fail the same way
+  on v0.32.0 today, as the test contract list (saved 30 Oct) has few expiries left.
+
 ## v0.32.0 — 5 Nov 2026 — LiveTrader 1.24: RR lock, per-trade trailing, tool gap
 
 Added
