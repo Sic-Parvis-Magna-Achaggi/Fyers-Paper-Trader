@@ -80,7 +80,8 @@ def hm_minus(hm: str, minutes: float) -> str:
     h, m = int(hm[:2]), int(hm[3:])
     t = max(0, h * 60 + m - int(minutes))
     return f"{t // 60:02d}:{t % 60:02d}"
-DEFAULT_TICKET = {"mode": "pct", "risk_pct": 1.0, "risk_amt": 250.0, "lots": 1, "product": "INTRADAY", "tp_r": 2.0}
+DEFAULT_TICKET = {"mode": "pct", "risk_pct": 1.0, "risk_amt": 250.0, "lots": 1, "product": "INTRADAY", "tp_r": 2.0,
+                  "rr_lock": False}   # rr_lock: the tool keeps its net RR (tp_r) when the SL or the TP is moved (LiveTrader 1.24)
 DEFAULT_TRAIL = {"be_on": False, "be_r": 1.0, "sl_on": False, "sl_r": 1.0}
 
 
@@ -352,7 +353,13 @@ class Paper:
     def plan(self, req: dict, place=False) -> dict:
         """Work out an order from the ticket: lots, net risk, net reward, charges, margin, and the guards' verdict.
         req: s, side (1/-1), type (market/limit/stop), price, sl, tp, tp_r, basis (self/underlying),
-             mode (pct/amt/lots), risk_pct, risk_amt, lots, product"""
+             mode (pct/amt/lots), risk_pct, risk_amt, lots, product
+             lock_tp: the RR lock (LiveTrader 1.24): the target was moved to this price, so the stop is worked out
+             (with tp_r) to keep that net RR at the lots it sizes to; the plan then has that sl and its tp from tp_r"""
+        lock_note = None
+        if req.get("lock_tp") not in (None, "", 0) and not req.get("_inner"):
+            sl_l, lock_note = self._lock_sl(req)
+            req = {**req, "sl": sl_l, "lock_tp": None}
         self.roll_day()
         R = self.rules
         row0 = self.row(req["s"])
@@ -530,7 +537,58 @@ class Paper:
         # guards
         if not out.get("blocked"):
             out["blocked"] = self.guard_new(out)
+        if lock_note:
+            out["lock_note"] = lock_note
+            out["notes"].append(lock_note)
         return out
+
+    def _lock_sl(self, req: dict) -> tuple:
+        """The stop that gives net reward : net risk = tp_r with the target at lock_tp (LiveTrader's LockSL, but with every
+        Indian charge and this app's sizing). Moving the stop changes the lots, so it's searched: the net RR falls as the
+        stop widens (more risk, fewer lots over the same flat charges). Returns (stop, note): the note says when your rules
+        (risk %, risk cap, margin) stop the stop going wider, so the target can't stay where it was put."""
+        rr = float(req.get("tp_r") or 0)
+        if rr <= 0:
+            raise Refused("set the RR first (Target R)")
+        tp = float(req["lock_tp"])
+        base = {k: v for k, v in req.items() if k not in ("lock_tp", "tp_r", "sl", "tp")}
+        base.update(_inner=True, tp=tp)
+        p0 = self.plan({**base, "sl": None})
+        if p0["basis"] != "self":
+            raise Refused("the RR lock works on the contract's own price, not the underlying's")
+        entry, side, tick = p0["entry"], p0["side"], p0.get("tick") or 0.05
+        span = side * (tp - entry)
+        if span <= 0:
+            raise Refused("the target is on the wrong side of the entry")
+
+        def rr_at(d):
+            try:
+                p = self.plan({**base, "sl": entry - side * d})
+            except Refused:
+                return None
+            return p["reward"] / p["risk"] if p.get("risk") and p.get("reward") is not None else None
+
+        lo, hi = tick, span / rr * 4 + tick
+        r0 = rr_at(lo)
+        if r0 is None:                             # nothing to size (e.g. no margin figure): a plain price ratio
+            return charges.round_tick(entry - side * span / rr, tick), None
+        if r0 < rr:                                # even the closest stop can't give that RR: the charges are too big
+            return (charges.round_tick(entry - side * lo, tick),
+                    f"RR lock: the target is too close for {rr:g}R after charges, even with a 1-tick stop - "
+                    f"it stays at {rr:g}R from the closest stop")
+        for _ in range(40):                        # the widest stop that still gives at least that RR
+            mid = (lo + hi) / 2
+            r = rr_at(mid)
+            if r is not None and r >= rr:
+                lo = mid
+            else:
+                hi = mid
+        sl = charges.round_tick(entry - side * lo, tick, side)        # rounded towards the entry: the RR stays at least rr
+        note = None
+        if rr_at(lo + tick) is None and (rr_at(lo) or 0) > rr * 1.05:   # wider would size to 0 lots: the rules stop it here
+            note = (f"RR lock: the stop can't go wider than {sl:g} - 1 lot would then risk more than your rules allow, "
+                    f"so the target stays at {rr:g}R from this stop")
+        return sl, note
 
     def _jn(self, kind, obj):
         if self.journal_hook:
@@ -1180,23 +1238,35 @@ class Paper:
             p["own_stop"] = False
 
     def set_pos_trail(self, pid, new: dict):
-        """Trailing for one trade (the controls on its entry line)."""
+        """Trailing for one trade (the controls on its entry line), as in LiveTrader 1.24: typing a trade's R switches that
+        trail on; from then on the trade has its own setting (own_be / own_sl) until the panel's is changed."""
         p = self.find_pos(pid)
+        new = dict(new)
+        if "be_r" in new and "be_on" not in new:
+            new["be_on"] = True
+        if "sl_r" in new and "sl_on" not in new:
+            new["sl_on"] = True
         tr = dict(p.get("tr") or self.trail)
         self._apply_trail(tr, new)
+        if "be_on" in new or "be_r" in new:
+            tr["own_be"] = True
+        if "sl_on" in new or "sl_r" in new:
+            tr["own_sl"] = True
         p["tr"] = tr
         self._rearm(p, new)
         self.changed(f"{self.short(p['s'])}: Trail BE {'ON' if tr['be_on'] else 'off'} {tr['be_r']:g}R, "
                      f"Trail SL {'ON' if tr['sl_on'] else 'off'} {tr['sl_r']:g}R")
 
     def set_trail(self, new: dict):
-        """Defaults for new trades; a change here is also applied to every open trade (as in LiveTrader)."""
+        """Defaults for new trades. As in LiveTrader 1.24, changing the panel's Trail BE (switch or R) makes every open trade
+        follow the panel's Trail BE again (switch and R, dropping what was set on its own line); the same for Trail SL."""
         self._apply_trail(self.trail, new)
+        grp = {"be": "be_on" in new or "be_r" in new, "sl": "sl_on" in new or "sl_r" in new}
         for p in self.positions:
             tr = dict(p.get("tr") or self.trail)
-            for k in new:
-                if k in ("be_on", "sl_on", "be_r", "sl_r"):
-                    tr[k] = self.trail[k]
+            for g in ("be", "sl"):
+                if grp[g]:
+                    tr[g + "_on"], tr[g + "_r"], tr["own_" + g] = self.trail[g + "_on"], self.trail[g + "_r"], False
             p["tr"] = tr
             self._rearm(p, new)
         self.changed(f"Trail BE {'ON' if self.trail['be_on'] else 'off'} {self.trail['be_r']:g}R, "

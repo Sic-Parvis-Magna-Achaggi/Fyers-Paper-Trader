@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 5 Nov 2026, version **0.31.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 5 Nov 2026, version **0.32.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -92,6 +92,44 @@ the daytime. (Roadmap follow-up.)
 automatic pictures off itself (other suites turn them on).
 `indicator_settings_flow.js`'s "at the start of a contract's history it stops asking" failed once in 2 runs on 1 Nov
 (v0.22.0; passed on re-run, 37/37). Same advice.
+
+## LiveTrader 1.24: RR lock, per-trade trailing, tool gap (v0.32.0, roadmap 15)
+
+The EA in this project is now 1.24 (from 1.21). Its three changes, as built here:
+- **RR lock:**
+  - **Engine** (`helper/paper.py`): `Paper.plan(req)` takes `lock_tp`. `_lock_sl(req)` bisects the stop distance for the
+    widest stop whose net reward / net risk (from `plan()` itself with that stop and `tp=lock_tp`, so lots, cuts and
+    every charge count) is >= `tp_r`, rounded towards the entry. It returns `(sl, note)`, and the plan then runs with
+    that stop and `tp_r` (so its tp lands at the dragged price within a tick or two).
+  - **The notes** (`plan.lock_note`, also in `notes`): the rules stop the stop going wider (the next tick wider sizes to 0
+    lots), or the target is too close for that RR even with a 1-tick stop (then the closest stop).
+  - **Saved:** `rr_lock` is in `DEFAULT_TICKET`.
+- **Page** (`web/paper.js`):
+  - **State:** `P.T.rr_lock` and `P.T.lockTp` (the target being moved).
+  - **Moving the target:** `lockOn()` (lock on and basis self); `lockTo(tp)` sets tpMode r, lockTp, and a provisional
+    slDist from `rrK()` (the last plan's target / stop price ratio). `tpNow()` returns lockTp while set.
+  - **The exact answer:** `ticketBody()` sends `lock_tp`. `preview()` takes the answer's `sl` as slDist, clears lockTp
+    and toasts the note.
+  - **R mode now scales with the stop:** in r mode, `tpNow()` is `slDist * rrK()` (it was a fixed distance from the last
+    plan), so the target follows a stop being dragged, locked or not.
+  - **Controls:** the TP drag, `#tkTp` typing (and so the phone's ± target) go through `lockTo` when locked. `setRR`,
+    `rrLockToggle`, `renderLock` (`#cLock`, `#tkLock`, `#mtLock`, `#cRR`), `lockSvg`.
+  - **Markup:** `#ctools` is a 2-column grid with `.ctrr` (padlock + RR box) under BUY / SELL.
+- **Per-trade trailing:**
+  - **Engine:** `set_pos_trail` turns a lone `be_r` / `sl_r` into on, and marks `tr.own_be` / `tr.own_sl`. `set_trail`
+    copies the panel's switch + R for each touched group (be / sl) to every open trade and clears its own flag.
+  - **Page:** `trailTips(p)` (paper.js) words the BE-T / TRAIL tooltips and `beDone` (be_on and be_done or at_be), used
+    by the entry-line bar, the Trades page (pages.js) and the phone's position sheet (mobile.js, plus the
+    `[data-f="trwho"]` line).
+- **Tool gap:** `CHART_DEFAULTS.toolGap` (30) and its Chart settings row. `drawZones()`: the tool's x is the live
+  candle's x + barSpacing / 2 + toolGap, still clamped to the pane's width - 170.
+- **Not changed (owner's choice, roadmap 15):** unlocked, the target stays in R mode until dragged (LiveTrader 1.24
+  unlocked keeps its target price).
+- **Tests:**
+  - `tests/trail_rr_test.py` (engine) and `tests/rr_lock_flow.js` (browser). The browser test drags the lines with a real
+    mouse aimed at a price on every step, because the price scale rescales while a line moves.
+  - It uses a limit entry for the locked drags (a market tool moves with every price), and a fresh account, because
+    losing test trades on Main trip the journal's 2% lockout for later tests.
 
 ## Servers: the owner's and new ones (v0.31.0, roadmap 14)
 
@@ -543,6 +581,8 @@ indicator option to add (not built).
 
 ## Next job
 
+0a. Roadmap 15 (v0.32.0): the owner tries the RR lock and the entry line's R boxes on real Fyers, and answers the
+   unlocked-target question in the roadmap.
 0. Roadmap 14 (v0.31.0): the friend's first real server set-up with `docs/New_Server_Guide.md`. Fix whatever it shows.
    On the owner's server, after the update: `cat /etc/fyers/server.conf` should show his address and 134.209.159.171.
 1. The owner's first real trade (Monday at the earliest): whitelist 134.209.159.171 (order permission), turn on

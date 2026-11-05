@@ -397,7 +397,14 @@ a.btnlink{border:1px solid var(--line);border-radius:6px;padding:6px 12px;color:
 #cfgPick input[type=checkbox]{width:16px;height:16px}
 #cfgPick input[type=range]{width:100%}
 /* on-chart buttons and the long/short tool */
-#ctools{position:absolute;left:8px;top:8px;z-index:6;display:flex;gap:4px}
+#ctools{position:absolute;left:8px;top:8px;z-index:6;display:grid;grid-template-columns:auto auto;gap:4px}
+#ctools .ctrr{grid-column:1/-1;display:grid;grid-template-columns:26px 1fr;gap:4px}
+#ctools .ctrr input{width:100%;min-width:0;padding:2px 4px;font-size:12px;font-family:var(--mono);text-align:center;height:24px;
+  background:color-mix(in srgb,var(--panel) 85%,transparent)}
+#ctools .ctrr input.on{color:#ffc107;border-color:#ffb300}
+button.lk{padding:0!important;display:grid;place-items:center;color:var(--muted)}
+button.lk.on{background:#ffb300!important;border-color:#ffb300!important;color:#212121!important}
+button.lk:disabled{opacity:.4}
 #ctools button{padding:3px 12px;font-size:12px;font-weight:600;letter-spacing:.04em;background:color-mix(in srgb,var(--panel) 85%,transparent)}
 #cBuy{color:var(--up);border-color:color-mix(in srgb,var(--up) 50%,var(--line))} #cSell{color:var(--down);border-color:color-mix(in srgb,var(--down) 50%,var(--line))}
 #cBuy.on{background:var(--up);color:#fff} #cSell.on{background:var(--down);color:#fff}
@@ -421,6 +428,7 @@ a.btnlink{border:1px solid var(--line);border-radius:6px;padding:6px 12px;color:
 #posbars button{padding:2px 7px;font-size:11px;font-weight:600;border-radius:4px;line-height:1.3}
 #posbars button.bx{background:var(--down);border-color:var(--down);color:#fff;padding:2px 8px}
 #posbars button.tg.on{background:var(--accent);border-color:var(--accent);color:#fff}
+#posbars button.tg.on.done,table.tbl button.tg.on.done{background:#326eaa;border-color:#326eaa;color:#fff}
 #posbars .ta{font-family:var(--mono);font-size:11px;padding:0 4px}
 #posbars input.rr{width:38px;padding:2px 4px;font-size:11px;font-family:var(--mono);text-align:center;border-radius:4px}
 @media (max-width:760px){ #posbars .pbar{font-size:11px} #posbars input.rr{width:32px} }
@@ -488,6 +496,7 @@ body.nopanel:not(.chartfs) main{grid-template-columns:260px 1fr}
 #bBuy.on{background:var(--up);border-color:var(--up);color:#fff} #bSell.on{background:var(--down);border-color:var(--down);color:#fff}
 .f2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .inl{display:grid;grid-template-columns:1fr 64px;gap:4px}
+.inl.inl3{grid-template-columns:1fr 52px 30px}
 #tkPv{margin-top:12px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px;background:var(--panel2)}
 #tkPv > div,.breakdown > div{display:flex;justify-content:space-between;gap:10px;padding:2px 0}
 #tkPv > div > span:first-child,.breakdown > div > span:first-child{color:var(--muted)}
@@ -712,7 +721,8 @@ body:not(.is-admin) .admin-only{display:none!important}
         <div class="btns" style="margin-top:10px"><button id="cfgReset">Reset to defaults</button></div>
       </div>
       <div id="chart"><div id="chartMsg">Pick a contract from Find or Options.</div>
-        <div id="ctools"><button id="cBuy" title="Long tool">BUY</button><button id="cSell" title="Short tool">SELL</button></div>
+        <div id="ctools"><button id="cBuy" title="Long tool">BUY</button><button id="cSell" title="Short tool">SELL</button>
+          <div class="ctrr"><button id="cLock" class="lk" title="RR lock"></button><input id="cRR" value="RR 2.0" autocomplete="off" spellcheck="false" aria-label="Reward : risk"></div></div>
         <div id="tool" class="hide"></div>
         <div id="posbars"></div>
         <div id="ctimer" class="hide" title="Time left in this candle"></div>
@@ -753,7 +763,7 @@ body:not(.is-admin) .admin-only{display:none!important}
           <div class="seg" id="tkBasis" style="margin-top:0"><button data-v="self">This option</button><button data-v="underlying">The future</button></div>
           <div class="help" id="tkBasisNote"></div></div>
         <div class="f2"><div><label>Stop loss</label><input id="tkSl" class="mono" inputmode="decimal"></div>
-          <div><label>Target · or R</label><div class="inl"><input id="tkTp" class="mono" inputmode="decimal"><input id="tkTpR" class="mono" placeholder="R" inputmode="decimal"></div></div></div>
+          <div><label>Target · or R</label><div class="inl inl3"><input id="tkTp" class="mono" inputmode="decimal"><input id="tkTpR" class="mono" placeholder="R" inputmode="decimal"><button id="tkLock" class="lk" type="button" title="RR lock"></button></div></div></div>
         <label>Size</label>
         <div class="seg" id="tkMode" style="margin-top:0"><button data-v="pct">Risk %</button><button data-v="amt">Risk ₹</button><button data-v="lots">Lots</button></div>
         <div class="inl" style="grid-template-columns:90px 1fr;margin-top:6px;align-items:center"><input id="tkSize" class="mono" inputmode="decimal"><span class="help" id="tkSizeUnit"></span></div>
@@ -1028,7 +1038,7 @@ const CHART_DEFAULTS = {up:"#22a06b", down:"#e2483d", bg:"", grid:true,
   bidC:"#a3abb8", bidS:0, bidOn:true, askC:"#e2483d", askS:0, askOn:true, lastC:"#e0b341", lastS:2, lastOn:true,
   entryC:"", entryS:2, slC:"#e2483d", slS:0, tpC:"#22a06b", tpS:0, beC:"#4f8cff", beS:1, orderC:"#4f8cff", orderS:2,
   toolC:"#4f8cff", toolS:0, lossZ:"#e2483d", profitZ:"#22a06b", zoneA:20, volOn:true, timerOn:true, hideNoTrade:true, dataCheck:true,
-  btnCorner:"tl", btnX:8, btnY:8, lineC:"#4f8cff"};
+  btnCorner:"tl", btnX:8, btnY:8, lineC:"#4f8cff", toolGap:30};
 function chartCfg(){ return {...CHART_DEFAULTS, ...(prefGet("chart", {}) || {})}; }
 function cfgColor(k){ const c = chartCfg()[k]; return c || cssVar(k === "entryC" ? "--text" : "--bg"); }
 function buildChart(){
@@ -1682,6 +1692,8 @@ function renderCfg(){
     <div class="cr"><span>Loss zone</span><input type="color" data-k="lossZ" value="${C.lossZ}"><span></span><span></span></div>
     <div class="cr"><span>Profit zone</span><input type="color" data-k="profitZ" value="${C.profitZ}"><span></span><span></span></div>
     <div class="cr" style="grid-template-columns:1fr 150px"><span>Zone strength</span><input type="range" min="5" max="50" data-k="zoneA" data-num="1" value="${C.zoneA}"></div>
+    <div class="cr" style="grid-template-columns:1fr 70px"><span title="Space between the live candle's right edge and the new-trade tool, as LiveTrader's Tool gap">Tool gap after the live candle (px)</span>
+      <input type="number" data-k="toolGap" data-num="1" min="0" max="400" value="${C.toolGap}" style="padding:2px 4px"></div>
     <div class="sec">Chart</div>
     <div class="cr"><span>Background</span><input type="color" data-k="bg" value="${hex("bg")}"><span class="muted" style="font-size:11px">${C.bg ? "" : "theme"}</span><span></span></div>
     <div class="cr"><span>Grid lines</span><span></span><span></span><input type="checkbox" data-k="grid" ${C.grid ? "checked" : ""}></div>

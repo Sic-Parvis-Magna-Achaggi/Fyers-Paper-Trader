@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 5 Nov 2026 (v0.31.0). This is the one task list for the project.
+Updated 5 Nov 2026 (v0.32.0). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -232,6 +232,17 @@ v0.24.0 / v0.24.1); Telegram (3, done in v0.25.0) and the journal (4) next.
     - [x] The Live dialog names the server's own outgoing IP, not the owner's 134.209.159.171. *(v0.31.0)*
     - [ ] The friend's first real boot (untested on a real droplet until he does it).
 
+15. [x] **LiveTrader 1.24's changes** (owner, 5 Nov 2026: "I introduced some new changes to the livetrader. Can you check
+    and update the fyers paper trader?"; the EA went from 1.21 to 1.24): shipped in **v0.32.0**.
+    - [x] **RR box and lock** under BUY / SELL: typing an RR moves the tool's target; locked, moving the stop moves the
+      target and moving the target moves the stop. Net of all charges at the sized lots (worked out on the server). Also
+      beside the ticket's R and on the phone. *(v0.32.0)*
+    - [x] **Per-trade trailing** on the entry line (already in the app): typing an R switches it on; the panel's Trail BE /
+      Trail SL takes every trade back (switch and R); own / as-the-panel shown; BE-T "done". *(v0.32.0)*
+    - [x] **Tool gap** (Chart settings, 30 px after the live candle's right edge). *(v0.32.0)*
+    - [ ] Owner's choice: unlocked, should the target stay where it is when the stop moves (LiveTrader), or keep following
+      the R until it's dragged (the app today)?
+
 ## Rules that shape live trading and other users (checked 30 Oct 2026)
 
 Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers' rules in force from 1 Apr 2026.
@@ -272,6 +283,7 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Done
 
+- [x] **v0.32.0** (5 Nov): LiveTrader 1.24's changes (item 15): the RR box and lock under BUY / SELL (also the ticket and the phone; the stop for a moved target worked out net of all charges at the sized lots, with a message when the rules or the charges stop it); per-trade trailing like 1.24 (a typed R switches it on, the panel takes the trades back, own / as-the-panel, BE-T done); the tool gap.
 - [x] **v0.31.0** (5 Nov): a second server for a friend, on any Linux server (item 14): `server/startup.sh` sets it all up and finishes the install once its deploy key is on GitHub; `sudo fyers-status`; any repo (owner's, fork, own copy) and an optional `stable` branch; each server's own address / outgoing IP / branch in `/etc/fyers/server.conf`; the Live dialog names the server's own IP; `docs/New_Server_Guide.md`.
 - [x] **v0.30.3** (3 Nov): an indicator's buttons (👁 ⚙ { } ✕) come right after its name and its values wrap within the chart, so a script with many values (MultiPivot) never pushes them off the screen (asked 3 Nov).
 - [x] **v0.30.2** (3 Nov): before the open, no false "candles don't match" warning (Fyers' live figures are already today's pre-open ones; the check now works out their day from Fyers' previous close; a day missing from the candles is flagged as **Latest day**) and no extra pre-open candle on intraday charts (reported 3 Nov, NIFTY 50 at 09:14).

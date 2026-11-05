@@ -100,14 +100,14 @@ function pgPositions(){
   const tb = pgq("#pgPos"); if(!tb) return;
   const ps = P.snap.positions;
   pgq("#pgPosN").textContent = ps.length ? `(${ps.length})` : "";
-  const key = ps.map(p => [p.id, p.sl, p.tp, p.floor, p.qty, p.trail, p.be_done, JSON.stringify(p.tr)].join("|")).join(";");
+  const key = ps.map(p => [p.id, p.sl, p.tp, p.floor, p.qty, p.trail, p.be_done, p.at_be, JSON.stringify(p.tr)].join("|")).join(";");
   if(key !== PG.posKey){
     PG.posKey = key;
     if(!ps.length){ tb.innerHTML = `<tr><td class="empty">No open positions.</td></tr>`; return; }
     tb.innerHTML = `<thead><tr><th>Contract</th><th>Side</th><th class="r">Lots</th><th>Product</th><th class="r">Entry</th><th class="r">LTP</th>
       <th class="r">SL</th><th class="r">at SL</th><th class="r">TP</th><th class="r">at TP</th><th class="r">BE + costs</th>
       <th class="r">Net P&L</th><th class="r">R</th><th class="r">Charges paid</th><th>Opened</th><th>Trail BE</th><th>Trail SL</th><th></th></tr></thead><tbody>` +
-      ps.map(p => { const tr = p.tr || {}, tk = p.tick;
+      ps.map(p => { const tr = p.tr || {}, tk = p.tick, ts = trailTips(p);
         return `<tr data-id="${p.id}">
         <td><a href="#" class="psym mono" data-open="${esc(p.basis === "underlying" ? p.ref : p.s)}">${esc(short(p.s))}</a>${p.basis === "underlying" ? `<div class="muted sm">stops on ${esc(short(p.ref))}</div>` : ""}</td>
         <td><b class="${p.side > 0 ? "up" : "down"}">${p.side > 0 ? "LONG" : "SHORT"}</b></td>
@@ -116,8 +116,8 @@ function pgPositions(){
         <td class="r mono ed" data-e="tp" title="Click to change">${p.tp != null ? fmt(p.tp, tk) : "add"}</td><td class="r mono" data-f="attp"></td>
         <td class="r mono" data-f="be"></td><td class="r mono" data-f="net"></td><td class="r mono" data-f="r"></td><td class="r mono" data-f="paid"></td>
         <td class="mono sm">${istTime(p.opened)}<div class="muted" data-f="age"></div></td>
-        <td class="nw"><button class="tg ${tr.be_on ? "on" : ""}" data-t="be_on">BE-T</button><input class="rr" data-t="be_r" value="${tr.be_r ?? 1}"></td>
-        <td class="nw"><button class="tg ${tr.sl_on ? "on" : ""}" data-t="sl_on">TRAIL</button><input class="rr" data-t="sl_r" value="${tr.sl_r ?? 1}"></td>
+        <td class="nw"><button class="tg ${tr.be_on ? "on" : ""} ${ts.beDone ? "done" : ""}" data-t="be_on" title="${esc(ts.be)}">BE-T</button><input class="rr" data-t="be_r" value="${tr.be_r ?? 1}" title="${esc(ts.beR)}"></td>
+        <td class="nw"><button class="tg ${tr.sl_on ? "on" : ""}" data-t="sl_on" title="${esc(ts.sl)}">TRAIL</button><input class="rr" data-t="sl_r" value="${tr.sl_r ?? 1}" title="${esc(ts.slR)}"></td>
         <td class="nw"><button class="sm" data-a="be" title="Stop to break-even + costs now">BE</button> <button class="sm x" data-a="close" title="Close at market">✕</button></td></tr>`; }).join("") + `</tbody>`;
     tb.querySelectorAll("tr[data-id]").forEach(tr => {
       const id = tr.dataset.id, pos = () => P.snap.positions.find(x => x.id === id);

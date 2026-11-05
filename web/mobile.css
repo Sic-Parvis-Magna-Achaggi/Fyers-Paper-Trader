@@ -144,6 +144,8 @@ body.mob input,body.mob select{font-size:16px}          /* no zoom-in on focus (
 .step button{min-height:44px;font-size:20px;padding:0}
 .step input{text-align:center;font-family:var(--mono);min-height:44px}
 .step.r{grid-template-columns:44px 1fr 44px 64px}
+.step.r.lkr{grid-template-columns:44px 1fr 44px 56px 44px}
+.mtog button.on.done{background:#326eaa;border-color:#326eaa;color:#fff}
 .mpv{background:var(--panel2);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:13px}
 .mpv div{display:flex;justify-content:space-between;gap:10px;padding:2px 0}
 .mpv div span:first-child{color:var(--muted)}
@@ -190,6 +192,7 @@ body.mob.chartfs[data-ms="chart"] #mChips{display:flex;bottom:calc(var(--mb) + v
   .mrow > span{font-size:12px}
   .step{grid-template-columns:38px 1fr 38px;gap:3px}
   .step.r{grid-template-columns:36px 1fr 36px 44px}
+  .step.r.lkr{grid-template-columns:34px 1fr 34px 42px 36px}
   .mseg button{font-size:12px;padding:4px 2px;white-space:nowrap}
   .sides2 button{font-size:13px}
   #mSize{min-width:72px}

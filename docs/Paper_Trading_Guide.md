@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.30.3)
+# Paper and live trading: how it works (v0.32.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -229,9 +229,9 @@ Phones get their own layout, like MT5's app (a desktop browser never does). **Mo
 - **Tabs at the bottom:** Quotes (watchlist, Find, Options) · Chart · Trade · History · More. A number on Trade counts your open trades and orders.
 - **Top bar:** the account and its equity (tap to switch account), the contract and its price (tap for Quotes), and a dot for the price feed (green live, amber polling). A Fyers login reminder shows under it when needed.
 - **Chart tab:** the chart takes the whole screen. At the bottom: **SELL** (the bid) · your default size · **BUY** (the ask). Tap the middle to change the default size (Risk %, Risk ₹ or Lots) and product. Open positions show as chips above the bar with their net P&L; tap one to manage it.
-- **Placing a trade:** tap SELL or BUY. The order sheet slides up and the long / short tool appears on the chart. Choose Market, Limit or Stop; set the stop loss and target with − / + (one tick each, hold to repeat) or type them; the box after the target is R. Pick the size and product. The preview shows the lots, net ₹ at the stop and the target, BE + costs, charges in and out and the margin; if the order can't go (a rule, the margin, the intraday cut-off) the reason is right above PLACE. ✕ cancels.
+- **Placing a trade:** tap SELL or BUY. The order sheet slides up and the long / short tool appears on the chart. Choose Market, Limit or Stop; set the stop loss and target with − / + (one tick each, hold to repeat) or type them; the box after the target is R, and the padlock after it is the **RR lock** (see the long / short tool below). Pick the size and product. The preview shows the lots, net ₹ at the stop and the target, BE + costs, charges in and out and the margin; if the order can't go (a rule, the margin, the intraday cut-off) the reason is right above PLACE. ✕ cancels.
 - **The bubble:** to see the whole chart while you set the trade up, touch the chart (or tap ⌄ in the sheet's header, tap the grip, or swipe the header down). The sheet shrinks to a bubble in the SELL / BUY bar's place, so nothing covers the chart. It shows the side, lots, order type and product, and the net ₹ at the stop and the target with R (whole rupees, after all charges), or why the order can't go. Drag the SL and TP lines and the bubble follows. **PLACE** in the bubble places the trade, **✕** cancels it, and tapping the bubble brings the full sheet back. To have SELL / BUY go straight to the bubble, tap the middle of the bar → **SELL / BUY opens: A bubble** (saved on the server).
-- **A position** (tap its chip or its card on Trade): net P&L after all charges, R, LTP, BE + costs, charges paid. Move the SL and target with − / + and press **Save** (Undo puts them back). **BE-T** and **TRAIL** for that trade with their R, **BE now**, **Chart**, and **Close at market** (tap twice).
+- **A position** (tap its chip or its card on Trade): net P&L after all charges, R, LTP, BE + costs, charges paid. Move the SL and target with − / + and press **Save** (Undo puts them back). **BE-T** and **TRAIL** for that trade with their R (typing an R switches it on; **done** once Trail BE has put the stop at break-even; a line under them says whether they're set on this trade or follow the panel), **BE now**, **Chart**, and **Close at market** (tap twice).
 - **A pending order** (Trade tab): move its price, SL and target, Save; or Cancel order.
 - **Trade tab:** the account figures, every position and order, BE all, Close all (tap twice), Cancel all, and the trailing defaults for new trades.
 - **History tab:** Today, 7 days, 30 days or All, with net P&L, win rate, profit factor, average R and charges. Tap a trade for every charge. The full History page (equity curve, filters) is linked at the bottom.
@@ -241,10 +241,30 @@ Phones get their own layout, like MT5's app (a desktop browser never does). **Mo
 
 ## The long / short tool on the chart (like the MT5 EA)
 
-- Press **BUY** or **SELL** at the chart's top-left corner. The tool appears on the chart:
+- Press **BUY** or **SELL** at the chart's top-left corner. The tool appears on the chart, starting a little after the live
+  candle (**Tool gap** in Chart settings, 30 px by default, as in LiveTrader 1.24; with no room on the right, it sits
+  further in so its figures stay readable):
   - a red zone down to the stop and a green zone up to the target, each with its **net ₹**;
   - the R multiple;
   - a **PLACE** box on the entry line.
+- **The RR box and padlock** under BUY / SELL (LiveTrader 1.24):
+  - **RR box:** the tool's reward : risk, net of every charge (what its target tag shows). Type a number (0.1 to 50) and
+    press Enter: the tool's target goes to that RR. It's the same figure as the ticket's R box and the phone's.
+  - **Padlock (RR lock):** amber when locked. Locked, the tool keeps that RR whichever line you move:
+    - **move the stop:** the target follows;
+    - **move the target** (or type a target in the ticket): the stop follows, to the stop that gives that net RR at the
+      lots it then sizes to (a wider stop means fewer lots, and the charges then weigh more, so it's worked out on the
+      server, not by a plain price ratio);
+    - **move the entry:** both follow.
+  - **Limits of the lock:**
+    - **The rules can stop it:** if your rules (risk %, risk cap, margin) stop the stop going wider, it stops there, and the
+      target goes back to the RR from that stop. A message says so.
+    - **So can the charges:** if the target is too close for that RR even with a 1-tick stop, the tool uses the closest
+      stop and the target goes back to the RR from it.
+  - **When it works:** the lock works on the contract's own price (not when an option's stops follow its future). The RR
+    and the lock are saved with your ticket defaults.
+  - **Unlocked:** as before. The target stays at your R as the stop moves until you drag the target yourself; from then on,
+    moving the stop leaves the target where it is. (LiveTrader unlocked leaves the target where it is from the start.)
 - **The entry follows the live price** (a market order) until you drag it:
   - drag a buy's entry **below** the market and it becomes a **limit**; drag it **above** and it becomes a **stop** (the other way round for a sell);
   - **MKT** on the PLACE box snaps it back to market.
@@ -257,18 +277,27 @@ Phones get their own layout, like MT5's app (a desktop browser never does). **Mo
   - side, lots, entry price, live net P&L and R;
   - **✕** to close at market;
   - **BE** to move the stop to break-even + costs now;
-  - **BE-T** with its R box: trail to BE once the trade reaches that R;
+  - **BE-T** with its R box: trail to BE once the trade reaches that R. It turns blue-grey (**done**) once the stop is at
+    break-even;
   - **TRAIL** with its R box: trail the stop that many R behind the best price.
+  - **Typing an R in either box and pressing Enter switches that trail on** for this trade (LiveTrader 1.24).
 
   When the stop or target is only a few ticks from the entry (a BE stop, say), the bar slides just off that line so its label stays readable; the **Entry** tag on the price scale marks the exact entry.
 
-  These trailing settings belong to that trade. The panel's Trail row sets the defaults for new trades, and changing it there also changes every open trade.
+  These trailing settings belong to that trade:
+  - **A new trade follows the panel.** The panel's Trail row is the default for new trades.
+  - **Set on the trade's line** (or on the Trades page, or the phone's position sheet), the trade has its own setting.
+    Pointing at BE-T or TRAIL says which: "set on this trade" or "as the panel".
+  - **Changing the panel's Trail BE** (its switch or its R) makes every open trade follow the panel's Trail BE again, with
+    the switch and the R together. The same goes for Trail SL. The other trail keeps each trade's own setting (as in
+    LiveTrader 1.24).
 - **Pending orders** have a bar with their type and lots, and **✕** to cancel.
 - **Bid and ask** are solid lines, as in MT5: grey for bid, red for ask, with their prices on the scale. A dashed **Last** line marks the last traded price, which is where the live candle closes. Candles are built from trades, so in a thin contract the candle can sit away from bid / ask until the next trade. Stops, targets and fills always use bid / ask.
 - **Chart settings (⚙):**
   - colour and style for every line: bid, ask, last, entry, SL, TP, BE, order and new-trade entry;
   - show or hide bid, ask and last (they show the pre-open price too; intraday candles start at the session's open, so the pre-open makes no candle of its own);
   - candle colours, zone colours and strength, background and grid;
+  - **Tool gap after the live candle (px):** the space between the live candle's right edge and the new-trade tool (30 by default);
   - **Check candles against live prices** (on by default): the chart's candles are Fyers' history; the app compares them with Fyers' live figures for the same day - the day's open, high, low and volume, and after the close the last price. If a price differs by more than 0.5% (at least 10 ticks), or the volume by more than 5x, an amber note shows at the bottom of the chart: tap it to see candles vs Fyers live and **Load again**. Your trades aren't affected (fills, stops and P&L use the live prices), but indicators and Pine scripts read the candles, so treat them with care until it clears. Before the open (NSE's pre-open, 09:00-09:15) Fyers' live figures are already today's, so nothing is compared until today's candles arrive; if a later day has traded but isn't in the candles, the note says **Latest day** (the history is missing a day).
   - Charts always show the contract you opened, never Fyers' "continuous" series (which shows, on each date, whichever contract was the near month then, so around an expiry you'd see the expiring contract under the new one's name). The app asks Fyers for continuous data **off** on every request (v0.30.1: Fyers' API, like Fyers' own charts, gives the continuous series unless it's turned off; up to v0.30.0 the app didn't say, so GOLDPETAL NOV's 30 Oct showed the expiring OCT contract's last day: 319 lots, then 14,201). To compare with Fyers' own chart, turn off **Continuous Futures** there (Fyers Web: profile › Settings › Charts; it's on by default). If Fyers corrects a day later, the app picks the correction up within a week of that day.
   - **Hide no-trade candles** (on by default): Fyers' history can carry a closing price on empty candles where no one traded (seen on GOLDPETAL's 30 Oct: candles at 14,201 with no volume until 23:55; that day was the continuous series, fixed in v0.30.1, so the option is now a safeguard). No one traded at that price, so these candles are left off the chart, P&F, indicators and Pine scripts. Only candles with **no volume at a price away from the last trade** are hidden; quiet candles at the last price and indices (which have no volume) stay. Untick it to see Fyers' candles exactly as sent.
@@ -546,6 +575,9 @@ An order is refused if, with every stop on the account hit, equity would fall be
 
 - **Trail BE ON at X R:** once a trade has been X R in profit, its stop moves to BE + costs, once.
 - **Trail SL ON at X R:** after X R, the stop follows the best price X R behind. It never goes below BE + costs and never moves backwards.
+- **Per trade:** each trade can have its own Trail BE and Trail SL, set on its entry line, on the Trades page or on the
+  phone; typing an R there switches it on. The panel's settings apply to new trades. Changing one of the panel's trails
+  takes every open trade back to the panel for that trail.
 
 Moving a stop yourself makes it your stop again: it drops out of Trail SL until you toggle trailing.
 

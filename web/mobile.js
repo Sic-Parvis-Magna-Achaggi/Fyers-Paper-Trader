@@ -270,7 +270,7 @@ function mTicketBuild(){
       ${typ === "market" ? "" : `<div class="mrow"><span>${typ === "limit" ? "Limit" : "Stop"} price</span>${mStep("mtPrice", T.price)}</div>`}
       ${opt ? `<div class="mrow"><span>SL / target follow</span><div class="mseg" data-g="basis" style="margin:0"><button data-v="self" class="${T.basis === "self" ? "on" : ""}">This option</button><button data-v="underlying" class="${T.basis === "underlying" ? "on" : ""}">The future</button></div></div>` : ""}
       <div class="mrow"><span>Stop loss<i class="down" data-f="atsl"></i></span>${mStep("mtSl", "", T.basis === "underlying" ? "future price" : "price")}</div>
-      <div class="mrow"><span>Target<i class="up" data-f="attp"></i></span><div class="step r"><button data-st="mtTp" data-d="-1">−</button><input id="mtTp" class="mono" inputmode="decimal" autocomplete="off" placeholder="${T.basis === "underlying" ? "future price" : "price"}"><button data-st="mtTp" data-d="1">+</button><input id="mtTpR" class="mono" inputmode="decimal" placeholder="R" title="Target as a multiple of the risk" ${T.basis === "underlying" ? "disabled" : ""}></div></div>
+      <div class="mrow"><span>Target<i class="up" data-f="attp"></i></span><div class="step r lkr"><button data-st="mtTp" data-d="-1">−</button><input id="mtTp" class="mono" inputmode="decimal" autocomplete="off" placeholder="${T.basis === "underlying" ? "future price" : "price"}"><button data-st="mtTp" data-d="1">+</button><input id="mtTpR" class="mono" inputmode="decimal" placeholder="R" title="Target as a multiple of the risk" ${T.basis === "underlying" ? "disabled" : ""}><button id="mtLock" class="lk" type="button" title="RR lock"></button></div></div>
       <div class="mrow"><span>Size</span><div class="mseg" data-g="mode" style="margin:0">${[["pct", "Risk %"], ["amt", "Risk ₹"], ["lots", "Lots"]].map(([v, n]) => `<button data-v="${v}" class="${T.mode === v ? "on" : ""}">${n}</button>`).join("")}</div></div>
       <div class="mrow"><span data-f="unit"></span>${mStep("mtSize", "")}</div>
       <div class="mrow"><span>Product</span><div class="mseg" data-g="prod" style="margin:0">${prods.map(([v, n]) => `<button data-v="${v}">${esc(n.replace(/ \(.*\)/, ""))}</button>`).join("")}</div></div>
@@ -288,6 +288,7 @@ function mTicketBuild(){
   box.querySelectorAll('[data-g="prod"] button').forEach(b => b.onclick = () => { mDesk("#tkProd", b.dataset.v); mTicketFill(); mSymBar(); });
   const chg = (id, desk) => { const el = mq(id); if(!el) return; el.addEventListener("change", () => mDesk(desk, el.value)); el.addEventListener("keydown", e => { if(e.key === "Enter"){ el.blur(); } }); };
   chg("#mtPrice", "#tkPrice"); chg("#mtSl", "#tkSl"); chg("#mtTp", "#tkTp"); chg("#mtTpR", "#tkTpR"); chg("#mtSize", "#tkSize");
+  const lk = mq("#mtLock"); if(lk){ lk.onclick = () => rrLockToggle(); renderLock(); }
   mWireSteps(box, (id, d) => {
     const T = P.T;
     if(id === "mtPrice"){ const tk = tickOf(T.s), b = T.price ?? ltpOf(T.s); if(b == null) return; T.follow = false; T.price = roundTick(b + d * tk, tk); renderTicket(); toolRedraw(); preview(); return; }
@@ -419,6 +420,7 @@ function mPosSheet(id){
     <div class="mh">Trailing for this trade</div>
     <div class="mtog"><span>BE-T: stop to BE + costs at</span><input id="mpBeR" inputmode="decimal" value="${tr.be_r ?? 1}"><button id="mpBe" data-t="be_on">${tr.be_on ? "ON" : "off"}</button></div>
     <div class="mtog"><span>TRAIL: trail the stop from</span><input id="mpSlR" inputmode="decimal" value="${tr.sl_r ?? 1}"><button id="mpTr" data-t="sl_on">${tr.sl_on ? "ON" : "off"}</button></div>
+    <p class="help" data-f="trwho" style="margin:2px 0 6px"></p>
     <div class="mbtns"><button id="mpBeNow">BE now</button><button id="mpChart">Chart</button></div>
     <div class="mbtns"><button id="mpClose" class="danger" style="min-height:52px;font-weight:700">Close at market</button></div>`);
   const sh = mq("#mSheet");
@@ -475,10 +477,15 @@ function mPosFill(force){
   if(force || !("sl" in M.draft)) setv(sl, "sl" in M.draft ? M.draft.sl : p.sl);
   if(force || !("tp" in M.draft)) setv(tp, "tp" in M.draft ? M.draft.tp : p.tp);
   if(!("sl" in M.draft) && !("tp" in M.draft)){ sh.querySelector("#mpSave").disabled = true; sh.querySelector("#mpUndo").disabled = true; }
-  const tr = p.tr || {};
+  const tr = p.tr || {}, ts = trailTips(p);
   for(const [b, on, inp, r] of [["#mpBe", tr.be_on, "#mpBeR", tr.be_r], ["#mpTr", tr.sl_on, "#mpSlR", tr.sl_r]]){
-    const el = sh.querySelector(b); el.textContent = on ? "ON" : "off"; el.classList.toggle("on", !!on); setv(sh.querySelector(inp), r ?? 1);
+    const el = sh.querySelector(b), done = b === "#mpBe" && ts.beDone;
+    el.textContent = done ? "done" : on ? "ON" : "off"; el.classList.toggle("on", !!on); el.classList.toggle("done", done);
+    el.title = b === "#mpBe" ? ts.be : ts.sl; setv(sh.querySelector(inp), r ?? 1);
   }
+  const who = sh.querySelector('[data-f="trwho"]');
+  if(who) who.textContent = (tr.own_be || tr.own_sl ? `Set on this trade: ${[tr.own_be && "BE-T", tr.own_sl && "TRAIL"].filter(Boolean).join(" and ")}. ` : "As the panel. ")
+    + "Typing an R switches it on; changing the panel's Trail BE / Trail SL sets every trade again.";
 }
 
 /* ---------------------------------------------------------------- a pending order */

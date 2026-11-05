@@ -10,6 +10,15 @@ It runs on our own server and serves its own page, so there is nothing to instal
 for example to trade live from their own static IP. One script sets it all up: see
 [docs/New_Server_Guide.md](docs/New_Server_Guide.md).
 
+## Version 0.32.0: LiveTrader 1.24's changes
+
+- **RR box and padlock under BUY / SELL:** type an RR and the tool's target goes there; lock it and moving the stop moves
+  the target, moving the target moves the stop, keeping that net RR after all charges. Also beside the ticket's R and
+  on the phone.
+- **Each trade's own trailing:** typing an R on a trade's entry line switches that trail on; changing the panel's Trail BE
+  or Trail SL takes every trade back to the panel; BE-T shows when it's done.
+- **Tool gap** in Chart settings: the tool starts 30 px after the live candle.
+
 ## Version 0.31.0: a second server for a friend
 
 - **One script sets up a new server**, on any Linux server: paste `server/startup.sh` into the provider's start-up box

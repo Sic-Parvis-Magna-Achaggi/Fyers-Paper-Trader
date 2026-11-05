@@ -1,5 +1,59 @@
 # Changelog
 
+## v0.32.0 — 5 Nov 2026 — LiveTrader 1.24: RR lock, per-trade trailing, tool gap
+
+Added
+- **RR box and padlock under the chart's BUY / SELL** (LiveTrader 1.24's RR box and lock; owner, 5 Nov: "I introduced
+  some new changes to the livetrader").
+  - **RR box:** the tool's net reward : risk. Typing one (0.1 to 50) moves the tool's target to it. It's the same figure
+    as the ticket's R box (and the phone's).
+  - **Padlock (the RR lock):** locked, moving the stop moves the target, and moving the target (dragged, or typed in the
+    ticket or on the phone) moves the stop.
+    - **The stop is worked out on the server** (`plan(lock_tp=...)`): the widest stop that still gives at least that net
+      RR, after every Indian charge, at the lots it then sizes to. LiveTrader's own lock uses its round-trip commission
+      only.
+    - **On screen:** while dragging, the other line follows from the last exact figure; on release the server's answer
+      replaces it.
+  - **Limits, each with a message:**
+    - **The rules stop the stop going wider** (risk %, risk cap, margin): the stop stays at the widest that still trades,
+      and the target goes back to the RR from it.
+    - **A target too close for the RR after charges:** the closest stop.
+  - **Where:** under BUY / SELL, beside the ticket's R, and in the phone's order sheet.
+  - **Saved** with the ticket defaults (`rr_lock`).
+  - Not for an option whose stops follow its future.
+- **Tool gap** (Chart settings): the new-trade tool starts this many px after the live candle's right edge (30 by
+  default, LiveTrader's `InpToolGap`). It was 6 px after the candle's middle.
+
+Changed
+- **Per-trade trailing as in LiveTrader 1.24** (the BE-T / TRAIL controls on each trade's entry line, the Trades page and
+  the phone's position sheet, which this app already had):
+  - **Typing a trade's R switches that trail on** (it only changed the R).
+  - **Changing the panel's Trail BE (its switch or its R) makes every open trade follow the panel's Trail BE again**,
+    switch and R together; the same for Trail SL. Before, only the value changed was copied to each trade.
+  - **Each trade knows** whether its trail is its own or the panel's (`tr.own_be` / `tr.own_sl`), and its BE-T / TRAIL
+    say so when pointed at.
+  - **BE-T shows "done"** (blue-grey) once Trail BE has put the stop at break-even.
+- Unlocked, the tool's target keeps behaving as before: it stays at your R while the stop moves, until you drag the target
+  yourself. LiveTrader 1.24 unlocked leaves the target where it is from the start. Not changed; one switch away if wanted.
+
+Tests
+- `tests/trail_rr_test.py` (new, 27 checks, no browser):
+  - **Per-trade trailing:** a typed R switches it on; the panel takes trades back per trail; each trade's Trail BE fires
+    at its own R; no re-arm at BE.
+  - **The RR lock** (exactly 2.000R on NIFTY; one tick wider is 1.997R):
+    - long and short, market and limit, risk % and fixed lots, RR 2 and 3;
+    - the risk cap and a too-close target, each with its message;
+    - wrong side and no RR refused; saved with the ticket.
+- `tests/rr_lock_flow.js` (new, 36 checks, browser on the fake Fyers, a fresh account each run):
+  - **RR box and padlock:** where they sit; typing an RR; a bad RR refused; locking.
+  - **Dragging with a real mouse while locked:** the target (the stop follows, the target stays where dropped); the stop
+    (the target follows); typing the target; past the risk cap (the message).
+  - **The rest:** saved over a reload; unlocked drags; the tool gap at 30 and 80 px; the entry line's R boxes switching
+    trails on; the panel taking the trade back; the Trades page's wording; the phone's padlock.
+- Run again on fresh test data:
+  - security 29 checks, Live 24, phone 61, multi-charts 43, drawings 78;
+  - `live_test.py` (ALL PASSED), `routes_check.py`.
+
 ## v0.31.0 — 5 Nov 2026 — A second server for a friend, on any Linux server
 
 Added

@@ -5,7 +5,7 @@ const P = {
   snap: null, plan: null, armed: false, pvTimer: null, pvSeq: 0, drags: [], posDrags: [], toolDrags: [], dragging: null,
   posLines: [], toolLines: null, prim: null, primSeries: null, hits: [], posKey: "", ordKey: "", tab: "pos",
   T: {s: null, side: 1, follow: true, price: null, slDist: null, tpDist: null, tp_r: 2, tpMode: "r", basis: "self", ref: null,
-      mode: "pct", risk_pct: 1, risk_amt: 250, lots: 1, product: "INTRADAY"}
+      mode: "pct", risk_pct: 1, risk_amt: 250, lots: 1, product: "INTRADAY", rr_lock: false, lockTp: null}
 };
 const rs = n => n == null || isNaN(n) ? "–" : (n < 0 ? "−₹" : "₹") + Math.abs(n).toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2});
 const rsS = n => n == null || isNaN(n) ? "–" : (n > 0 ? "+" : n < 0 ? "−" : "") + "₹" + Math.abs(n).toLocaleString("en-IN", {maximumFractionDigits: 0});
@@ -36,7 +36,7 @@ function paperUpdate(s, events){
   if(events && events.length && P.tab === "hist") loadTrades();
   if(typeof pagesPaper === "function") pagesPaper(events);
   if(!P.ticketLoaded && s.ticket){ Object.assign(P.T, {mode: s.ticket.mode, risk_pct: s.ticket.risk_pct, risk_amt: s.ticket.risk_amt,
-    lots: s.ticket.lots, product: s.ticket.product, tp_r: s.ticket.tp_r}); P.ticketLoaded = true; renderTicket(); }
+    lots: s.ticket.lots, product: s.ticket.product, tp_r: s.ticket.tp_r, rr_lock: !!s.ticket.rr_lock}); P.ticketLoaded = true; renderTicket(); }
   if(document.querySelector("#drawer.open") && !P.rulesShown){ renderRules(); }
 }
 function renderAcct(){
@@ -77,10 +77,62 @@ function basisNow(){ return P.T.basis === "underlying" ? (ltpOf(P.T.ref) || (P.p
 function slNow(){ const b = basisNow(); return b == null || P.T.slDist == null ? null : roundTick(b - udir() * P.T.slDist, tickOf(basisSym())); }
 function tpNow(){
   const b = basisNow(); if(b == null) return null;
+  if(P.T.lockTp != null) return roundTick(P.T.lockTp, tickOf(basisSym()));          // RR lock: the target you're moving
   if(P.T.tpMode === "dist" && P.T.tpDist != null) return roundTick(b + udir() * P.T.tpDist, tickOf(basisSym()));
+  // the target as an R: the last exact figure from the server, scaled to the stop now (so it follows a stop being dragged)
+  if(P.plan && P.plan.tp != null && P.plan.entry != null && P.plan.sl != null && P.T.slDist != null && P.T.basis === "self")
+    return roundTick(b + udir() * P.T.slDist * rrK(), tickOf(basisSym()));
   if(P.plan && P.plan.tp != null && P.plan.entry != null) return roundTick(b + udir() * Math.abs(P.plan.tp - P.plan.entry), tickOf(basisSym()));
   if(P.T.slDist != null) return roundTick(b + udir() * P.T.slDist * (P.T.tp_r || 2), tickOf(basisSym()));   // until the server has worked it out
   return null;
+}
+/* RR lock (LiveTrader 1.24): the tool keeps its net RR (Target R) whether you move the stop (the target follows) or the
+   target (the stop follows). The exact stop comes from the server (lock_tp: net of every charge, at the lots it sizes to). */
+function lockOn(){ return !!P.T.rr_lock && P.T.basis === "self"; }
+function rrK(){            // target distance / stop distance in price, from the last exact plan (charges make it more than the R)
+  const p = P.plan;
+  if(p && p.tp != null && p.sl != null && p.entry != null && Math.abs(p.entry - p.sl) > 0) return Math.abs(p.tp - p.entry) / Math.abs(p.entry - p.sl);
+  return P.T.tp_r || 2;
+}
+function lockTo(tp){       // the target was moved to tp with the lock on: the stop follows (exactly once the server answers)
+  const b = basisNow(), T = P.T; if(b == null || tp == null) return;
+  if(udir() * (tp - b) <= 0) return toast("The target must be on the profit side of the entry");
+  T.tpMode = "r"; T.lockTp = tp;
+  T.slDist = Math.max(tickOf(basisSym()), roundTick(Math.abs(tp - b) / rrK(), tickOf(basisSym())));
+}
+function setRR(v, quiet){
+  v = num(String(v).replace(/^\s*RR\s*/i, "").replace(",", "."));
+  if(v == null || v < 0.1 || v > 50){ if(!quiet) toast("RR: a number from 0.1 to 50"); renderTicket(); return; }
+  P.T.tp_r = Math.round(v * 10) / 10; P.T.tpMode = "r"; P.T.lockTp = null;
+  saveTicketDefaults(); renderTicket(); toolRedraw(); preview(0);
+}
+function rrLockToggle(){
+  if(P.T.basis === "underlying") return toast("The RR lock works on the contract's own price, not the underlying's");
+  P.T.rr_lock = !P.T.rr_lock;
+  if(P.T.rr_lock){ P.T.tpMode = "r"; P.T.lockTp = null; }       // locking puts the target at the RR now
+  setStatus(P.T.rr_lock ? `RR locked at ${P.T.tp_r}: moving the stop moves the target, moving the target moves the stop` : "RR unlocked");
+  saveTicketDefaults(); renderTicket(); toolRedraw(); preview(0);
+}
+const lockSvg = on => `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="3" y="7" width="10" height="7.5" rx="1.5" fill="currentColor"/>`
+  + `<path d="${on ? "M5.2 7V5.2a2.8 2.8 0 0 1 5.6 0V7" : "M5.2 7V5.2a2.8 2.8 0 0 1 5.6 0V5.6"}" fill="none" stroke="currentColor" stroke-width="1.7"/>`
+  + `<rect x="7.3" y="9.4" width="1.4" height="3" rx=".5" fill="${on ? "#212121" : "var(--panel,#222)"}"/></svg>`;
+function lockTitle(){
+  if(P.T.basis === "underlying") return "RR lock: works on the contract's own price, not the underlying's";
+  return P.T.rr_lock ? `RR locked at ${P.T.tp_r}: moving the stop moves the target, moving the target moves the stop (net of all charges). Click to unlock`
+    : `RR not locked. Click to lock the tool at RR ${P.T.tp_r}`;
+}
+function renderLock(){
+  const T = P.T;
+  for(const id of ["#cLock", "#tkLock", "#mtLock"]){
+    const b = $(id); if(!b) continue;
+    const key = [T.rr_lock, T.basis].join("|");
+    if(b.dataset.k !== key){ b.dataset.k = key; b.innerHTML = lockSvg(T.rr_lock) + (b.dataset.txt ? " " + b.dataset.txt : ""); }
+    b.classList.toggle("on", !!T.rr_lock); b.disabled = T.basis === "underlying"; b.title = lockTitle();
+  }
+  const rr = $("#cRR");
+  if(rr){ if(document.activeElement !== rr) rr.value = "RR " + (+T.tp_r || 2).toFixed(1); rr.classList.toggle("on", !!T.rr_lock);
+    rr.title = "Reward : risk for the tool, net of all charges (as its TP tag shows). Type and press Enter: the tool's target goes to that RR"
+      + (T.rr_lock ? ". Locked: moving the stop or the target keeps it" : ". Lock it with the padlock to keep it while you move the stop or target"); }
 }
 function distKey(){ const r = tkRow() || {}; return (P.T.basis === "underlying" ? "U:" : "") + (r.u || r.s) + (r.f === "OPT" && P.T.basis === "self" ? ":OPT" : ""); }
 function setDefaults(){
@@ -126,7 +178,7 @@ function renderTicket(){
   for(const [id, s] of [["#bBuy", 1], ["#bSell", -1], ["#cBuy", 1], ["#cSell", -1]]) $(id).classList.toggle("on", P.armed && T.side === s);
   $("#tkBody").classList.toggle("hide", !P.armed);
   $("#tkHint").classList.toggle("hide", P.armed);
-  if(!P.armed){ toolOverlay(); return; }
+  if(!P.armed){ renderLock(); toolOverlay(); return; }
   const typ = orderType();
   document.querySelectorAll("#tkType button").forEach(b => b.classList.toggle("on", b.dataset.v === typ));
   document.querySelectorAll("#tkMode button").forEach(b => b.classList.toggle("on", b.dataset.v === T.mode));
@@ -136,6 +188,7 @@ function renderTicket(){
   setv("#tkPrice", T.follow ? "market" : T.price);
   setv("#tkSl", slNow()); setv("#tkTp", tpNow());
   setv("#tkTpR", T.tpMode === "r" ? T.tp_r : "");
+  renderLock();
   $("#tkTp").placeholder = T.basis === "underlying" ? "future price" : "price";
   $("#tkSl").placeholder = T.basis === "underlying" ? "future price" : "price";
   $("#tkTpR").disabled = T.basis === "underlying";
@@ -195,6 +248,7 @@ function ticketBody(){
   const useR = T.tpMode === "r" && T.basis === "self";
   return {s: T.s, side: T.side, type: typ, price: typ === "market" ? null : T.price, sl: slNow(),
     tp: useR ? null : tpNow(), tp_r: useR ? T.tp_r : null,
+    lock_tp: useR && lockOn() && T.lockTp != null ? T.lockTp : null,
     basis: T.basis, mode: T.mode, risk_pct: T.risk_pct, risk_amt: T.risk_amt, lots: T.lots, product: T.product};
 }
 function preview(delay = 250){
@@ -202,8 +256,15 @@ function preview(delay = 250){
   clearTimeout(P.pvTimer);
   P.pvTimer = setTimeout(async () => {
     if(P.needDefaults && setDefaults()) P.needDefaults = false;
-    const my = ++P.pvSeq;
-    const j = await api("/api/paper/preview", {body: ticketBody()});
+    const my = ++P.pvSeq, body = ticketBody();
+    const j = await api("/api/paper/preview", {body});
+    if(body.lock_tp != null && P.T.lockTp === body.lock_tp){             // the RR lock's answer: the exact stop for that target
+      P.T.lockTp = null;
+      if(j.ok && j.plan.sl != null && j.plan.entry != null){
+        P.T.slDist = Math.max(tickOf(basisSym()), roundTick(Math.abs(j.plan.entry - j.plan.sl), tickOf(basisSym()))); rememberDist();
+        if(j.plan.lock_note) toast(j.plan.lock_note); }
+      else if(!j.ok) toast(j.error);
+    }
     if(my !== P.pvSeq || !P.armed) return;
     if(!j.ok){
       P.plan = null; P.pvErr = j.error;
@@ -230,7 +291,7 @@ let tkSaveTimer = null;
 function saveTicketDefaults(){
   clearTimeout(tkSaveTimer);
   tkSaveTimer = setTimeout(() => api("/api/paper/ticket", {body: {mode: P.T.mode, risk_pct: P.T.risk_pct, risk_amt: P.T.risk_amt,
-    lots: P.T.lots, product: P.T.product, tp_r: P.T.tp_r}}), 500);
+    lots: P.T.lots, product: P.T.product, tp_r: P.T.tp_r, rr_lock: !!P.T.rr_lock}}), 500);
 }
 function rememberDist(){
   const m = {...(prefGet("sl_dist", {}) || {})}; m[distKey()] = P.T.slDist; prefSet("sl_dist", m);
@@ -263,9 +324,17 @@ function wireTicket(){
     if(udir() * (b - v) <= 0) return toast("The stop must be on the losing side of the entry");
     P.T.slDist = roundTick(Math.abs(b - v), tickOf(basisSym())); rememberDist(); toolRedraw(); preview(); });
   on("#tkTp", () => { const v = num($("#tkTp").value), b = basisNow();
-    if(v == null){ P.T.tpMode = "r"; } else if(b != null){ P.T.tpMode = "dist"; P.T.tpDist = Math.abs(v - b); }
+    if(v == null){ P.T.tpMode = "r"; P.T.lockTp = null; }
+    else if(lockOn()){ lockTo(roundTick(v, tickOf(basisSym()))); toolRedraw(); return preview(0); }   // RR locked: the stop follows
+    else if(b != null){ P.T.tpMode = "dist"; P.T.tpDist = Math.abs(v - b); }
     toolRedraw(); preview(); });
-  on("#tkTpR", () => { const v = num($("#tkTpR").value); if(v){ P.T.tp_r = v; P.T.tpMode = "r"; saveTicketDefaults(); preview(); } });
+  on("#tkTpR", () => { const v = num($("#tkTpR").value); if(v){ P.T.tp_r = v; P.T.tpMode = "r"; P.T.lockTp = null; saveTicketDefaults(); renderLock(); preview(); } });
+  // the RR box and padlock under the chart's BUY / SELL (LiveTrader 1.24), and the ticket's padlock
+  const rr = $("#cRR");
+  if(rr){ rr.addEventListener("keydown", e => { e.stopPropagation(); if(e.key === "Enter"){ setRR(rr.value); rr.blur(); } if(e.key === "Escape"){ rr.blur(); renderLock(); } });
+    rr.addEventListener("change", () => setRR(rr.value, true)); rr.addEventListener("focus", () => rr.select()); }
+  for(const id of ["#cLock", "#tkLock"]){ const b = $(id); if(b) b.onclick = e => { e.stopPropagation(); rrLockToggle(); }; }
+  renderLock();
   on("#tkSize", () => { const v = num($("#tkSize").value); if(v == null) return;
     if(P.T.mode === "pct") P.T.risk_pct = v; else if(P.T.mode === "amt") P.T.risk_amt = v; else P.T.lots = Math.max(1, Math.round(v));
     preview(); saveTicketDefaults(); });
@@ -468,7 +537,10 @@ function drawZones(ctx, size){
   for(const z of zoneList()){
     const ye = series.priceToCoordinate(z.entry); if(ye == null) continue;
     let x0 = zoneX(z.x0, size.width);
-    if(z.tool){ x0 = x0 == null ? size.width * 0.55 : x0 + 6; x0 = Math.min(x0, size.width - 170); P.toolX = x0; }
+    if(z.tool){                    // LiveTrader 1.24: a gap (Chart settings, 30 px) after the live candle's right edge
+      let half = 3; try{ half = (chart.timeScale().options().barSpacing || 6) / 2; }catch(e){}
+      x0 = x0 == null ? size.width * 0.55 : x0 + half + Math.max(0, +C.toolGap || 0);
+      x0 = Math.min(x0, size.width - 170); P.toolX = x0; }
     else if(x0 == null) x0 = 0;
     const x1 = size.width, w = Math.max(0, x1 - x0), a = z.tool ? A : A * 0.45;
     const box = (y2, col) => { if(y2 == null) return; ctx.fillStyle = rgba(col, a); ctx.fillRect(x0, Math.min(ye, y2), w, Math.abs(y2 - ye)); };
@@ -586,7 +658,10 @@ function toolRedraw(rebuild){
     if(onBasis && sl != null) P.toolDrags.push({line: L.sl, price: () => slNow(), tick: tickOf(bs),
       move: v => { const b = basisNow(); if(udir() * (b - v) > 0) T.slDist = Math.max(tickOf(bs), roundTick(Math.abs(b - v), tickOf(bs))); }, drop: () => { rememberDist(); renderTicket(); preview(0); }});
     if(onBasis && tp != null) P.toolDrags.push({line: L.tp, price: () => tpNow(), tick: tickOf(bs),
-      move: v => { const b = basisNow(); if(udir() * (v - b) > 0){ T.tpMode = "dist"; T.tpDist = roundTick(Math.abs(v - b), tickOf(bs)); } }, drop: () => { renderTicket(); preview(0); }});
+      move: v => { const b = basisNow(); if(udir() * (v - b) <= 0) return;
+        if(lockOn()) lockTo(v);                                       // RR locked: the stop follows the target
+        else { T.tpMode = "dist"; T.tpDist = roundTick(Math.abs(v - b), tickOf(bs)); } },
+      drop: () => { renderTicket(); preview(0); }});
   }
   P.drags = [...(P.posDrags || []), ...P.toolDrags];
   if(P.prim) P.prim.update();
@@ -604,18 +679,18 @@ function posBars(){
     if(y0 != null) items.push({kind: "pos", id: p.id, price: y0, p});
   }
   for(const o of P.snap.orders) if(o.s === cur.s) items.push({kind: "ord", id: o.id, price: o.price, o});
-  const key = items.map(i => i.kind === "pos" ? [i.id, i.p.tr.be_on, i.p.tr.be_r, i.p.tr.sl_on, i.p.tr.sl_r, i.p.lots, i.p.be_done].join("|") : i.id).join(";");
+  const key = items.map(i => i.kind === "pos" ? [i.id, i.p.tr.be_on, i.p.tr.be_r, i.p.tr.sl_on, i.p.tr.sl_r, i.p.tr.own_be, i.p.tr.own_sl, i.p.lots, i.p.be_done, i.p.at_be].join("|") : i.id).join(";");
   const focused = host.contains(document.activeElement) && document.activeElement.tagName === "INPUT";
   if(key !== P.barKey && !focused){
     P.barKey = key;
     host.innerHTML = items.map(i => {
       if(i.kind === "ord") return `<div class="pbar" data-id="${i.id}"><span class="pt" data-f="t"></span><button class="bx" data-a="cancel" title="Cancel order">✕</button></div>`;
-      const t = i.p.tr;
+      const t = i.p.tr, ts = trailTips(i.p);
       return `<div class="pbar" data-id="${i.id}"><span class="pt" data-f="t"></span>
         <button class="bx" data-a="close" title="Close at market">✕</button>
         <button data-a="be" title="Stop to break-even + costs now">BE</button>
-        <button class="tg ${t.be_on ? "on" : ""}" data-a="be_on" title="Trail BE: move the stop to BE + costs once the trade reaches this many R">BE-T</button><input class="rr" data-a="be_r" value="${t.be_r}" inputmode="decimal" title="R for trail BE">
-        <button class="tg ${t.sl_on ? "on" : ""}" data-a="sl_on" title="Trail SL: follow the best price this many R behind">TRAIL</button><input class="rr" data-a="sl_r" value="${t.sl_r}" inputmode="decimal" title="R for trail SL">
+        <button class="tg ${t.be_on ? "on" : ""} ${ts.beDone ? "done" : ""}" data-a="be_on" title="${esc(ts.be)}">BE-T</button><input class="rr" data-a="be_r" value="${t.be_r}" inputmode="decimal" title="${esc(ts.beR)}">
+        <button class="tg ${t.sl_on ? "on" : ""}" data-a="sl_on" title="${esc(ts.sl)}">TRAIL</button><input class="rr" data-a="sl_r" value="${t.sl_r}" inputmode="decimal" title="${esc(ts.slR)}">
         <span class="ta muted" data-f="ta"></span>
       </div>`;
     }).join("");
@@ -668,6 +743,16 @@ function posBars(){
       t.innerHTML = `<b class="${o.side > 0 ? "up" : "down"}">${o.side > 0 ? "BUY" : "SELL"} ${o.type.toUpperCase()} ${o.lots}</b>`;
     }
   }
+}
+/* a trade's own trailing, worded as in LiveTrader 1.24 (also used by the Trades page and the phone) */
+function trailTips(p){
+  const t = p.tr || {}, beDone = !!t.be_on && !!(p.be_done || p.at_be);
+  const own = " - set on this trade (changing the panel's Trail BE / Trail SL sets every trade again)", pan = " - as the panel";
+  return {beDone,
+    be: `Trail BE: ${t.be_on ? (beDone ? "done - the stop is at break-even + costs" : `ON, the stop to break-even + costs once the trade is ${t.be_r}R in profit`) : "OFF"}${t.own_be ? own : pan}. Click to switch`,
+    sl: `Trail SL: ${t.sl_on ? `ON, ${t.sl_r}R behind the best price once ${t.sl_r}R in profit` : "OFF"}${t.own_sl ? own : pan}. Click to switch`,
+    beR: "Trail BE trigger for this trade, in R: type and press Enter (switches it on)",
+    slR: "Trail SL distance for this trade, in R: type and press Enter (switches it on)"};
 }
 /* the PLACE box that sits on the tool's entry line */
 function toolOverlay(){
