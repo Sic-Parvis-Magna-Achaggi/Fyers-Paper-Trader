@@ -1688,7 +1688,9 @@ async def journal_pictures(request: Request):
     u, r = _urt(request)
     j = journal.get(u["uid"])
     use = await asyncio.get_running_loop().run_in_executor(None, jshots.usage, u["uid"])
-    unsent = sum(1 for t in j.d["trades"].values() for s in t.get("shots") or [] if not (s.get("tg") or {}).get("msg"))
+    c = jshots.cfg(j.d["settings"])
+    unsent = sum(1 for t in j.d["trades"].values() if jshots.chat_for(c, t) for s in t.get("shots") or []
+                 if not (s.get("tg") or {}).get("msg"))
     return {"ok": True, "cfg": j.shots_cfg(), "tg": jshots.tg_state(u["uid"]), "usage": use, "unsent": unsent,
             "pillow": jshots.pillow(), "queued": jshots.pending(), "admin": u["role"] == "admin"}
 
@@ -1705,7 +1707,7 @@ async def journal_pictures_tg(request: Request):
         if not jshots.CHAT_RE.match(chat):
             return _err("Telegram chat: a number like -1001234567890, or @channelname")
         try:
-            await asyncio.get_running_loop().run_in_executor(None, jshots.tg_test, u["uid"], chat)
+            await asyncio.get_running_loop().run_in_executor(None, jshots.tg_test, u["uid"], chat, bool(b.get("live")))
         except telegram.TgError as e:
             return _err(e)
         return {"ok": True}

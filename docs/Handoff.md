@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 5 Nov 2026, version **0.33.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 5 Nov 2026, version **0.33.1**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -98,6 +98,17 @@ the daytime. (Roadmap follow-up.)
 automatic pictures off itself (other suites turn them on).
 `indicator_settings_flow.js`'s "at the start of a contract's history it stops asking" failed once in 2 runs on 1 Nov
 (v0.22.0; passed on re-run, 37/37). Same advice.
+
+## Live trades' Telegram channel for journal pictures (v0.33.1, roadmap 17)
+
+- `helper/jshots.py`: setting `tg_chat_live` (in `DEFAULTS`, validated by `clean_cfg` like `tg_chat`; changing it re-stamps
+  `tg_since`). `chat_for(c, t)` = the Live channel for a trade with `mode == "live"` when set, else `tg_chat`; "" = not
+  copied. `tg_on(c)` = backup on with either chat. `review_chat(c)` = `tg_chat`, else the Live channel (the weekly
+  summary). Used by `after_add`, `_job_tg` (the copy's `tg.chat` is the chat it went to, so deletes go there),
+  `tg_send_missing`, `startup`, `tg_review`, and the Pictures route's `unsent` count. `tg_test(uid, chat, live)`.
+- `web/jshots.js`: `jsChatFor(t, cfg)` (the same rule) for the ✈… marks and the viewer; the Pictures card's `#jsChatLive`,
+  `#jsChatLiveSave`, `#jsTgTestLive` (admin only). `web/jinsights.js`: the review's Telegram line counts either chat.
+- Tests: `jshots_test.py` (section after "Send a test"), `jshots_flow.js`.
 
 ## The Live account is the Fyers account (v0.33.0, roadmap 16)
 

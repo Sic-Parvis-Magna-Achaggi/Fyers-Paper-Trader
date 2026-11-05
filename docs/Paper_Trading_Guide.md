@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.33.0)
+# Paper and live trading: how it works (v0.33.1)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -219,6 +219,11 @@ paste and drop work as before.
   with the bot as an admin that can post and delete. ✈ on a picture = in Telegram (✈! = failed: the viewer says why; it
   retries 4 times over an hour). **Send the pictures not in Telegram yet** sends the older ones. **Send a test** checks the
   chat. Pictures stay on the server either way; Telegram is only a copy.
+- **Live trades' channel** (optional, the admin, v0.33.1): fill it in and every picture of a **Live** trade goes there,
+  while paper trades' pictures stay in the journal's chat. Leave it empty and everything goes to the journal's chat. Leave
+  the journal's chat empty instead and only Live trades are copied. Each has its own **Send a test**. The weekly review's
+  summary goes to the journal's chat (the Live channel if it's the only one). Captions start with LIVE or Paper and the
+  account either way.
 - Settings › Pictures also shows how many pictures there are and the space they take.
 
 **Insights** (Journal › Insights) use the same filters as the trade list (except Octagon, so held and broken trades can be

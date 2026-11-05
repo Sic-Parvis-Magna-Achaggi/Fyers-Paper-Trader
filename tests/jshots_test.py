@@ -314,6 +314,44 @@ unsent = [s for t in J.d["trades"].values() for s in t.get("shots") or [] if not
 ok(n >= 5 and len(fake("/_docs")) == n and not unsent, f"'Send the ones not in Telegram yet' sends every picture ({n})")
 jshots.tg_test("u1", "-1009990001")
 ok(any("Journal backup" in m["text"] for m in fake("/_sent")), "Send a test: a message to that chat")
+
+# v0.33.1: a separate Telegram channel for Live trades (owner, 5 Nov)
+c = jshots.cfg(J.d["settings"])
+ok(jshots.chat_for(c, {"mode": "live"}) == "-1009990001", "no Live channel set: Live trades' pictures go to the journal's chat")
+ok(raises(jshots.clean_cfg, {"tg_chat_live": "my live channel"}, {}), "the Live channel must be a number or @name too")
+J.set_settings({"shots": {"tg_chat_live": "-1009990002"}})
+c = jshots.cfg(J.d["settings"])
+ok(jshots.chat_for(c, {"mode": "live"}) == "-1009990002" and jshots.chat_for(c, {"mode": "paper"}) == "-1009990001"
+   and c["tg_since"] >= since2, "Live channel set: Live trades there, paper trades in the journal's chat (and a new stamp)")
+kl = next(k for k, t in J.d["trades"].items() if t.get("shots"))
+kp = next(k for k, t in J.d["trades"].items() if t.get("shots") and k != kl)
+with J.lock:
+    J.d["trades"][kl]["mode"] = "live"
+    for k in (kl, kp):
+        for sh in J.d["trades"][k]["shots"]:
+            sh["tg"] = {}
+fake_telegram.DOCS.clear()
+n = jshots.tg_send_missing("u1")
+jshots.wait_idle(30)
+docs = fake("/_docs")
+nl, np_ = len(J.d["trades"][kl]["shots"]), len(J.d["trades"][kp]["shots"])
+ok(n == nl + np_ and sum(d["chat"] == "-1009990002" for d in docs) == nl and sum(d["chat"] == "-1009990001" for d in docs) == np_
+   and "LIVE" in next(d["caption"] for d in docs if d["chat"] == "-1009990002"),
+   f"each picture to its own channel: {nl} Live trade picture(s) to the Live channel (captioned LIVE), {np_} paper to the journal's")
+ok(all(sh["tg"]["chat"] == "-1009990002" for sh in J.d["trades"][kl]["shots"]), "…and each remembers which chat it's in (deleting removes it there)")
+# Live only: the journal's chat emptied
+J.set_settings({"shots": {"tg_chat": ""}})
+c = jshots.cfg(J.d["settings"])
+with J.lock:
+    for sh in J.d["trades"][kp]["shots"]:
+        sh["tg"] = {}
+ok(jshots.tg_on(c) and jshots.chat_for(c, {"mode": "paper"}) == "" and jshots.tg_send_missing("u1") == 0,
+   "Live channel only: paper pictures aren't sent (nor counted as waiting)")
+ok(jshots.review_chat(c) == "-1009990002", "…and the weekly review's summary goes to the Live channel then")
+J.set_settings({"shots": {"tg_chat": "-1009990001", "tg_chat_live": ""}})
+ok(jshots.review_chat(jshots.cfg(J.d["settings"])) == "-1009990001", "the weekly review's summary: the journal's chat")
+jshots.tg_test("u1", "-1009990002", live=True)
+ok(any("Live" in m["text"] and m["chat"] == "-1009990002" for m in fake("/_sent")), "Send a test to the Live channel")
 u = jshots.usage("u1")
 ok(u["files"] >= 5 and u["mb"] >= 0, "space used is counted")
 

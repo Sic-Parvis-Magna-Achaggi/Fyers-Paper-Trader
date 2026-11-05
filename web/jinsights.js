@@ -310,7 +310,7 @@ function jiWeek(draft){
   const kept = (v, l) => `<button type="button" data-kept="${v}" class="${rv.focusKept === v ? "on-" + v : ""}">${l}</button>`;
   const callout = lastFocus ? `<div class="ji-callout"><span class="muted jn-small">Your focus for this week, set in last week's review</span><q>${jEsc(lastFocus)}</q>
     <span class="seg">${kept("held", "Held it")}${kept("partly", "Partly")}${kept("missed", "Missed it")}</span></div>` : "";
-  const cfg = JN.d.shots_cfg || {}, tgOn = cfg.tg && cfg.tg_chat;
+  const cfg = JN.d.shots_cfg || {}, tgOn = cfg.tg && (cfg.tg_chat || cfg.tg_chat_live);
   const form = `<div class="jn-card ji-rvform"><h3>Reflection</h3>${callout}
     <label for="jiRvWell">What went well</label><textarea id="jiRvWell" rows="3" placeholder="Patient clicks, realistic targets banked, walked away at the 99…">${jEsc(rv.well || "")}</textarea>
     <label for="jiRvBroke">What broke the octagon — and why</label><textarea id="jiRvBroke" rows="3" placeholder="Which pillar, what was going on around it, what you felt before the click">${jEsc(rv.broke || "")}</textarea>

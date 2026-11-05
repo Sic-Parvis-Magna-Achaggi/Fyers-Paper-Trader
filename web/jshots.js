@@ -16,11 +16,17 @@ function jsTgLink(tg){
   if(c.startsWith("@")) return `https://t.me/${c.slice(1)}/${tg.msg}`;
   return "";
 }
-function jsTgMark(sh){
-  const cfg = (JN.d && JN.d.shots_cfg) || {}, tg = sh.tg || {};
+/* the chat a trade's pictures go to (helper/jshots.py chat_for): Live trades to the Live channel when one is set (v0.33.1) */
+function jsChatFor(t, cfg){
+  cfg = cfg || (JN.d && JN.d.shots_cfg) || {};
+  if(!cfg.tg) return "";
+  return t && t.mode === "live" && cfg.tg_chat_live ? cfg.tg_chat_live : (cfg.tg_chat || "");
+}
+function jsTgMark(sh, t){
+  const tg = sh.tg || {};
   if(tg.msg) return `<span class="js-tg ok" title="Copy in Telegram">✈</span>`;
   if(tg.err) return `<span class="js-tg bad" title="Telegram copy failed: ${jEsc(tg.err)}">✈!</span>`;
-  return cfg.tg && cfg.tg_chat ? `<span class="js-tg wait" title="Telegram copy on its way">✈…</span>` : "";
+  return jsChatFor(t) ? `<span class="js-tg wait" title="Telegram copy on its way">✈…</span>` : "";
 }
 
 /* ------------------------------------------------------------------ the strip on a trade card and in the audit form */
@@ -36,7 +42,7 @@ function jsStrip(t, where){
     <div class="js-head"><b>Pictures</b><span class="muted">${shots.length || ""}</span><span class="sp"></span>${draw.join("")}
       <button data-act="addpic" data-id="${jEsc(t.id)}" title="Add pictures (or paste with Ctrl+V, or drop them here)">＋ Add pictures</button></div>
     ${shots.length ? `<div class="js-thumbs">${shots.map(sh => `<button class="js-th" data-act="shot" data-id="${jEsc(t.id)}" data-sid="${jEsc(sh.id)}" title="${jEsc(jsLabel(sh) + " · " + jsKindText(sh))}">
-        <img loading="lazy" alt="${jEsc(jsLabel(sh))}" src="${jsUrl(t.id, sh, true)}"><span class="js-lbl">${jEsc(jsLabel(sh))}</span>${jsTgMark(sh)}</button>`).join("")}</div>`
+        <img loading="lazy" alt="${jEsc(jsLabel(sh))}" src="${jsUrl(t.id, sh, true)}"><span class="js-lbl">${jEsc(jsLabel(sh))}</span>${jsTgMark(sh, t)}</button>`).join("")}</div>`
       : `<div class="muted js-none">No pictures yet. ${t.status === "removed" ? "" : "Paste one (Ctrl+V), drop it here, or tap ＋ Add pictures."}</div>`}
     ${errs}
   </div>`;
@@ -165,7 +171,7 @@ function jsViewRender(){
       ${t.shots.length > 1 ? `<button class="js-nav next" id="jsNext" aria-label="Next">›</button>` : ""}</div>
     <div class="js-vfoot">
       <label class="js-tfsel">Timeframe <select id="jsTf">${tfs.map(x => `<option${x === sh.tf ? " selected" : ""}>${jEsc(x)}</option>`).join("")}</select></label>
-      <span class="js-tgst">${tg.msg ? `✈ In Telegram${link ? ` · <a href="${jEsc(link)}" target="_blank" rel="noopener">open</a>` : ""}` : tg.err ? `<span class="down">✈ Telegram copy failed: ${jEsc(tg.err)}</span>` : cfg.tg && cfg.tg_chat ? "✈ Telegram copy on its way" : `<span class="muted">No Telegram copy (Journal › Settings › Pictures)</span>`}</span>
+      <span class="js-tgst">${tg.msg ? `✈ In Telegram${link ? ` · <a href="${jEsc(link)}" target="_blank" rel="noopener">open</a>` : ""}` : tg.err ? `<span class="down">✈ Telegram copy failed: ${jEsc(tg.err)}</span>` : jsChatFor(t, cfg) ? "✈ Telegram copy on its way" : `<span class="muted">No Telegram copy (Journal › Settings › Pictures)</span>`}</span>
       <span class="sp"></span>
       ${sh.kind === "server" ? `<button class="ghost" id="jsRedraw" title="Draw this picture again from Fyers' candles">Draw again</button>` : ""}
       <a class="btnlink" href="${jsUrl(t.id, sh)}" target="_blank" rel="noopener">Full size</a>
@@ -275,22 +281,28 @@ async function jsSettings(){
       ${sw("tg", "Send a copy of every picture to Telegram", "Each new picture goes to the chat below, silently, with the trade's details. Delete a picture here and its copy goes too.")}
       <div class="jn-row"><div style="flex:2"><label for="jsChat">Journal chat or channel</label><input type="text" id="jsChat" class="mono" placeholder="-1001234567890 or @channel" value="${jEsc(c.tg_chat || "")}"></div></div>
       <div class="jn-pledb"><button id="jsChatSave">Save chat</button>${tg.alerts_chat ? `<button class="ghost" id="jsUseAlerts" title="${jEsc(tg.alerts_title || tg.alerts_chat)}">Use my alerts chat</button>` : ""}<button class="ghost" id="jsTgTest">Send a test</button></div>
+      ${j.admin ? `<div class="jn-row"><div style="flex:2"><label for="jsChatLive">Live trades' channel <span class="muted">(optional)</span></label><input type="text" id="jsChatLive" class="mono" placeholder="empty: Live pictures go to the chat above" value="${jEsc(c.tg_chat_live || "")}"></div></div>
+      <div class="jn-pledb"><button id="jsChatLiveSave">Save Live channel</button><button class="ghost" id="jsTgTestLive">Send a test</button></div>
+      <p class="muted jn-small">Set, it takes every picture of your Live account's trades; paper trades' pictures stay in the chat above (leave that one empty to send Live only). The weekly review's summary stays in the chat above.</p>` : ""}
       <p class="muted jn-small">Best: a new private channel just for the journal, with your bot added as an admin that can post and delete messages. "Find my chat" in Settings › Telegram alerts lists the chats the bot has seen.</p>
       <p class="jn-small">${last.error ? `<span class="down">Last error: ${jEsc(last.error.msg)}</span>` : last.t ? `<span class="muted">Last copy sent ${jEsc(jWhen(last.t))} (${last.n || 0} so far).</span>` : ""}</p>
-      ${c.tg && c.tg_chat && j.unsent ? `<button id="jsTgAll">Send the ${j.unsent} picture${j.unsent === 1 ? "" : "s"} not in Telegram yet</button>` : ""}
+      ${c.tg && (c.tg_chat || c.tg_chat_live) && j.unsent ? `<button id="jsTgAll">Send the ${j.unsent} picture${j.unsent === 1 ? "" : "s"} not in Telegram yet</button>` : ""}
       <div class="jn-sst" id="jsSetSt"></div>
     </div></div>`;
   const save = async b => { const r = await japi("/api/journal/settings", {shots: b});
     if(r.ok){ jnMerge(r.j); jToast("Saved"); jsSettings(); } else { jToast(r.error || "Couldn't save"); const st = document.getElementById("jsSetSt"); if(st) st.textContent = r.error || ""; } };
   box.querySelectorAll("[data-shot]").forEach(i => i.onchange = () => save({[i.dataset.shot]: i.type === "checkbox" ? i.checked : i.value}));
   box.querySelector("#jsChatSave").onclick = () => save({tg_chat: box.querySelector("#jsChat").value.trim()});
+  const lv = box.querySelector("#jsChatLiveSave"); if(lv) lv.onclick = () => save({tg_chat_live: box.querySelector("#jsChatLive").value.trim()});
   const ua = box.querySelector("#jsUseAlerts"); if(ua) ua.onclick = () => { box.querySelector("#jsChat").value = tg.alerts_chat; save({tg_chat: tg.alerts_chat}); };
-  box.querySelector("#jsTgTest").onclick = async () => {
-    const chat = box.querySelector("#jsChat").value.trim(), st = document.getElementById("jsSetSt");
+  const test = async (sel, live) => {
+    const chat = box.querySelector(sel).value.trim(), st = document.getElementById("jsSetSt");
     st.textContent = "Sending…";
-    const r = await japi("/api/journal/pictures/tg", {action: "test", chat});
+    const r = await japi("/api/journal/pictures/tg", {action: "test", chat, live: !!live});
     st.textContent = r.ok ? "✓ Sent: check the chat" : (r.error || "Couldn't send"); st.className = "jn-sst " + (r.ok ? "up" : "down");
   };
+  box.querySelector("#jsTgTest").onclick = () => test("#jsChat");
+  const tl = box.querySelector("#jsTgTestLive"); if(tl) tl.onclick = () => test("#jsChatLive", true);
   const all = box.querySelector("#jsTgAll"); if(all) all.onclick = async () => {
     const r = await japi("/api/journal/pictures/tg", {action: "send"});
     jToast(r.ok ? `${r.queued} picture${r.queued === 1 ? "" : "s"} going to Telegram (about one a second)` : (r.error || "Couldn't start it")); jsSettings();

@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 5 Nov 2026 (v0.33.0). This is the one task list for the project.
+Updated 5 Nov 2026 (v0.33.1). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -303,6 +303,13 @@ v0.24.0 / v0.24.1); Telegram (3, done in v0.25.0) and the journal (4) next.
     - [ ] **Owner's choice (judgement calls made in v0.33.0, each one switch away):** Close all and the kill switch keep
       delivery holdings; money moved in or out moves the account size too (LiveTrader keeps a prop account's size).
 
+17. [x] **A separate Telegram channel for Live trades' pictures** (owner, 5 Nov 2026, asked whether the journal's
+    screenshots had separate Telegram settings for Live: "A separate telegram channel for live"): shipped in **v0.33.1**.
+    - [x] Journal › Settings › Pictures: an optional **Live trades' channel**. Set: Live trades' pictures go there, paper
+      ones to the journal's chat; empty: all to the journal's chat (as before); the journal's chat empty: Live only. Each
+      copy remembers its chat (deletes go to the right one). The weekly review's summary stays in the journal's chat.
+      The same bot. *(v0.33.1)*
+
 ## Rules that shape live trading and other users (checked 30 Oct 2026)
 
 Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers' rules in force from 1 Apr 2026.
@@ -343,6 +350,7 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
 
 ## Done
 
+- [x] **v0.33.1** (5 Nov): a separate Telegram channel for Live trades' pictures (item 17): Journal › Settings › Pictures › Live trades' channel (optional; paper pictures stay in the journal's chat; Live only if that's empty).
 - [x] **v0.33.0** (5 Nov): the Live account is your Fyers account (item 16): the PAPER / LIVE switch at the top left (green / red, client ID + 2FA, per login, the server refusing Live changes from a Paper page); Fyers' own funds for the balance and every % rule (money in / out never a profit or a loss); every trade on the Fyers account shown and managed (placed here or in Fyers; a Fyers stop adopted; no stop: the red flag and Place my stop); delivery holdings (never squared off); old Live accounts back to Paper.
 - [x] **v0.32.0** (5 Nov): LiveTrader 1.24's changes (item 15): the RR box and lock under BUY / SELL (also the ticket and the phone; the stop for a moved target worked out net of all charges at the sized lots, with a message when the rules or the charges stop it); per-trade trailing like 1.24 (a typed R switches it on, the panel takes the trades back, own / as-the-panel, BE-T done); the tool gap.
 - [x] **v0.31.0** (5 Nov): a second server for a friend, on any Linux server (item 14): `server/startup.sh` sets it all up and finishes the install once its deploy key is on GitHub; `sudo fyers-status`; any repo (owner's, fork, own copy) and an optional `stable` branch; each server's own address / outgoing IP / branch in `/etc/fyers/server.conf`; the Live dialog names the server's own IP; `docs/New_Server_Guide.md`.

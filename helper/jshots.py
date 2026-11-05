@@ -51,7 +51,8 @@ DEFAULTS = {"auto": False,       # draw a picture on the server at every entry a
             "chart": False,      # ask an open chart of the contract for its own picture at entry and exit
             "tg": False,         # send a backup copy of every picture to Telegram
             "tg_chat": "",       # ...to this chat / channel (the bot is the one in Settings › Telegram alerts)
-            "tg_since": 0}       # when the backup was turned on (or its chat changed): older pictures go only when asked
+            "tg_chat_live": "",  # Live trades' pictures to this one instead (v0.33.1, owner 5 Nov); empty = the chat above
+            "tg_since": 0}       # when the backup was turned on (or a chat changed): older pictures go only when asked
 MAX_BYTES = 10 * 1024 * 1024
 DELAY = 3.0                      # seconds after the fill / close before drawing (Fyers' candle for that minute)
 TG_BACKOFF = [60, 300, 900, 3600]
@@ -59,6 +60,25 @@ CHAT_RE = re.compile(r"^(-?\d{3,20}|@[A-Za-z][A-Za-z0-9_]{4,31})$")
 
 
 # ---------------------------------------------------------------- settings
+def chat_for(c: dict, t: dict) -> str:
+    """The Telegram chat for this trade's pictures: Live trades to the Live channel when one is set (v0.33.1), everything
+    else to the journal's chat. "" = this trade's pictures aren't copied (backup off, or no chat for its kind)."""
+    if not c.get("tg"):
+        return ""
+    if (t or {}).get("mode") == "live" and c.get("tg_chat_live"):
+        return c["tg_chat_live"]
+    return c.get("tg_chat") or ""
+
+
+def tg_on(c: dict) -> bool:
+    return bool(c.get("tg") and (c.get("tg_chat") or c.get("tg_chat_live")))
+
+
+def review_chat(c: dict) -> str:
+    """The weekly review covers every account: the journal's chat (the Live channel if that's the only one)."""
+    return (c.get("tg_chat") or c.get("tg_chat_live") or "") if c.get("tg") else ""
+
+
 def cfg(settings: dict) -> dict:
     out = dict(DEFAULTS)
     sh = (settings or {}).get("shots") or {}
@@ -90,12 +110,15 @@ def clean_cfg(b: dict, old: dict) -> dict:
         if not 30 <= n <= 400:
             raise ValueError("candles: between 30 and 400")
         out["bars"] = n
-    if "tg_chat" in b:
-        c = str(b["tg_chat"] or "").strip()
-        if c and not CHAT_RE.match(c):
-            raise ValueError("Telegram chat: a number like -1001234567890, or @channelname")
-        out["tg_chat"] = c
-    if out.get("tg") and (not (old or {}).get("tg") or out.get("tg_chat") != (old or {}).get("tg_chat")):
+    for k in ("tg_chat", "tg_chat_live"):
+        if k in b:
+            c = str(b[k] or "").strip()
+            if c and not CHAT_RE.match(c):
+                raise ValueError(("Live trades' channel" if k == "tg_chat_live" else "Telegram chat")
+                                 + ": a number like -1001234567890, or @channelname")
+            out[k] = c
+    if out.get("tg") and (not (old or {}).get("tg") or out.get("tg_chat") != (old or {}).get("tg_chat")
+                          or out.get("tg_chat_live", "") != (old or {}).get("tg_chat_live", "")):
         out["tg_since"] = time.time()
     return out
 
@@ -358,8 +381,9 @@ def _job_draw(uid, key, ph, manual, tries=0):
 
 def after_add(uid: str, key: str, sh: dict) -> None:
     """A picture was added: the Telegram backup copy, if it's on."""
-    c = cfg(_journal(uid).d["settings"])
-    if c["tg"] and c["tg_chat"]:
+    j = _journal(uid)
+    c = cfg(j.d["settings"])
+    if chat_for(c, j.d["trades"].get(key) or {}):
         queue(("tg", uid, key, sh["id"], 0), 0.5)
 
 
@@ -811,10 +835,11 @@ def _job_tg(uid, key, sid, tries=0):
     from . import telegram as tgm
     j = _journal(uid)
     c = cfg(j.d["settings"])
-    if not (c["tg"] and c["tg_chat"]):
-        return
     with j.lock:
         t = copy.deepcopy(j.d["trades"].get(key))
+    chat = chat_for(c, t)
+    if not chat:
+        return
     sh = next((s for s in (t or {}).get("shots") or [] if s["id"] == sid), None)
     if not t or not sh or (sh.get("tg") or {}).get("msg"):
         return
@@ -822,9 +847,9 @@ def _job_tg(uid, key, sid, tries=0):
     try:
         with open(file_of(uid, key, sh), "rb") as f:
             data = f.read()
-        res = send_file(tok, c["tg_chat"], data, sh.get("name") or f"{sid}.{sh.get('ext', 'png')}",
+        res = send_file(tok, chat, data, sh.get("name") or f"{sid}.{sh.get('ext', 'png')}",
                         MIME.get(sh.get("ext") or "png", "image/png"), caption(t, sh))
-        j.set_shot_tg(key, sid, {"msg": res.get("message_id"), "chat": c["tg_chat"], "at": time.time()})
+        j.set_shot_tg(key, sid, {"msg": res.get("message_id"), "chat": chat, "at": time.time()})
         _tg_note(uid, t=time.time(), error=None, n=store.load(f"u/{uid}/tg_journal.json", {}).get("n", 0) + 1)
     except OSError:
         j.set_shot_tg(key, sid, {"err": "the picture's file is missing on the server", "at": time.time(), "n": tries + 1})
@@ -852,11 +877,11 @@ def tg_send_missing(uid: str, since: float | None = None) -> int:
     start-up only those added since the backup was turned on (`since`)."""
     j = _journal(uid)
     c = cfg(j.d["settings"])
-    if not (c["tg"] and c["tg_chat"]):
+    if not tg_on(c):
         return 0
     n = 0
     with j.lock:
-        items = [(k, s["id"]) for k, t in j.d["trades"].items() for s in t.get("shots") or []
+        items = [(k, s["id"]) for k, t in j.d["trades"].items() if chat_for(c, t) for s in t.get("shots") or []
                  if not (s.get("tg") or {}).get("msg") and (since is None or (s.get("at") or 0) >= since)]
     for i, (k, sid) in enumerate(items):
         if queue(("tg", uid, k, sid, 0), 0.5 + i * 1.2):     # Telegram: about one upload a second
@@ -864,10 +889,11 @@ def tg_send_missing(uid: str, since: float | None = None) -> int:
     return n
 
 
-def tg_test(uid: str, chat: str) -> None:
+def tg_test(uid: str, chat: str, live: bool = False) -> None:
     from . import telegram as tgm
     tok = tgm.token(tgm.load(uid))
-    tgm.send(tok, chat, "✅ <b>Journal backup</b>: copies of your journal pictures will come to this chat.", silent=True)
+    tgm.send(tok, chat, "✅ <b>Journal backup</b>: copies of your " + ("<b>Live</b> trades' " if live else "journal ")
+             + "pictures will come to this chat.", silent=True)
 
 
 def startup(uids) -> None:
@@ -875,7 +901,7 @@ def startup(uids) -> None:
     for uid in uids:
         try:
             c = cfg(_journal(uid).d["settings"])
-            if c["tg"] and c["tg_chat"]:
+            if tg_on(c):
                 tg_send_missing(uid, c.get("tg_since") or 0)
         except Exception as e:
             log.warning("journal pictures start-up %s: %s", uid, e)
@@ -895,15 +921,16 @@ def tg_review(uid: str, week: str, text: str) -> str:
     from . import telegram as tgm
     j = _journal(uid)
     c = cfg(j.d["settings"])
-    if not (c["tg"] and c["tg_chat"]):
+    chat = review_chat(c)
+    if not chat:
         return "off"
     tok = tgm.token(tgm.load(uid))
     rv = j.d["reviews"].get(week) or {}
     msg = rv.get("msg") or {}
     text = text[:4000]
-    if msg.get("id") and msg.get("chat") == c["tg_chat"]:
+    if msg.get("id") and msg.get("chat") == chat:
         try:
-            tgm.call(tok, "editMessageText", {"chat_id": c["tg_chat"], "message_id": msg["id"], "text": text,
+            tgm.call(tok, "editMessageText", {"chat_id": chat, "message_id": msg["id"], "text": text,
                                               "disable_web_page_preview": True})
             return "edited"
         except tgm.TgError as e:
@@ -911,7 +938,7 @@ def tg_review(uid: str, week: str, text: str) -> str:
                 return "edited"
             if not re.search(r"not found|can't be edited|MESSAGE_ID_INVALID", str(e), re.I):
                 raise
-    res = tgm.call(tok, "sendMessage", {"chat_id": c["tg_chat"], "text": text, "disable_web_page_preview": True,
+    res = tgm.call(tok, "sendMessage", {"chat_id": chat, "text": text, "disable_web_page_preview": True,
                                         "disable_notification": True})
-    j.set_review_msg(week, {"id": (res or {}).get("message_id"), "chat": c["tg_chat"]})
+    j.set_review_msg(week, {"id": (res or {}).get("message_id"), "chat": chat})
     return "posted"

@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.33.1 — 5 Nov 2026 — A separate Telegram channel for Live trades' pictures
+
+Added
+- **Live trades' channel** in Journal › Settings › Pictures (roadmap 17; owner, 5 Nov: "A separate telegram channel for
+  live"), below the journal's chat, with its own Save and Send a test. The admin only.
+  - **Set:** every picture of the Live account's trades goes there; paper trades' pictures stay in the journal's chat.
+  - **Empty:** everything goes to the journal's chat, as before.
+  - **Only the Live channel set** (the journal's chat empty): only Live trades are copied; paper pictures aren't sent or
+    counted as waiting.
+  - **Each copy remembers its chat,** so deleting a picture deletes its copy from the right channel. Changing the Live
+    channel restarts the backup's stamp, as changing the journal's chat does.
+  - **The weekly review's summary** stays in the journal's chat (the Live channel if that's the only one): it covers every
+    account.
+- The same bot as before (Settings › Telegram alerts); captions already start with LIVE or Paper and the account.
+
+Tests
+- `tests/jshots_test.py`: 9 new checks (52 in all): which chat each trade's pictures go to, a bad Live channel refused, a
+  Live and a paper trade's pictures each to their own channel, Live only, the weekly review's chat, Send a test.
+- `tests/jshots_flow.js`: 5 new checks (50 in all): the field, a bad channel refused, saved, Send a test, emptied again.
+- Run again: `journal_test.py`, `jreview_test.py`, `jinsights_flow.js`, `journal_flow.js`, `routes_check.py`.
+
 ## v0.33.0 — 5 Nov 2026 — The Live account is your Fyers account
 
 Added

@@ -182,6 +182,16 @@ let br;
   await pg.fill("#jsChat", "-1009990001"); await pg.click("#jsChatSave"); await pg.waitForTimeout(700);
   await pg.click("#jsTgTest"); await pg.waitForTimeout(800);
   ok(/Sent/.test(await pg.textContent("#jsSetSt")) && (await tgGet("/_sent")).some(m => m.chat === "-1009990001" && /Journal backup/.test(m.text)), "Send a test: the message reaches that chat");
+  // v0.33.1: a separate channel for Live trades (the admin)
+  ok(await pg.isVisible("#jsChatLive"), "the admin has a \"Live trades' channel\" field");
+  await pg.fill("#jsChatLive", "not a chat"); await pg.click("#jsChatLiveSave"); await pg.waitForTimeout(500);
+  ok(/Live trades' channel: a number/.test(await pg.textContent("#jsSetSt")), "a Live channel that isn't a number or @name is refused");
+  await pg.fill("#jsChatLive", "-1009990002"); await pg.click("#jsChatLiveSave"); await pg.waitForTimeout(700);
+  ok((await jget()).shots_cfg.tg_chat_live === "-1009990002", "the Live channel is saved");
+  await pg.click("#jsTgTestLive"); await pg.waitForTimeout(800);
+  ok((await tgGet("/_sent")).some(m => m.chat === "-1009990002" && /Live/.test(m.text)), "Send a test to the Live channel");
+  await pg.fill("#jsChatLive", ""); await pg.click("#jsChatLiveSave"); await pg.waitForTimeout(700);
+  ok((await jget()).shots_cfg.tg_chat_live === "", "emptied: Live pictures go to the journal's chat again");
   await pg.check('#jsSet input[data-shot="tg"]'); await pg.waitForTimeout(800);
   ok((await jget()).shots_cfg.tg === true, "Telegram backup switched on");
   await pg.click('#jnSub button[data-v="trades"]');
