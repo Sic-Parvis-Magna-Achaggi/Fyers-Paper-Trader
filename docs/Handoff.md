@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 10 Nov 2026, version **0.34.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 10 Nov 2026, version **0.35.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -100,6 +100,28 @@ the daytime. (Roadmap follow-up.)
 automatic pictures off itself (other suites turn them on).
 `indicator_settings_flow.js`'s "at the start of a contract's history it stops asking" failed once in 2 runs on 1 Nov
 (v0.22.0; passed on re-run, 37/37). Same advice.
+
+## ƒx search and the Settings page (v0.35.0, roadmap 18 and 19)
+
+- **ƒx search** (index.html, next to `renderIndPick`): `#indQ` above `#indBody` (outside it, so re-renders keep it).
+  `renderIndPick` gives every row `data-q` (name; built-ins name + description) and marks names with `indHl(text, words)`
+  (`<mark>`); `indFilter(W)` hides rows / empty sections, adds `.indnone`, picks row 0. `indRows()` = shown rows with
+  `[data-add]`, `[data-padd]` or `[data-pedit]`; `indSel(n)` (`IND_SEL`, `.sel`); Enter clicks `[data-add],[data-padd]`
+  first, else `[data-pedit]` (libraries). `indOpen(focus)` (ƒx and the "/" key in the page's keydown handler; focuses the
+  box except on the phone unless asked).
+- **Settings page** (`web/settings.js`, after mt5.js; CSS in index.html under `#drawer` and in mobile.css): still
+  `#drawer` / `.open` / `openDrawer()` / `#bClose`, so nothing that opens or tests it changed. `setBuild()` turns `.db`'s
+  children into `#setNav` + `#setBody > .scard` sections (an `<h3>` starts one; a `<div>` whose first child is an `<h3>`,
+  i.e. `#tgSec`, `#mt5Sec`, `#usersSec`, is one, so its `hide` hides its list entry: `setNav()` rebuilds on class changes).
+  `setGo(id)` jumps (instantly; `.db` is `position: relative` so `offsetTop` is inside it), `setSpy()` marks on scroll.
+  A MutationObserver on `#drawer`'s class runs `setOpened` (hash `#settings`, remembers the previous hash) / `setClosed`
+  (`#bSettings`'s onclick holds the original `openDrawer`, so wrapping it wasn't enough). Esc closes unless typing in a
+  filled field of the page or a dialog is up. `pagesStart` is wrapped: a load on `#settings` opens it.
+  `#setBody::after` (55vh) lets the last sections reach the top. Desktop: `#drawer` starts under the app's header
+  (`--sethdr`, `setTop()` on open / resize), and a `pgShow(name)` without `fromHash` (a click in `#nav`) closes it; the
+  page's keydown handler ignores keys while it's open; `showGate` and `#bLogout` close it.
+- **The version** (roadmap 20): `refreshState()` fills `#verTop` (a `<small>` in `.brand`), `#verSet` (Settings' header) and
+  `#mVer` (top of the phone's More, also set when More renders).
 
 ## MT5 bridge: MT5 prices and charts (v0.34.0, roadmap 8 stage a)
 

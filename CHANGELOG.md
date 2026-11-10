@@ -1,5 +1,44 @@
 # Changelog
 
+## v0.35.0 — 10 Nov 2026 — Search in the indicators menu; Settings as a page of its own; the version at the top
+
+Added
+- **Search in ƒx, like TradingView** (roadmap 18; owner, 10 Nov: "Can you give me a search within indicators like
+  tradingview?").
+  - A search box at the top of the indicators menu, ready to type as it opens (on the phone, tap it).
+  - Typing filters everything in the menu: what's on this chart, the built-in indicators (found by their description
+    too: "column" finds the P&F toolkit) and your own scripts. Every word must match, and the matching letters are marked.
+    Sections with nothing left are hidden; with no match it says so.
+  - **↑ / ↓** pick a result, **Enter** adds it to the chart (a library opens its code); the menu and the search stay
+    open for the next one. **Esc** clears the search, a second Esc closes the menu.
+  - **/** (outside a text box, on the chart) opens ƒx with the search, as on TradingView.
+- **Settings as a page of its own** (roadmap 19; owner, 10 Nov: "the settings can be a separate page instead of a tab.
+  It looks too cramped").
+  - Settings fills the window instead of the 440 px side drawer: the list of sections on the left (Fyers app, Telegram
+    alerts, MT5 bridge, paper trading rules, charges, reset, security, users, display, helper log), each section in its own
+    card, up to 820 px wide.
+  - A click in the list jumps to that section; the list marks the section you're in as you scroll.
+  - **← Back** (top left) or **Esc** returns to where you were. The address says **#settings** while it's open, so a
+    reload opens it again.
+  - The app's own top bar stays above it: picking Chart, Trades, History... there closes Settings and opens that page.
+  - The phone: full screen, with the sections as a row of chips along the top.
+- **The version at the top** (roadmap 20; owner, 10 Nov: "bring the version somewhere at the top so, it's easily
+  visible"): under "Trade Manager" in the top bar (its commit and the server's up-time when you point at it), at the top
+  of the Settings page, and at the top of the phone's More tab.
+
+Changed
+- Every setting is where it was, with the same buttons; only the layout around them changed.
+- **Settings is a ⚙ at the top right** (it was the word "Settings"): the top bar has no room for anything more at
+  1500 px on the Live side with MT5 in use (it moved to a second line).
+- Logging out closes Settings, so the next login starts on the app. The chart's keys (F, P, /) don't reach through it.
+
+Tests
+- `tests/settings_search_flow.js` (new, 34 checks): the version (top bar, Settings, the phone's More); the ƒx search (filtering, words, descriptions, marks, nothing
+  found, ↑ / ↓ / Enter / Esc, "/"), the Settings page (full window, the section list, jumps, the list following the
+  scroll, #settings and reload, Esc and ← Back), the phone (chips, a jump, the Layout switch, the search).
+- Every browser suite run again on fresh test data (security_flow first). `live_flow.js` (its "the header stays on one
+  line" check found the crowded top bar) passes with the ⚙.
+
 ## v0.34.0 — 10 Nov 2026 — MT5 prices and charts through your own bridge EA (FundingPips, stage a)
 
 Added

@@ -10,6 +10,12 @@ It runs on our own server and serves its own page, so there is nothing to instal
 for example to trade live from their own static IP. One script sets it all up: see
 [docs/New_Server_Guide.md](docs/New_Server_Guide.md).
 
+## Version 0.35.0: search in ƒx, Settings as a page
+
+- **ƒx has a search box**, like TradingView: type to filter the built-in indicators and your own scripts, ↑ / ↓ and
+  Enter to add; **/** opens it.
+- **Settings is a page of its own**, with its sections listed on the left; ← Back or Esc returns.
+
 ## Version 0.34.0: MT5 prices and charts (FundingPips)
 
 - **Your MT5 terminal's prices in this app**, through **FTM Bridge**, your own EA (`mt5/FTM_Bridge.mq5`; how it works:

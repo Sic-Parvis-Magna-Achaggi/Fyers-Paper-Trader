@@ -44,6 +44,7 @@ FYERS_HELPER_DATA=/tmp/fyers_test node tests/jshots_flow.js        # journal pic
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/jinsights_flow.js     # journal v0.28.0: Insights, the weekly review, walk-through, calendar, Copy for Gemini, export / backup / restore, phone
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/mobile_flow.js        # the phone layout on an emulated Pixel 7: order sheet and its bubble, positions, tabs, full screen (resets the admin's paper account)
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/replay_flow.js        # trade replay: ▶ On chart (recorded chart + Pine code, nothing saved), ▶ Play, every chart type, History, the phone; ~5 min (resets the admin's paper account)
+FYERS_HELPER_DATA=/tmp/fyers_test node tests/settings_search_flow.js  # v0.35.0: the ƒx search (filter, marks, ↑ / ↓ / Enter / Esc, "/") and Settings as a page (sections list, jumps, #settings, Esc / ← Back), the phone
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/mt5_flow.js           # v0.34.0: Settings › MT5 bridge (key with 2FA), a fake MT5 terminal connecting (fake_mt5.py), Find, an MT5 chart with every chart type + Volume + Pine, the broker's day, trading refused, MT5 off, the phone
 ```
 

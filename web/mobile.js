@@ -663,7 +663,7 @@ function mMore(){
   const f = (typeof S !== "undefined" && S.fyers) || {}, u = (S && S.user) || {};
   const theme = prefGet("theme", "");
   box.innerHTML = `
-    <div class="mcard"><b>${esc(u.name || u.username || "")}</b> <span class="muted">${esc(u.role || "")}</span>
+    <div class="mcard"><b>${esc(u.name || u.username || "")}</b> <span class="muted">${esc(u.role || "")}</span><span class="muted mono" id="mVer" style="float:right;font-size:12px">v${esc(S.version || "")}</span>
       <div class="muted sm" style="margin-top:4px">Fyers: ${f.logged_in ? `<span class="up">logged in${f.client_id ? " · " + esc(f.client_id) : ""}</span>` : f.configured ? '<span class="down">not logged in today</span>' : '<span class="down">app not set up</span>'}</div>
       ${f.configured && !f.logged_in ? `<div class="mbtns"><button class="primary" id="mmFy">Log in to Fyers</button></div>` : ""}</div>
     <div class="mlist">

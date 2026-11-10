@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.34.0)
+# Paper and live trading: how it works (v0.35.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -6,6 +6,8 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
 
 - **Login** is your username and password, then a 6-digit code from your authenticator app (Google Authenticator, Microsoft Authenticator, Authy or similar). Lost your phone? Type one of your recovery codes instead of the app code; each works once.
 - **First login** (and the first login after this update, as user **admin** with your old page password): you scan a QR code into the app, type the code it shows, and save the 10 recovery codes shown once.
+- **Settings** (**⚙** at the top right; phone: More › Settings) is a page of its own: its sections are listed on the left (on the phone, chips along the top); click one to jump there. **← Back**, **Esc** or a page in the top bar returns.
+- **The version** shows under "Trade Manager" at the top left (point at it for the commit and how long the server has been up), at the top of Settings, and at the top of the phone's More tab.
 - **Settings → Security:** change your name or password, get new recovery codes, move 2FA to a new phone, see every device you're logged in on (log any out, or everywhere else), and recent activity.
 - **A fresh code is asked again** (valid 5 minutes) for sensitive actions: adding or changing users, new recovery codes, moving 2FA, editing charge rates, switching a page to Live, Resume after the kill switch.
 - **Lockout:** 5 wrong passwords or codes lock that user for 15 minutes. Sessions end after 48 hours without use and after 7 days at most.
@@ -520,6 +522,7 @@ Turn it on or off in Chart settings (⚙).
 - Write or paste a script. It's checked as you type: an error shows its line (click it to jump there) and the line turns red.
 - **Save** (Ctrl+S) puts it in your library on the server; edit the name and Save to rename. **Save as** makes a copy. **Delete** removes it (and takes it off the chart).
 - **Add to chart** (Ctrl+Enter). When the script is already on the chart, the button says **Update on chart**. Saving also updates the chart.
+- **Search in ƒx:** the indicators menu opens with a search box (or press **/** on the chart, as on TradingView). Type part of a name: what's on the chart, the built-in indicators (also by their description) and your scripts are filtered, every word must match, and the matching letters are marked. **↑ / ↓** pick one, **Enter** adds it (the menu stays open for the next), **Esc** clears the search, then closes the menu.
 - **ƒx → My scripts** lists your library: **+ Add** puts a script on the chart, **{ }** opens it in the editor. You can add the same script twice with different inputs.
 - On the chart, each script's read-out shows its values for the bar under the cursor. A read-out never runs past the price scale: a script with many values wraps them onto more lines. Point at a read-out for its buttons, right after its name (on the phone they're always shown):
   - **👁** hides the indicator, or shows it again (a hidden script stops running);

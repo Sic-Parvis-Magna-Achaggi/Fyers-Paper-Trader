@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 10 Nov 2026 (v0.34.0: item 8 stage a, MT5 prices and charts). This is the one task list for the project.
+Updated 10 Nov 2026 (v0.35.0: items 18-20, the ƒx search, the Settings page, the version at the top). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -185,8 +185,8 @@ fallback"):** item 8 is built now, stage by stage. Stage a shipped in **v0.34.0*
    - **Plan B if FundingPips says no to the server:** the app itself runs on the owner's laptop for MT5 accounts (the same
      code, Windows), with the EA talking to it on localhost only; nothing leaves the laptop except MT5's own connection.
    - **Answered by FundingPips** (10 Nov, above): the set-up (an explanation of the rules), hedging, the news window.
-     **To confirm with the owner:** what "opposite trades on different instruments" covers (e.g. long EURUSD with short
-     GBPUSD?), which decides how wide the app's hedging check is.
+     **Owner, 10 Nov 2026:** opposite trades on different instruments (long EURUSD with short GBPUSD) are allowed: "it is not
+     same instrument hedging". **News calendar (owner, 10 Nov): ForexFactory.**
    - **Build it as described to FundingPips on 8 Nov:** the EA on the laptop calls out to the server with WebRequest (for
      prices up and for the orders waiting for it); nothing calls in to the laptop. A change to that (e.g. MT5 sockets)
      is told to FundingPips first.
@@ -210,12 +210,12 @@ fallback"):** item 8 is built now, stage by stage. Stage a shipped in **v0.34.0*
        reading and the per-account switch):** the app refuses an order opposite an open position or pending order on the
        same symbol in the same FundingPips account, and (to be safe, no ruling from FundingPips) one opposite a position
        in the owner's other FundingPips accounts. Adding to a position on the same side stays allowed. Different
-       instruments: after the owner's answer above.
+       instruments are allowed (owner, 10 Nov): the check is per symbol only.
      - **News guard (FundingPips, 10 Nov):** each MT5 account has its phase (evaluation / Master). Master: no opening and
        no manual closing from 5 minutes before to 5 minutes after a high-impact release on the symbol's currencies (the
        broker's own SL / TP can still fire inside it: a warning beforehand). Evaluation: no block, a warning ahead of
-       high-impact news (purposely trading news is prohibited). The calendar: FundingPips' dashboard is the official one
-       but has no feed for the app; a public calendar feed to agree before building.
+       high-impact news (purposely trading news is prohibited). The calendar: **ForexFactory** (owner, 10 Nov), its
+       high-impact events for the symbol's currencies (FundingPips' dashboard calendar stays the official one).
      - **No copying in:** every MT5 order comes from the owner's own click; nothing from Fyers or anywhere else is mirrored in.
      - **Money (owner's answer, 10 Nov 2026: "$, net of FundingPips costs"):** MT5 trades in the account's currency ($):
        SL, TP, risk, P&L, R and BE net of commission (typed per symbol, checked against MT5's real deals) and swap; the
@@ -393,6 +393,24 @@ fallback"):** item 8 is built now, stage by stage. Stage a shipped in **v0.34.0*
       copy remembers its chat (deletes go to the right one). The weekly review's summary stays in the journal's chat.
       The same bot. *(v0.33.1)*
 
+18. [x] **Search in the indicators menu (ƒx), like TradingView** — shipped in **v0.35.0** (asked 10 Nov 2026: "Can you give me a search within
+    indicators like tradingview?"). Design (Claude's, 10 Nov; the owner can change it): a search box at the top of ƒx,
+    ready to type as the menu opens; typing filters every part (on this chart, built in, my scripts) by name (built-ins
+    by their description too), the matching letters marked; ↑ / ↓ move, Enter adds the highlighted one (or opens a
+    library's code), Esc clears then closes; "/" opens ƒx with the search, as on TradingView; the phone too.
+
+19. [x] **Settings as a page of its own, not the side drawer** — shipped in **v0.35.0** (asked 10 Nov 2026: "the settings can be a separate page
+    instead of a tab. It looks too cramped"). Design (Claude's, 10 Nov; the owner can change it): Settings fills the
+    window with a list of its sections on the left (Fyers app, MT5 bridge, Telegram alerts, rules, charges, reset, security,
+    users, display, layout, helper log) and each section in its own card on the right, wider than the drawer; a click on
+    the list jumps there and the list follows as you scroll; ← Back (or Esc) returns to where you were; the address
+    remembers it (#settings). Phone: full screen, the sections as chips along the top.
+
+20. [x] **The version at the top, easy to see** — shipped in **v0.35.0** (asked 10 Nov 2026: "bring the version somewhere at the top so, it's
+    easily visible. It can be in the settings page. But, another one at the top can really help"). Design: under "Trade
+    Manager" in the header (its commit and the server's up-time in its tip), at the top of the Settings page, and at the
+    top of the phone's More tab.
+
 ## Rules that shape live trading and other users (checked 30 Oct 2026)
 
 Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers' rules in force from 1 Apr 2026.
@@ -450,10 +468,12 @@ marked before relying on it.
 - [ ] Agri MCX contracts use the non-agri rates (low priority: Fyers doesn't offer agri commodities at present).
 - [ ] Ask Fyers in writing whether a second user's app may fetch market data from this server's IP (support request drafted 30 Oct).
 - [x] **FundingPips (owner):** answered 10 Nov 8:12 PM: no hedging in one account; news window ±5 min on Master only (item 8).
-- [ ] **The owner:** what FundingPips' "opposite trades on different instruments" covers (item 8's hedging check).
+- [x] **The owner (10 Nov):** opposite trades on different instruments are allowed (only the same symbol is hedging); the
+  news calendar is ForexFactory (item 8).
 
 ## Done
 
+- [x] **v0.35.0** (10 Nov): the ƒx search, like TradingView (item 18: filter as you type, marks, ↑ / ↓ / Enter, Esc, "/") and Settings as a page of its own (item 19: sections listed on the left, cards, ← Back / Esc, #settings; chips on the phone); the version at the top (item 20).
 - [x] **v0.34.0** (10 Nov): MT5 prices and charts through the owner's own bridge EA (item 8, stage a): `mt5/FTM_Bridge.mq5` (calls out only, no orders), Settings › MT5 bridge, MT5 in the Prices pill, MT5 symbols in Find, every chart type and Pine on the broker's own candles, the broker's day; paper trading refuses MT5 symbols until stage b.
 - [x] **v0.33.1** (5 Nov): a separate Telegram channel for Live trades' pictures (item 17): Journal › Settings › Pictures › Live trades' channel (optional; paper pictures stay in the journal's chat; Live only if that's empty).
 - [x] **v0.33.0** (5 Nov): the Live account is your Fyers account (item 16): the PAPER / LIVE switch at the top left (green / red, client ID + 2FA, per login, the server refusing Live changes from a Paper page); Fyers' own funds for the balance and every % rule (money in / out never a profit or a loss); every trade on the Fyers account shown and managed (placed here or in Fyers; a Fyers stop adopted; no stop: the red flag and Place my stop); delivery holdings (never squared off); old Live accounts back to Paper.
