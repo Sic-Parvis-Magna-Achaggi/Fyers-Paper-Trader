@@ -1,11 +1,13 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 5 Nov 2026, version **0.33.1**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 10 Nov 2026, version **0.34.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
 
-The repo is `Sic-Parvis-Magna-Achaggi/Fyers-Paper-Trader` (private). The owner uploads release zips by dragging the
+The repo is `Sic-Parvis-Magna-Achaggi/Fyers-Paper-Trader` (meant to be private; on 10 Nov 2026 it could be cloned
+without a login, i.e. it was public: the owner was told how to make it private). GitHub still had `helper/auth.py` (the
+pre-v0.13 single-password login, unused): v0.34.0's release deletes it (tick the delete box). The owner uploads release zips by dragging the
 folder's contents into GitHub; the server pulls every minute. Always start from the latest commit in the repo, not
 an old zip. The owner releases with `tools/github_upload.html` (Release to GitHub, v0.26.1): a single page opened from disk; with his
 fine-grained token (resource owner the Sic-Parvis-Magna-Achaggi organization, this repo, Contents: Read and write; the
@@ -98,6 +100,85 @@ the daytime. (Roadmap follow-up.)
 automatic pictures off itself (other suites turn them on).
 `indicator_settings_flow.js`'s "at the start of a contract's history it stops asking" failed once in 2 runs on 1 Nov
 (v0.22.0; passed on re-run, 37/37). Same advice.
+
+## MT5 bridge: MT5 prices and charts (v0.34.0, roadmap 8 stage a)
+
+- **The EA:** `mt5/FTM_Bridge.mq5` 1.00, walk-through in `mt5/README.md` (the owner's proof of ownership for FundingPips:
+  keep every version in Git; he compiles it himself). **Never compiled here** (no MetaEditor in the build environment):
+  the owner compiles and reports errors. Places no orders. Calls out only, with WebRequest (as described to FundingPips
+  on 8 Nov; their AI support's reply of 10 Nov: own EA allowed, the rule is the account connection: MT5 on the home
+  connection, no VPN / VPS, the server never logs in). **Keep it that way**: anything that connects in to the laptop, or
+  the server logging in to the broker, must be put to the owner (and FundingPips) first.
+- **Protocol** (EA -> server, header `X-FTM-Key`, no cookie):
+  - `POST /api/mt5/sync` every `POLL_MS` (250): `{v, ea, build, srv: TimeTradeServer, gmt: TimeGMT, acct: {login, server,
+    company, name, currency, balance, equity, margin, free, leverage, mode: hedge|netting|exchange, trade_allowed,
+    ea_allowed, demo}, ticks: [[name, time_msc (server time), bid, ask, last, today's D1 tick volume], ...]}`.
+    Answer: text lines `OK <ms>`, `SUB a,b,c` (the full list each time; the EA keeps per-symbol last msc), `HIST <id>
+    <name> <tf: minutes|D> <from> <to>` (server time), `LIST`, `ERR <msg>`.
+  - `POST /api/mt5/bars` `{id, sym, bars: [[t_srv, o, h, l, c, tick_vol]], done, err}` (parts of 20,000).
+  - `POST /api/mt5/symbols` `{part, parts, symbols: [{name, desc, path, digits, point, tick_size, tick_value, contract,
+    vmin, vstep, vmax, cprofit, cmargin, cbase, trade_mode, calc_mode, swap_mode, swap_long, swap_short, stops_level,
+    freeze_level, spread, visible}]}` (parts of 300; the last part replaces the list).
+- **Server, `helper/mt5.py`:**
+  - **Key:** `new_key` (`ftm-` + 24 random bytes) / `revoke`; `u/<uid>/mt5.json` keeps `key` (sha256), `key_made`,
+    `price_login`, `clock` (us|fixed), `offset`, `bridges` (last account info per login, saved at most every 60 s).
+    `_index` sha -> uid (rebuilt on change). `uid_for` counts wrong keys per IP (30 in 10 min: `blocked`).
+  - **Per user `UserMT5`:** `bridges` {login: Bridge (info, seen, ip, ea, offset, q of command lines, hist futures)},
+    `specs` (the symbol list, `u/<uid>/mt5_symbols.json`). `price_bridge()` = the ticked login while online (`ONLINE_SEC`
+    8), else the most recently seen online one. Only the price bridge gets `SUB` / `HIST` / `LIST`; others get `SUB` empty.
+  - **Ticks:** `sync()` publishes `{s: "MT5:<name>", ltp: bid, bid, ask, t: msc/1000 - offset (UTC), vol, src: "mt5"}` to
+    the user's `Feed`. `SUB` = MT5 symbols in `feed.wanted()`.
+  - **Clock:** offset = round((srv - gmt) / 1800) * 1800. `Clock.to_utc / to_srv`: mode "us" (offset moves with US DST:
+    winter offset = now's offset minus 1 h in US summer) or "fixed". `day_ist()` = the broker's midnight in IST minutes;
+    rows carry `sess` "HHMM-HHMM" from it. Changing the mode deletes MT5 candles (`_clear_candles`).
+  - **Candles:** `history(uid, folder, symbol, res, days)`: the user's `candles.db` (same tables as Fyers' candles; `cover`
+    `first_day` holds an epoch string for MT5). No cover: fetch [want, now]; want earlier than first: fetch [want, first];
+    older than `FRESH_SEC` (15): fetch [last - 3 bars, now]. `_fetch` queues a HIST line and awaits the EA's bars
+    (`HIST_TIMEOUT` 45 s). Offline: saved candles serve; none saved -> `Offline` (HTTP 409). **Daily candles are stamped
+    00:00 IST of the broker's date** (`t_srv // 86400 * 86400 - 19800`), so US summer time never moves them; intraday
+    candles are real UTC times. "45" = `agg45` of "15" from the broker's midnight. `STORE_V` ("1") in `meta.mt5_v`: a
+    change drops MT5 candles once (`_store_check`).
+  - **Symbols:** `row_from(spec)`: Fyers' row shape (`f` "CFD", `x` / `g` "MT5", lot 1, `mult` contract size, `tick` tick
+    size, `mt5` {digits, point, tick_value, vmin, vstep, vmax, currencies, calc_mode, swaps, path, spread}). `row(uid,
+    ticker)`; `row(None, ticker)` (any user: `symbols.EXTRA`, set in app.py, so `symbols.get("MT5:...")` works).
+    `search(uid, q)`: name / desc / path; exact, then Market Watch (`visible`) first.
+  - `status(uid, url)` (Settings), `brief(uid)` (the pill: `feed.status()["mt5"]` via `feed.mt5`), `settings()`.
+- **Routes (app.py):** EA: `/api/mt5/sync` (PlainText), `/api/mt5/bars`, `/api/mt5/symbols` (`_mt5_uid`: key -> uid,
+  disabled users refused; size limits 4 / 30 / 20 MB). Page: `GET /api/mt5`, `GET /api/mt5/ea` (the .mq5), `POST
+  /api/mt5/key` (step-up; audit `mt5_key_new` / `mt5_key_revoked`), `POST /api/mt5/settings`. `/api/history` sends MT5
+  symbols to `mt5.history`; `/api/symbols` puts up to 10 MT5 hits first (filter `ex=MT5` or `kind=CFD`: only MT5);
+  `/api/symbol` uses `mt5.row(uid, s)`; `/api/measure` refuses MT5 ("points only").
+- **Kept from Fyers:** `Feed.fy_wanted()` (everything but `MT5:`) is what Fyers' socket and quote polls get;
+  `set_depth` drops MT5; `publish` doesn't count MT5 ticks for `last_tick_at` (Fyers' silence check). `Paper.row()` refuses
+  MT5 symbols (stage a), so preview / place / the ticket refuse them.
+- **Page:**
+  - `index.html`: `isMT5(s)`, `curMT5()`, `chartFeedOk()` (charts load without a Fyers login on MT5), `chartDay(ts)` (the
+    broker's date on MT5: `floor((ts - sessStart*60) / 86400)`). `bucket()` uses it (intraday from the broker's midnight;
+    D / W / M by the broker's date, stamped 00:00 IST); `sessRange()` = [start, start + 1440] and `sessMinutes()` 1380 on
+    MT5; `mktClosedNow()` / the candle timer use `chartDay`; `liveBar` skips the pre-open rule; `dataCheck` off; `onTick`
+    leaves `#pFeed` alone for `src: "mt5"`; `symLabel` strips `MT5:`; Find rows say "MT5 · <desc>"; the `MT5` button in
+    `#exf`; `#pMt5` (a `<b>` inside `#pFeed`, after `.txt`; `setDot` now writes `.txt` when there is one); `#mt5Sec` /
+    `#mt5Box` in the drawer. The header has no room for another pill at 1500 px (it already wraps below ~1440 px).
+  - `web/mt5.js` (after tgalerts.js): `mtRender()` (Settings › MT5 bridge, wraps `secRender`), `mtKeyShow`, `mtPill(fd)`
+    (shown only while the chart or the watchlist has an MT5 symbol; wraps `feedPill` and `openSymbol` on DOMContentLoaded,
+    as `renderBook`: "No order book for MT5 symbols", and `paperOnSymbol`: the ticket's hint), `mtPhoneWarn()` (used by
+    mobile.js's `mWarnings`).
+  - **The EA's delivery rules:** ticks are committed (`g_lastMsc`) only after a 200; the server drops ticks at or below the
+    previous call's last msc per symbol (`Bridge.last_msc`); after `CATCHUP_MS` (60 s) without an answered call, each
+    symbol restarts from `SymbolInfoTick`; HIST waits `HIST_WAIT_MS` (37 s) for history, ERR_HISTORY_NOT_FOUND on a synced
+    series = an empty finished answer; a failed older-range fetch leaves the saved candles serving.
+- **Known limits:** custom (built) timeframes and 45m candles from before the last US clock change are aligned an hour off
+  the current broker midnight (MT5's own native candles are right); weekends show as gaps like Fyers' nights.
+- **Tests:** `tests/fake_mt5.py` (the EA's protocol; GMT+2/+3; `bars()` = CopyRates with open times in [from, to]),
+  `tests/mt5_test.py` (in-process, 52), `tests/mt5_flow.js` (browser, 44; makes a key through the page, starts
+  fake_mt5.py). `mock_server.py`'s Fyers stream uses `fy_wanted()`.
+- **Next (stage b, the owner's answer 10 Nov: "$, net of FundingPips costs"):** MT5 accounts in the app (one per login),
+  orders through the EA (real SL / TP on each Hedge-mode position, moved by the app; the EA keeps trailing if the link
+  drops), $ net of commission (typed per symbol, checked against MT5's deals) and swap, **no opposite trades** in one
+  account or across his FundingPips accounts (FundingPips, 10 Nov: no hedging even in Hedge mode), the news guard (Master:
+  no opening / closing ±5 min of high-impact news on the symbol's currencies; evaluation: a warning), FundingPips'
+  drawdown rules (his 21182752 is Phase 1 of the 2-Step). To agree first: a news calendar feed, and what "opposite trades
+  on different instruments" covers (roadmap 8).
 
 ## Live trades' Telegram channel for journal pictures (v0.33.1, roadmap 17)
 
@@ -686,6 +767,10 @@ TradingView. If the owner wants indicators on the real candles under a Heikin-As
 indicator option to add (not built).
 
 ## Next job
+
+**Roadmap 8 stage a shipped in v0.34.0** (MT5 prices and charts through the owner's own bridge EA). Next, the owner:
+compiles `mt5/FTM_Bridge.mq5` in MetaEditor (send any errors), sets it up on the FundingPips demo (Settings › MT5 bridge),
+and checks a few MT5 charts against MT5's own (candle times and prices, the daily candles). Then stage b (above).
 
 **Roadmap 16 shipped in v0.33.0** (the Live account is the Fyers account). Next, the owner:
 - **Updates the server** and switches a page to LIVE (top left): the Account page's Live card should show his real Fyers

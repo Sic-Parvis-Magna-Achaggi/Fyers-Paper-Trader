@@ -10,6 +10,13 @@ It runs on our own server and serves its own page, so there is nothing to instal
 for example to trade live from their own static IP. One script sets it all up: see
 [docs/New_Server_Guide.md](docs/New_Server_Guide.md).
 
+## Version 0.34.0: MT5 prices and charts (FundingPips)
+
+- **Your MT5 terminal's prices in this app**, through **FTM Bridge**, your own EA (`mt5/FTM_Bridge.mq5`; how it works:
+  [mt5/README.md](mt5/README.md)). P&F, Renko, your Pine scripts and every other chart type on your broker's own candles.
+- The EA runs in MT5 on your laptop and only calls out to the server; it places no orders. Set it up in
+  **Settings › MT5 bridge**. Trading MT5 through the app comes next.
+
 ## Version 0.32.0: LiveTrader 1.24's changes
 
 - **RR box and padlock under BUY / SELL:** type an RR and the tool's target goes there; lock it and moving the stop moves
@@ -124,6 +131,7 @@ Next: the journal in the app, with Telegram screenshots.
 | `web/` | The page (`index.html`), the trade panel (`paper.js`), the phone layout (`mobile.js`, `mobile.css`), Pine Script (`pine.js`, `pine_worker.js`) and bundled libraries in `vendor/`: Lightweight Charts (Apache-2.0), PineTS (AGPL-3.0), CodeMirror 5 (MIT) |
 | `server/` | `startup.sh` sets up a new server (any Linux); `install.sh` installs / refreshes the app; `update.sh` takes new versions every minute; `serverconf.sh` keeps each server's own address, outgoing IP and branch in `/etc/fyers/server.conf`; the service files and the Caddy config |
 | `docs/` | Project brief, server details, setup guide, new server guide |
+| `mt5/` | `FTM_Bridge.mq5`, the MT5 bridge EA (compile it in your own MetaEditor), and `README.md`, how it works |
 
 ## Updating
 

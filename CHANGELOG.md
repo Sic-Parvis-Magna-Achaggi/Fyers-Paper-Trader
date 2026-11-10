@@ -1,5 +1,71 @@
 # Changelog
 
+## v0.34.0 — 10 Nov 2026 — MT5 prices and charts through your own bridge EA (FundingPips, stage a)
+
+Added
+- **MT5 bridge** (roadmap 8, stage a; owner, 5 Nov: "It will be interesting to be able to trade from this platform on MT5?
+  Like I have so many things like PnF charts which are not possible on MT5"; 10 Nov: "Let's build this"). Your FundingPips
+  MT5 terminal's prices and candles in this app: every chart type (P&F, Renko, range, line break, Heikin-Ashi...), Volume,
+  every indicator and Pine script, drawings, the measure in points, watchlists, grids, the phone.
+  - **Your own EA, `mt5/FTM_Bridge.mq5`** (version 1.00), with a plain-words walk-through in `mt5/README.md` (proof of
+    ownership for FundingPips: the source and its history are in this repo; you compile it in your own MetaEditor).
+    It runs in MT5 on your laptop and **only calls out** to the server with WebRequest, as described to FundingPips on
+    8 Nov; nothing connects in to your laptop; the server never logs in to your broker account. **It places no orders.**
+  - **How it talks:** `POST /api/mt5/sync` about 4 times a second (the account, the broker's clock, new ticks); the answer
+    is a few text lines (`OK`, `SUB` the symbols to stream, `HIST` candles to send, `LIST` the symbol list, `ERR`).
+    Candles come from MT5 itself (`CopyRates`) and are saved on the server like Fyers' candles; the symbol list (with
+    each symbol's digits, tick size, contract size, volume steps, swap...) is asked for once and every 12 hours.
+  - **Settings › MT5 bridge** (every user, for their own MT5): the setup in 5 steps, **Download FTM_Bridge.mq5**, the
+    address to allow in MT5, a **bridge key** (made with your 2FA code, shown once, only its fingerprint kept; a new key
+    stops the old one; Remove the key), each terminal that has called (login, server, DEMO, Hedge / Netting, balance,
+    equity, connected or when last heard, the address it calls from, the EA's version), which one gives the prices, and
+    the broker's clock. A reminder: MT5 and the EA only on your own laptop, no VPS, no VPN.
+  - **MT5 in the Prices pill** while the page shows an MT5 symbol (the chart or the watchlist): green while a terminal gives
+    prices, red when MT5 is off (its tip says which terminal or why; click: the settings). The phone: a warning line
+    "MT5 isn't connected" on an MT5 chart.
+  - **Find:** MT5 symbols by name or description ("gold" finds XAUUSD), shown as "XAUUSD · MT5 · Gold vs US Dollar";
+    an **MT5** button shows only them. Symbols are `MT5:<the broker's name>`.
+  - **Prices like MT5's:** the price (ltp) is the bid, as MT5 draws its candles; bid and ask lines as on Fyers charts.
+    Volume is MT5's tick volume.
+  - **The broker's day:** an MT5 symbol's day starts at the broker's midnight (FundingPips GMT+2: 03:30 IST; 02:30 IST in
+    US summer time), so its intraday candles count from there like MT5's, and its daily candles are the broker's days
+    (stamped 00:00 IST of the broker's date). No "market closed" on weekdays; the candle timer counts to the broker's
+    day end. **The broker's clock** setting: moves with US summer time (most brokers, FundingPips) or never changes; the
+    candles from before a clock change are placed by it.
+  - **45-minute candles** (MT5 has none) are built from MT5's 15-minute ones, from the broker's midnight.
+  - **Several terminals** (several FundingPips accounts) can connect with the same key; prices come from the ticked one
+    while it's connected, else the one heard from last.
+  - **The EA is careful with the connection:** ticks count as delivered only once the app answers (a failed call sends
+    them again; the server drops repeats); after a gap of over a minute it starts from the latest price instead of
+    replaying it; history MT5 is still downloading is retried for up to 37 s, then reported; a symbol the broker doesn't
+    have is logged once.
+- **Safety on the server:** 30 wrong keys from one address in 10 minutes block it for 10 minutes; bodies are size
+  limited; making or removing a key is in the security log.
+
+Changed
+- **Charges and trading stay Indian-only for now:** paper trading refuses MT5 symbols ("charts only for now"), and the
+  measure tool / position drawings show points (not net ₹) on them. Trading through the bridge, in $ net of FundingPips'
+  commission and swap (owner, 10 Nov), is stage b.
+- **Fyers' feed is never asked for MT5 symbols** (price socket, quote polls, order books), and MT5's ticks don't count as
+  Fyers' feed being alive.
+- On MT5 charts: no Fyers data check, no order book (the Book tab says so), and charts load without a Fyers login.
+
+Tests
+- `tests/fake_mt5.py`: a fake MT5 terminal running the EA's protocol (GMT+2 / +3, weekends without candles, the same
+  prices every run), usable from the command line or in-process.
+- `tests/mt5_test.py` (new, 52 checks): the key (hash only, a new one stops the old one, wrong keys blocked), the EA's
+  first call, the symbol list and search, ticks to the feed and pages (UTC times, ltp = bid, repeats dropped, two ticks in
+  one millisecond both kept), Fyers never asked for MT5,
+  candles (saved, fresh, older days, daily, 45m, an unknown symbol), offline, the broker's clock rule, paper refusing MT5.
+- `tests/mt5_flow.js` (new, 44 checks): Settings › MT5 bridge (key with 2FA, the EA download, a terminal connecting),
+  MT5 in the Prices pill (the header stays on one line at 1500 px), Find and its MT5 button, an MT5 chart (candles, live ticks, the broker's day), **every chart type with Volume
+  and two Pine scripts on MT5 candles**, 1D and 45m, the Book tab, trading refused, MT5 going away, the phone (and its "MT5 isn't connected" line).
+- `tests/mock_server.py`: its fake Fyers stream sends only what Fyers would (never MT5 symbols).
+- `tests/routes_check.py`: the 7 new routes.
+- **Not tested: the EA in a real MT5.** MetaEditor can't run here, so `FTM_Bridge.mq5` hasn't been compiled (an
+  independent desk check of every MQL5 call found no compile errors, and its runtime findings are fixed): compile it
+  (F7) and send any errors. Also untested: FundingPips' real server, history downloads, and the real WebRequest set-up.
+
 ## v0.33.1 — 5 Nov 2026 — A separate Telegram channel for Live trades' pictures
 
 Added

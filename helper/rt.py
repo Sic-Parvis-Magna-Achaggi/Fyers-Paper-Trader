@@ -9,7 +9,7 @@ import secrets
 import shutil
 import time
 
-from . import journal, store, users
+from . import journal, mt5, store, users
 from .feedcheck import FC
 from .feed import Feed
 from .fyers_link import FyersLink
@@ -37,6 +37,7 @@ class UserRT:
         self.loop = None
         self.feed.extra = self.watch_symbols
         self.feed.on_tick = self.on_tick
+        self.feed.mt5 = lambda: mt5.brief(uid)     # the MT5 bridge's state for the price pill
         self._migrate_live()
         for a in self.accounts():
             if not a.get("archived"):

@@ -354,6 +354,8 @@ a.btnlink{border:1px solid var(--line);border-radius:6px;padding:6px 12px;color:
 #isPop label{display:flex;align-items:center;gap:6px;color:var(--muted)} #isPop input[type=range]{flex:1}
 #isPop input[type=text]{font-family:IBM Plex Mono,monospace;padding:3px 6px}
 .warnc{color:var(--warn)}
+#pMt5{font-weight:600;cursor:pointer;padding-left:6px;border-left:1px solid var(--line)}#pMt5.on{color:var(--up)}#pMt5.off{color:var(--down)}
+.mtb{border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin:6px 0}.mtb.on{border-color:var(--up)}.mtb .help{margin:2px 0 0 26px}
 #pineIn .pif{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--line)}
 #ctPick{position:absolute;right:10px;top:42px;z-index:31;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;width:300px;max-height:calc(100% - 60px);overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.35);font-size:12.5px}
 #ctPick .cfgh{display:flex;align-items:center;margin-bottom:6px} #ctPick .cfgh b{flex:1}
@@ -671,7 +673,7 @@ body:not(.is-admin) .admin-only{display:none!important}
     <select id="acctSel" title="Paper account"></select>
     <span class="pill" id="pFyers"><span class="dot"></span><span>Fyers</span></span>
     <button class="primary hide" id="bFyersLogin">Log in to Fyers</button>
-    <span class="pill" id="pFeed" title="Live price feed"><span class="dot"></span><span>Prices</span></span>
+    <span class="pill" id="pFeed" title="Live price feed"><span class="dot"></span><span class="txt">Prices</span><b id="pMt5" class="hide" title="Prices from your MT5 terminal (Settings › MT5 bridge)">MT5</b></span>
     <span class="pill" id="pBudget" title="Data requests used (free plan: 50/min, 5,000/day)"><span>Data</span></span>
     <span class="spacer"></span>
     <span class="pill mono" id="pClock"></span>
@@ -683,7 +685,7 @@ body:not(.is-admin) .admin-only{display:none!important}
       <div class="pane" id="tWatch"><div id="wlBar"></div><div id="watchList"></div></div>
       <div class="pane hide" id="tFind">
         <input id="q" placeholder="nifty, reliance, sensex 80000 ce, crudeoil, usdinr" autocomplete="off">
-        <div class="seg" id="exf"><button data-x="" class="on">All</button><button data-x="NSE">NSE</button><button data-x="BSE">BSE</button><button data-x="MCX">MCX</button></div>
+        <div class="seg" id="exf"><button data-x="" class="on">All</button><button data-x="NSE">NSE</button><button data-x="BSE">BSE</button><button data-x="MCX">MCX</button><button data-x="MT5" title="Your MT5 terminal's symbols (Settings › MT5 bridge)">MT5</button></div>
         <div class="seg" id="kind"><button data-k="" class="on">All</button><button data-k="EQ">Stocks</button><button data-k="IDX">Index</button><button data-k="FUT">Fut</button><button data-k="OPT">Opt</button></div>
         <div id="results"></div>
       </div>
@@ -825,6 +827,11 @@ body:not(.is-admin) .admin-only{display:none!important}
       <div id="tgBox"></div>
     </div>
 
+    <div id="mt5Sec">
+      <h3>MT5 bridge</h3>
+      <div id="mt5Box"></div>
+    </div>
+
     <h3>Paper trading rules</h3>
     <p class="help">Checked before every new order, the same way as LiveTrader: if every stop on the account were hit, equity must stay above each floor plus the buffer. Lots are cut to fit the caps.</p>
     <div id="rulesForm"></div>
@@ -872,6 +879,7 @@ if(window.FTM_REPLAY) document.documentElement.classList.add("cell", "replay");<
 <script src="/static/security.js?v=__V__"></script>
 <script src="/static/live.js?v=__V__"></script>
 <script src="/static/tgalerts.js?v=__V__"></script>
+<script src="/static/mt5.js?v=__V__"></script>
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
@@ -914,12 +922,23 @@ function tfPlan(k){
   return {t, res: "D", agg: t.u !== "D" || t.n > 1, sec: 86400 * (t.u === "D" ? t.n : 1), days: t.u === "M" ? 1095 : 730};
 }
 function sessStart(){ const r = cur && sym[cur.s]; const m = /^(\d\d)(\d\d)/.exec((r && r.sess) || cur && cur.sess || ""); return m ? (+m[1]) * 60 + (+m[2]) : 540; }
+/* MT5 symbols (roadmap 8, helper/mt5.py): prices and candles from the owner's MT5 terminal, not Fyers. They trade round
+   the clock on weekdays and their day starts at the broker's midnight (FundingPips, GMT+2: 03:30 IST; their row's `sess`
+   says when), so their day, week and month candles start there too. */
+function isMT5(s){ return /^MT5:/.test(String(s || "")); }
+function curMT5(){ return !!cur && isMT5(cur.s); }
+function chartFeedOk(){ return curMT5() || !!(S.fyers || {}).logged_in; }
+function chartDay(ts){                       // ts: IST-shifted seconds -> the start of its trading day's calendar date
+  if(!curMT5()) return Math.floor(ts / 86400) * 86400;
+  const sh = sessStart() * 60; return Math.floor((ts - sh) / 86400) * 86400;
+}
 function bucket(ts, plan){                // ts: seconds already shifted to IST
-  const t = plan.t, day = Math.floor(ts / 86400) * 86400;
+  // (MT5: a daily candle is stamped 00:00 IST of the broker's date, as helper/mt5.py stores it, so summer time can't move it)
+  const t = plan.t, day = chartDay(ts);
   if(t.min){ const a = day + sessStart() * 60; return a + Math.floor((ts - a) / plan.sec) * plan.sec; }
   if(t.u === "D") return t.n === 1 ? day : Math.floor(day / plan.sec) * plan.sec;
   if(t.u === "W"){ const dow = new Date(day * 1000).getUTCDay(); return day - ((dow + 6) % 7) * 86400; }
-  const d = new Date(ts * 1000); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) / 1000;
+  const d = new Date(day * 1000); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) / 1000;
 }
 let S = {};                              // last /api/state
 let watch = prefGet("watch", []);        // the watchlist on screen: [{s, d, ...}] (the items of wlCur())
@@ -945,7 +964,7 @@ async function api(path, opt = {}){
 function toast(msg){ const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.append(t); setTimeout(()=>t.remove(), 4000); }
 function fmt(n, tick){ if(n == null || isNaN(n)) return "–"; const dp = tick && tick < 1 ? Math.max(0, (String(tick).split(".")[1]||"").length) : 0; return Number(n).toLocaleString("en-IN",{minimumFractionDigits:dp, maximumFractionDigits:Math.max(dp,2)}); }
 function expStr(e){ if(!e) return ""; return new Date((e+IST)*1000).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"2-digit",timeZone:"UTC"}); }
-function setDot(el, cls, text){ el.querySelector(".dot").className = "dot " + (cls||""); el.querySelector("span:last-child").textContent = text; }
+function setDot(el, cls, text){ el.querySelector(".dot").className = "dot " + (cls||""); (el.querySelector(".txt") || el.querySelector("span:last-child")).textContent = text; }
 
 /* ---------------------------------------------------------------- gates */
 function showGate(){
@@ -1023,7 +1042,7 @@ function sendWant(){
 function onTick(t){
   last[t.s] = t;
   pagesTick(t);
-  setDot($("#pFeed"), t.src === "poll" ? "warn" : "ok", t.src === "poll" ? "Polling" : "Live");
+  if(t.src !== "mt5") setDot($("#pFeed"), t.src === "poll" ? "warn" : "ok", t.src === "poll" ? "Polling" : "Live");   // (MT5's own pill: mt5.js)
   document.querySelectorAll(`[data-px="${CSS.escape(t.s)}"]`).forEach(el => {
     const prev = parseFloat(el.dataset.v);
     el.textContent = fmt(t.ltp, (sym[t.s]||{}).tick);
@@ -1865,6 +1884,7 @@ const CDB = {
     try{ localStorage.setItem("cdbUsed", JSON.stringify(used)); }catch(e){} },
 };
 function sessMinutes(){
+  if(curMT5()) return 1380;                                           // MT5: about 23 hours a day
   const r = cur && sym[cur.s], m = /^(\d\d)(\d\d)-(\d\d)(\d\d)/.exec((r && r.sess) || (cur && cur.sess) || "");
   if(m){ const a = (+m[1]) * 60 + (+m[2]), b = (+m[3]) * 60 + (+m[4]); if(b > a) return b - a; }
   return cur && /^MCX:/.test(cur.s) ? 900 : 375;
@@ -1898,7 +1918,7 @@ function noTradeDrop(rows){
    error). Trading isn't affected (fills, stops and P&L use the live prices). Runs only when Fyers sends the day's
    figures. Chart settings › "Check candles against live prices" (on by default). */
 function mktClosedNow(){
-  const ts = Date.now() / 1000 + IST, day = Math.floor(ts / 86400) * 86400, dow = new Date(day * 1000).getUTCDay(), [s0, s1] = sessRange();
+  const ts = Date.now() / 1000 + IST, day = chartDay(ts), dow = new Date(day * 1000).getUTCDay(), [s0, s1] = sessRange();
   return dow === 0 || dow === 6 || ts < day + s0 * 60 || ts >= day + s1 * 60;
 }
 // rows: Fyers' candles [t, o, h, l, c, v] (t in UTC seconds); t: Fyers' live figures (ltp, o, h, l, vol, pc = previous close);
@@ -1946,6 +1966,7 @@ function dataCheck(force, tk){
   if(!cur || !curPlan || !$("#chart")) return;
   if(!force && Date.now() - dcAt < 5000) return;
   dcAt = Date.now();
+  if(curMT5()) return dcShow([]);                 // MT5: the candles and the prices both come from MT5 itself
   const r = sym[cur.s] || {};
   const now = Date.now() / 1000 + IST, mod = now - Math.floor(now / 86400) * 86400, dow = new Date(Math.floor(now / 86400) * 86400000).getUTCDay();
   const s0 = sessRange()[0] * 60, preopen = dow > 0 && dow < 6 && mod < s0 && mod >= s0 - 1800;
@@ -2037,7 +2058,7 @@ async function loadHistory(){
   if(my !== histToken) return;
   const have = saved && saved.rows && saved.rows.length && saved.from <= wantFrom + 86400;
   if(have) renderCandles(saved.rows.filter(r => r[0] >= wantFrom - 86400), plan);      // at once, from this browser
-  if(!(S.fyers||{}).logged_in){ if(!have){ msg.textContent = "Log in to Fyers to load charts."; series.setData([]); } return; }
+  if(!chartFeedOk()){ if(!have){ msg.textContent = "Log in to Fyers to load charts."; series.setData([]); } return; }
   // the last 7 days come from the server every time (cheap: its own copy), as far back as the server re-checks them
   // with Fyers, so a day corrected since replaces this browser's copy; older days are kept as saved
   const since = have ? saved.rows[saved.rows.length - 1][0] - 7 * 86400 : 0;
@@ -2072,7 +2093,7 @@ function histPill(text, ms){
   clearTimeout(p._t); if(text && ms) p._t = setTimeout(() => p.classList.add("hide"), ms);
 }
 async function histMore(){
-  if(!cur || !curPlan || !HROWS.length || !(S.fyers || {}).logged_in) return;
+  if(!cur || !curPlan || !HROWS.length || !chartFeedOk()) return;
   const plan = curPlan, key = cur.s + "|" + plan.res, h = HX[key] || (HX[key] = {days: histDays(plan), miss: 0});
   if(h.busy || h.end) return;
   h.busy = true;
@@ -2157,7 +2178,7 @@ async function goTo(t){                          // t: epoch seconds (UTC)
   goBusy = true;
   try{
     for(let step = 0; HROWS[0][0] > t && !h.end && step < 40; step++){
-      if(!(S.fyers || {}).logged_in){ histPill("Log in to Fyers to load older candles", 4000); break; }
+      if(!chartFeedOk()){ histPill("Log in to Fyers to load older candles", 4000); break; }
       const oldest = HROWS[0][0], days = Math.ceil((Date.now() / 1000 - t) / 86400) + 3;
       histPill(`Loading back to ${new Date((t + IST) * 1000).toLocaleDateString("en-GB", {day: "numeric", month: "short", year: "numeric", timeZone: "UTC"})}…`);
       let j = await api(`/api/history?symbol=${encodeURIComponent(cur.s)}&res=${plan.res}&days=${days}&until=${oldest}`);
@@ -2210,7 +2231,7 @@ function liveBar(t){
   // v0.30.2 (owner, 3 Nov: NIFTY 15m showed a 09:00 candle at 23,582.25 at 09:14): a price before the session opens
   // (NSE's pre-open, 09:00-09:15) gets no intraday candle of its own - Fyers' history has none, and the session's first
   // candle carries the opening price. The bid / ask / last lines still move; daily and longer candles take it as today's.
-  if(curPlan.t.min && ts - Math.floor(ts / 86400) * 86400 < sessStart() * 60) return;
+  if(curPlan.t.min && !curMT5() && ts - Math.floor(ts / 86400) * 86400 < sessStart() * 60) return;
   let b = bucket(ts, curPlan);
   // native intraday bars: follow Fyers' own bar alignment (the last bar loaded) within the same day
   if(!curPlan.agg && curPlan.t.min && lastBar && Math.floor(lastBar.time / 86400) === Math.floor(ts / 86400) && ts >= lastBar.time)
@@ -2236,10 +2257,11 @@ document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
 function rowEl(r, {inWatch} = {}){
   sym[r.s] = r;
   const el = document.createElement("div"); el.className = "row";
-  const kind = {FUT: "FUT", EQ: "Stock", IDX: "Index", OTHER: "Other"}[r.f] || r.o || r.f;
+  const kind = {FUT: "FUT", EQ: "Stock", IDX: "Index", OTHER: "Other", CFD: "MT5"}[r.f] || r.o || r.f;
   el.innerHTML = `<div class="name"><div></div><div class="sub"></div></div><span class="px" data-px=""></span>`;
   el.querySelector(".name div").textContent = symLabel(r.s);
-  el.querySelector(".sub").textContent = `${kind}${r.exp ? " · " + expStr(r.exp) : ""}${r.f === "IDX" ? "" : r.f === "EQ" ? "" : ` · lot ${r.lot}${r.mult > 1 ? " × " + r.mult : ""}`}`
+  el.querySelector(".sub").textContent = r.f === "CFD" ? `MT5${r.d && r.d !== r.u ? " · " + r.d : ""}` :
+    `${kind}${r.exp ? " · " + expStr(r.exp) : ""}${r.f === "IDX" ? "" : r.f === "EQ" ? "" : ` · lot ${r.lot}${r.mult > 1 ? " × " + r.mult : ""}`}`
     + (r.f === "EQ" || r.f === "IDX" ? ` · ${r.d && r.d !== r.s ? r.d : ""}` : "");
   const px = el.querySelector(".px"); px.dataset.px = r.s;
   if(last[r.s]) px.textContent = fmt(last[r.s].ltp, r.tick);
@@ -2427,7 +2449,7 @@ document.querySelectorAll("#exf button").forEach(b => b.onclick = () => {
   exf = b.dataset.x; document.querySelectorAll("#exf button").forEach(x => x.classList.toggle("on", x === b)); search();
 });
 /* MCX contracts show without "MCX:" (as before); NSE / BSE keep the exchange, so NSE and BSE listings can be told apart */
-function symLabel(s){ return String(s || "").replace(/^MCX:/, ""); }
+function symLabel(s){ return String(s || "").replace(/^(MCX|MT5):/, ""); }
 $("#q").oninput = () => { clearTimeout(qTimer); qTimer = setTimeout(search, 200); };
 async function search(){
   const q = $("#q").value.trim(), box = $("#results");
@@ -2598,6 +2620,7 @@ if(prefGet("nopanel", false)) document.body.classList.add("nopanel");
 
 /* candle timer: time left until the current candle closes (the session's close for the last candle of the day) */
 function sessRange(){
+  if(curMT5()){ const a = sessStart(); return [a, a + 1440]; }        // MT5: the broker's whole day
   const r = cur && sym[cur.s], m = /^(\d\d)(\d\d)-(\d\d)(\d\d)/.exec((r && r.sess) || (cur && cur.sess) || "");
   return m ? [(+m[1]) * 60 + (+m[2]), (+m[3]) * 60 + (+m[4])] : [540, 1430];   // MCX default 09:00-23:50
 }
@@ -2605,10 +2628,10 @@ function candleTimer(){
   const el = $("#ctimer");
   if(!el || !chart || !cur || !curPlan || !lastBar){ if(el) el.classList.add("hide"); return; }
   if(!CT.timeBased(ctType())){ el.classList.add("hide"); $("#cTimer").textContent = ""; return; }   // Renko / range / line break
-  const ts = Date.now() / 1000 + IST, day = Math.floor(ts / 86400) * 86400;
+  const ts = Date.now() / 1000 + IST, day = chartDay(ts);
   const [s0, s1] = sessRange(), open = day + s0 * 60, close = day + s1 * 60;
   let txt;
-  if(ts < open || ts >= close) txt = "closed";
+  if(ts < open || ts >= close || curMT5() && mktClosedNow()) txt = "closed";
   else {
     let end;
     if(curPlan.t.min){

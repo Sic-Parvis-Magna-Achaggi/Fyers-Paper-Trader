@@ -119,7 +119,7 @@ def ticker():
 
 def tick_feed(feed):
     if True:
-        for s in feed.wanted():
+        for s in feed.fy_wanted():          # (what Fyers streams: never MT5 symbols, which come from the MT5 bridge)
             base = 150.0 if s.endswith(("CE", "PE")) else 5600.0
             t = 0.1 if base < 1000 else 1.0
             p = PX.get(s, base) + random.choice([-2, -1, 0, 1, 2]) * t

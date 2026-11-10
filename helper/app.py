@@ -14,17 +14,18 @@ import time
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 
 from fastapi.staticfiles import StaticFiles
 
-from . import alerts, charges, charges_watch, fyers_link, journal, jreplay, jshots, logbuf, rt, store, symbols, telegram, users
+from . import alerts, charges, charges_watch, fyers_link, journal, jreplay, jshots, logbuf, mt5, rt, store, symbols, telegram, users
 from .feedcheck import FC
 from . import candles as candles_store
 from .paper import Refused
 
 logbuf.setup()
 log = logging.getLogger("helper")
+symbols.EXTRA = lambda t: mt5.row(None, t)          # MT5:... symbols come from the MT5 bridge (roadmap 8)
 ROOT = Path(__file__).resolve().parent.parent
 VERSION = (ROOT / "VERSION").read_text().strip() if (ROOT / "VERSION").exists() else "dev"
 try:
@@ -686,13 +687,18 @@ def find_symbols(request: Request, q: str = "", kind: str = "", ex: str = ""):
     _need(request)
     if len(q.strip()) < 2:
         return {"ok": True, "rows": []}
-    return {"ok": True, "rows": symbols.search(q, kind, ex=ex)}
+    u = _user(request)
+    mt = [] if kind and kind != "CFD" or ex and ex != "MT5" else mt5.search(u["uid"], q)
+    if ex == "MT5" or kind == "CFD":
+        return {"ok": True, "rows": mt}
+    fy = symbols.search(q, kind, ex=ex)
+    return {"ok": True, "rows": (mt[:10] + fy)[:50] if mt else fy}
 
 
 @app.get("/api/symbol")
 def one_symbol(request: Request, s: str):
-    _need(request)
-    r = symbols.get(s)
+    u = _need(request)
+    r = mt5.row(u["uid"], s) if s.startswith(mt5.PREFIX) else symbols.get(s)
     return {"ok": bool(r), "row": r}
 
 
@@ -724,6 +730,16 @@ async def history(request: Request, symbol: str, res: str = "5", days: int = 5, 
     u, r = _urt(request)
     if res not in fyers_link.RES:
         return _err("bad resolution")
+    if symbol.startswith(mt5.PREFIX):                  # from the MT5 bridge (roadmap 8)
+        try:
+            rows = await mt5.history(u["uid"], r.dir, symbol, res, days)
+        except mt5.Offline as e:
+            return _err(e, 409)
+        except Exception as e:
+            log.warning("MT5 history %s %s failed: %s", symbol, res, e)
+            return _err(e, 502)
+        rows = [x for x in rows if (not since or x[0] >= since) and (not until or x[0] < until)]
+        return {"ok": True, "candles": rows}
     key = (u["uid"], symbol, res, days)
     fut = _hist_inflight.get(key)
     if fut is None:
@@ -942,6 +958,8 @@ async def measure(request: Request):
     row = symbols.get(str(b.get("s") or ""))
     if not row:
         return _err("unknown contract")
+    if row.get("x") == "MT5":                           # net $ for MT5 symbols comes with trading them (roadmap 8b)
+        return _err("MT5 symbols: points only for now (net $ comes with trading MT5 in the next step)")
     prod = b.get("product")
     if prod in ("INTRADAY", "MARGIN", "CNC"):
         row = {**row, "prod": prod}
@@ -1717,6 +1735,101 @@ async def journal_pictures_tg(request: Request):
 
 
 # ------------------------------------------------------------------ live prices (each user's own feed)
+# ------------------------------------------------------------------ MT5 bridge (roadmap 8): the EA on the owner's laptop
+# The EA (mt5/FTM_Bridge.mq5) calls out to these three routes with WebRequest and its bridge key (X-FTM-Key); no cookie.
+def _mt5_uid(request: Request):
+    ip = _ip(request)
+    if mt5.blocked(ip):
+        return None, PlainTextResponse("ERR too many wrong keys from this address: wait 10 minutes\n", status_code=429)
+    uid = mt5.uid_for(request.headers.get("x-ftm-key") or "", ip)
+    u = users.get(uid) if uid else None
+    if not u or u.get("disabled"):
+        return None, PlainTextResponse("ERR bridge key not accepted: make a new one in Settings › MT5 bridge\n", status_code=401)
+    return uid, None
+
+
+def _too_big(request: Request, mb: int) -> bool:
+    try:
+        return int(request.headers.get("content-length") or 0) > mb * 1_000_000
+    except ValueError:
+        return True
+
+
+@app.post("/api/mt5/sync")
+async def mt5_sync(request: Request):
+    """The EA, about 4 times a second: its account, clock and new ticks. Answers with text lines (commands)."""
+    uid, bad = _mt5_uid(request)
+    if bad:
+        return bad
+    if _too_big(request, 4):
+        return PlainTextResponse("ERR too big\n", status_code=413)
+    b = await _body(request)
+    r = rt.get(uid)
+    return PlainTextResponse(mt5.sync(uid, b, _ip(request), r.feed))
+
+
+@app.post("/api/mt5/bars")
+async def mt5_bars(request: Request):
+    """The EA: candles for a HIST line (in parts)."""
+    uid, bad = _mt5_uid(request)
+    if bad:
+        return bad
+    if _too_big(request, 30):
+        return _err("too big", 413)
+    return mt5.take_bars(uid, await _body(request))
+
+
+@app.post("/api/mt5/symbols")
+async def mt5_symbols(request: Request):
+    """The EA: the broker's symbol list with each symbol's settings (after a LIST line)."""
+    uid, bad = _mt5_uid(request)
+    if bad:
+        return bad
+    if _too_big(request, 20):
+        return _err("too big", 413)
+    return mt5.take_symbols(uid, await _body(request))
+
+
+@app.get("/api/mt5")
+def mt5_status(request: Request):
+    """Settings › MT5 bridge: the key, the terminals that called, where prices come from."""
+    u = _user(request)
+    proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "https").split(",")[0].strip()
+    host = request.headers.get("host") or ""
+    return mt5.status(u["uid"], f"{proto}://{host}" if host else "")
+
+
+@app.get("/api/mt5/ea")
+def mt5_ea(request: Request):
+    """The bridge EA's source (mt5/FTM_Bridge.mq5), to compile in your own MetaEditor."""
+    _user(request)
+    return FileResponse(ROOT / "mt5" / "FTM_Bridge.mq5", media_type="text/plain; charset=utf-8", filename="FTM_Bridge.mq5")
+
+
+@app.post("/api/mt5/key")
+async def mt5_key(request: Request):
+    """A new bridge key (shown once; the old one stops working) or no key. Needs a fresh 2FA code."""
+    _same_origin(request)
+    u = _user(request)
+    _stepped(request)
+    b = await _body(request)
+    if b.get("action") == "revoke":
+        mt5.revoke(u["uid"])
+        users.audit(u["uid"], "mt5_key_revoked", "", _ip(request))
+        return {"ok": True}
+    key = mt5.new_key(u["uid"])
+    users.audit(u["uid"], "mt5_key_new", "", _ip(request))
+    return {"ok": True, "key": key}
+
+
+@app.post("/api/mt5/settings")
+async def mt5_settings(request: Request):
+    """Which terminal gives the prices, and the broker's clock rule."""
+    _same_origin(request)
+    u = _user(request)
+    return mt5.settings(u["uid"], await _body(request))
+
+
 @app.websocket("/ws")
 async def ws(socket: WebSocket):
     origin = socket.headers.get("origin", "")

@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.33.1)
+# Paper and live trading: how it works (v0.34.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -112,6 +112,36 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
   - refuses new Intraday orders for the rest of the day (pick Carry / Delivery instead).
 - The app switches the MCX time by itself when US clocks change (second Sunday of March, first Sunday of November). The minutes, Fyers' times and on / off are all in Rules. Carry (NRML) and Delivery (CNC) positions are never squared off.
 - **Expiry-day exits:** MCX 22:45, NSE and BSE 15:00, currency 12:00 (Rules). Currency intraday closes at 16:45 (Fyers doesn't offer currency intraday at present).
+
+## MT5 charts (your FundingPips terminal, through your own bridge EA)
+
+- **What it is:** your MT5 terminal's prices and candles in this app, so P&F, Renko, your Pine scripts and every other
+  chart type and indicator work on your broker's own prices. **Charts only for now:** paper trading and real orders on MT5
+  symbols come in the next step (in $, net of FundingPips' commission and swap).
+- **How it connects:** the **FTM Bridge** EA (`mt5/FTM_Bridge.mq5`, your own code; how it works: `mt5/README.md`) runs in
+  MT5 on your laptop and calls out to the server about 4 times a second. Nothing connects in to your laptop and the server
+  never logs in to your broker account. **It places no orders.** FundingPips: MT5 and the EA only on your own laptop at
+  home, no VPS, no VPN (their support, 6 and 10 Nov 2026).
+- **Set it up (Settings › MT5 bridge):** download the EA, put it in MT5's `MQL5\Experts` folder and compile it in MetaEditor
+  (F7); make a **bridge key** (your 2FA code; it's shown once, so copy it into the EA's **BridgeKey** input then); in MT5,
+  Tools › Options › Expert Advisors, tick **Allow WebRequest for listed URL** and add the app's address; drag the EA onto
+  any chart. Its chart corner then says *connected* and the terminal shows up in Settings.
+- **Settings › MT5 bridge** also shows each terminal that has called (login, server, DEMO, Hedge / Netting, balance, equity,
+  connected or when last heard, the address it calls from) and which one gives the prices (tick another one to change).
+  A new key stops the old one; **Remove the key** stops the EA connecting.
+- **MT5 in the Prices pill** at the top, while the page shows an MT5 symbol: green while prices arrive, red when MT5 or
+  the laptop is off (hover for which terminal, or why; click for the settings). On the phone, a line under the top bar
+  says *MT5 isn't connected*. Saved candles still show then; a chart never opened before needs MT5 on.
+- **Find:** type a name or description ("gold" finds XAUUSD); the **MT5** button shows only your broker's symbols. MT5 adds
+  the symbols you open to its Market Watch (it only sends prices for symbols there).
+- **Prices:** the price is the bid, as MT5 draws its candles; the ask line shows the spread. Volume is MT5's tick volume.
+  No order book and no Fyers data check on MT5 charts.
+- **The broker's day:** MT5 symbols trade round the clock on weekdays. Their day starts at the broker's midnight
+  (FundingPips: 03:30 IST in winter, 02:30 IST in US summer time), so intraday candles count from there, as in MT5, and a
+  daily candle is the broker's day (shown at 00:00 IST of its date). The candle timer counts to the broker's day end.
+  **The broker's clock** (Settings): *moves with US summer time* (most brokers, FundingPips) or *never changes*; it only
+  decides where candles from before a clock change go. 45-minute candles are built from MT5's 15-minute ones.
+- **Measure and position drawings** show points on MT5 symbols (net $ comes with trading them).
 
 ## Pages
 
@@ -623,6 +653,7 @@ When BE-T has already moved the stop to break-even, a Trail SL of N R behind the
 
 ## Not yet
 
+- MT5 trading through the bridge (stage b: orders, stops at the broker, $ net of FundingPips' commission and swap) and MT5 accounts in the journal (stage c).
 - Footprint / delta (order flow): waiting for the order-flow check (Monday 2 Nov).
 - Comparing the charges the app counts with what Fyers actually deducted (live).
 - Prop-firm journals in the same journal (waiting for the owner's yes).

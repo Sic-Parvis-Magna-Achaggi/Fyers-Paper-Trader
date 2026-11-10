@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 5 Nov 2026 (v0.33.1). This is the one task list for the project.
+Updated 10 Nov 2026 (v0.34.0: item 8 stage a, MT5 prices and charts). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -145,10 +145,93 @@ v0.24.0 / v0.24.1); Telegram (3, done in v0.25.0) and the journal (4) next.
      once can take a few seconds.
 7. [x] **Measurement tool** (MT5 + TradingView, with net ₹ and R): shipped in **v0.22.0**, see Done.
 
-8. [ ] **CFD prices for prop-firm analysis** (asked 31 Oct 2026: analysis only, for prop-firm trades, not broker trades). **On hold** (owner, 31 Oct 2026).
-   - Main source, free: the prop firm's own MT5. A small EA on that terminal sends every bid / ask tick (and back-history) for chosen symbols to the app, so charts use exactly the prices the prop firm fills at (they differ between CFD providers). Works while that MT5 runs (PC or VPS).
-   - In the app: every chart type, every indicator / Pine script, the P&F toolkit and paper trading on those symbols.
-   - Backup when MT5 is off: a free API (Twelve Data: 800 requests / day, 8 stream symbols "trial"; or AllTick's free stream) for a few forex / gold symbols, labelled as not the prop firm's prices. Global index CFDs have no good free source besides MT5.
+**Order change (owner, 10 Nov 2026: "Let's build this. If they come back saying no, we can have the local setup as
+fallback"):** item 8 is built now, stage by stage. Stage a shipped in **v0.34.0**.
+
+8. [ ] **MT5 (FundingPips): prices, charts, trading and the journal from this app** (asked 31 Oct 2026 for analysis
+   only; widened 5 Nov 2026 to trading: "It will be interesting to be able to trade from this platform on MT5? Like I have
+   so many things like PnF charts which are not possible on MT5"). **Not started. Its place in the order is the owner's
+   to choose** (the analysis part was put on hold on 31 Oct). *(Started 10 Nov: see the order change above.)*
+   - **FundingPips' answers (support email thread, 6-9 Nov 2026):**
+     - 6 Nov (Deekshitha): the EA "will be allowed as it is self-coded by you"; "make sure that you are not using any VPS
+       or VPN, even in the future"; the team may ask for source code files later.
+     - 8 Nov (owner's description of the set-up): the EA on his laptop only, the charting app on DigitalOcean; the EA
+       passes prices to the app by WebRequest; the app's trade requests go back to the EA, which executes them.
+     - 9 Nov (Tobi): if the EA is your own and uses no forbidden strategy, proof of ownership when requested; the
+       Responsible Trading Team makes the final decision. 9 Nov (Emem): full automation is permitted with proof. Proof
+       that may be accepted: the uncompiled .mq5 source; version-control history showing it developed step by step;
+       development-environment evidence (screenshots, compile logs, file paths under your user folder); explaining the
+       EA's logic on a live call. A compiled file alone is not proof.
+     - 6 Nov 3:08 PM (Deekshitha, to the owner's "a separate server on Digital Ocean that I have with an IP address"):
+       "Unfortunately, the EA can't be hosted at a different IP address. It should be on local host only." The owner's
+       8 Nov description (EA on the laptop, app on DigitalOcean) was answered only in general terms (9 Nov), so **an
+       explicit yes to this exact set-up is still needed before a paid challenge or Master account** (asked 10 Nov).
+     - 10 Nov 7:29 PM (Alice, FundingPips' AI support assistant, to the owner's 5 Nov email): your own EA is permitted
+       without approval beforehand, full automation included, on challenge and Master accounts, with proof of ownership if
+       asked; the VPN / VPS rule is about the account connection: MT5 on the home connection without VPN / VPS and a
+       charting server that never logs in to the account is what the rules address; "server execution" isn't defined.
+       Keep the source and its history, keep the IP region the same, copy nothing in. "An explanation of the rules, not a
+       ruling on your setup." Hedging inside one account and the news window: asked again 10 Nov (owner's reply email).
+     - 10 Nov 8:12 PM (Alice, to that reply): **hedging is not allowed, even in MT5 Hedge mode**: no buy and sell on the
+       same pair at the same time, no exceptions ("including for supply and demand zone trading and for opposite trades
+       on different instruments"); the team checks at the end of the evaluation and before any reward, even without an
+       alert at the time. An opposite position opened by mistake and closed at once is reviewed case by case; repeated:
+       a violation. The published rule is about one pair; positions split across accounts: no separate ruling; copy or
+       coordinated trading across accounts of different people is forbidden. **News:** login 21182752 is **Phase 1 of
+       the 2-Step evaluation**: no restriction on holding through news, but purposely trading news is prohibited. **On a
+       Master account:** no opening or closing from 5 minutes before to 5 minutes after a high-impact release on the
+       affected currencies (profits from trades opened or closed in it are deducted); holding through it is allowed. The
+       official source: the Economic Calendar on the FundingPips dashboard (high-impact in red).
+   - **Plan B if FundingPips says no to the server:** the app itself runs on the owner's laptop for MT5 accounts (the same
+     code, Windows), with the EA talking to it on localhost only; nothing leaves the laptop except MT5's own connection.
+   - **Answered by FundingPips** (10 Nov, above): the set-up (an explanation of the rules), hedging, the news window.
+     **To confirm with the owner:** what "opposite trades on different instruments" covers (e.g. long EURUSD with short
+     GBPUSD?), which decides how wide the app's hedging check is.
+   - **Build it as described to FundingPips on 8 Nov:** the EA on the laptop calls out to the server with WebRequest (for
+     prices up and for the orders waiting for it); nothing calls in to the laptop. A change to that (e.g. MT5 sockets)
+     is told to FundingPips first.
+   - **Design (5 Nov 2026, Claude's proposal; the owner's corrections marked):**
+     - **A bridge EA of the owner's own** in the FundingPips MT5 terminal, connecting out to the server (MT5's
+       allowed-URL list). It sends bid / ask ticks and back-history up and carries out the app's orders (open with SL /
+       TP, BE, trail, close). The MT5 password never leaves the terminal.
+     - **Proof of ownership built in:** the EA's source lives in the repo (`mt5/`) from its first version, so GitHub's
+       history shows it developed step by step; no compiled .ex5 in the repo: the owner compiles it in his own MetaEditor
+       (compile log, his user folder); a plain-language walk-through of its logic for the live call.
+     - **MT5 runs on the owner's own PC at home, not a VPS** (FundingPips: no VPN / VPS while trading, same IP region). The
+       server never logs in to FundingPips. PC off: the app refuses new MT5 orders ("MT5 link down"); open trades keep
+       their real SL / TP at FundingPips.
+     - **Prices only from FundingPips' own MT5** for trading (stops fire on its bid / ask; the firm measures drawdown on
+       its prices). Every chart type, indicator, Pine script and the P&F toolkit work on them. Footprint / order flow and
+       the Order Book are off for MT5 symbols (a CFD has no real trades, only tick volume).
+     - **Stops at the broker:** every position has a real SL (and TP) in MT5 from the moment it opens, moved by the app
+       (like item 1's live design). If the link drops, the EA can keep trailing by itself (LiveTrader's logic).
+     - **Hedge mode:** each entry is its own MT5 position with its own ticket, SL and TP (as LiveTrader's multiple entries).
+     - **Hedging (FundingPips, 10 Nov: not allowed in one account, even in Hedge mode; this replaces the owner's 5 Nov
+       reading and the per-account switch):** the app refuses an order opposite an open position or pending order on the
+       same symbol in the same FundingPips account, and (to be safe, no ruling from FundingPips) one opposite a position
+       in the owner's other FundingPips accounts. Adding to a position on the same side stays allowed. Different
+       instruments: after the owner's answer above.
+     - **News guard (FundingPips, 10 Nov):** each MT5 account has its phase (evaluation / Master). Master: no opening and
+       no manual closing from 5 minutes before to 5 minutes after a high-impact release on the symbol's currencies (the
+       broker's own SL / TP can still fire inside it: a warning beforehand). Evaluation: no block, a warning ahead of
+       high-impact news (purposely trading news is prohibited). The calendar: FundingPips' dashboard is the official one
+       but has no feed for the app; a public calendar feed to agree before building.
+     - **No copying in:** every MT5 order comes from the owner's own click; nothing from Fyers or anywhere else is mirrored in.
+     - **Money (owner's answer, 10 Nov 2026: "$, net of FundingPips costs"):** MT5 trades in the account's currency ($):
+       SL, TP, risk, P&L, R and BE net of commission (typed per symbol, checked against MT5's real deals) and swap; the
+       spread is paid through the bid / ask fills, as in MT5 and LiveTrader. Not Indian charges.
+     - **Guards:** daily / overall drawdown from the owner's FundingPips dashboard for the challenge type; a news guard (no
+       new orders N minutes either side of high-impact news).
+   - In three steps, each tested on the FundingPips demo (SIM1, Hedge) first:
+     - [x] (a) MT5 prices and charts only (no trading): the bridge EA `mt5/FTM_Bridge.mq5` 1.00 (calls out only, places no
+       orders; walk-through for FundingPips in `mt5/README.md`), Settings › MT5 bridge (key with 2FA, terminals, price
+       source, the broker's clock), MT5 in the Prices pill, Find (MT5 button), every chart type / Volume / Pine on MT5 candles, the
+       broker's day for candles, the phone. *(v0.34.0)* Still to do: the owner compiles the EA (never compiled here) and
+       tries it on the FundingPips demo.
+     - [ ] (b) Trading through the bridge.
+     - [ ] (c) The journal for prop accounts (joins 4b) and FundingPips' rules.
+   - Backup prices when MT5 is off (analysis only, labelled as not the firm's prices): a free API (Twelve Data: 800
+     requests / day, 8 stream symbols "trial"; or AllTick's free stream) for a few forex / gold symbols.
 
 9. [ ] **Drawing tools, TradingView's full set** (asked 31 Oct 2026). Built in **v0.22.0**; a few extras left.
    - [x] Lines (trend line, ray, extended, horizontal / vertical line and ray, cross line, parallel channel, regression),
@@ -329,6 +412,25 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
   - a Fyers 2FA login every day.
 - **Still to confirm with Fyers in writing:** whether a second user's app may fetch market data from this server's IP. (Drafted support request, 30 Oct.)
 
+## Rules that shape trading on FundingPips (MT5, item 8; checked 5-10 Nov 2026)
+
+Sources: FundingPips' help pages, their support email of 9 Nov 2026, and third-party summaries (marked). Confirm anything
+marked before relying on it.
+
+- **EAs:** your own EA is allowed (support, 6 and 9 Nov 2026, with the set-up described), even fully automated, with proof of ownership (source, version history, development
+  evidence, a live call); a compiled file alone is not proof. A third-party EA only as a trade / risk manager.
+- **No VPN / VPS while trading, "even in the future"** (FundingPips support, 6 Nov 2026); the IP region stays the same
+  from purchase to Master account (third-party summaries, Oct 2026). So MT5 runs on the owner's own laptop at home.
+- **Banned:** hedging, **inside one account too, even in MT5 Hedge mode** (support, 10 Nov), opposite account trading, copy
+  trading into a FundingPips account from outside, HFT, tick scalping, latency / reverse / long-short arbitrage, gap
+  trading, server spamming, "server execution" (undefined; asked).
+- **News (support, 10 Nov):** evaluation (the owner's 21182752 is Phase 1 of the 2-Step): holding through news allowed,
+  purposely trading news prohibited. Master: no opening or closing from 5 min before to 5 min after a high-impact release
+  on the affected currencies (profits inside are deducted); holding through allowed. Source: the dashboard's Economic
+  Calendar (red).
+- **Platforms:** MT5 is offered again (FundingPips' copier lists MT5, cTrader and Match-Trader, Sep 2026). The owner's demo
+  shows "FundingPips-SIM1 ... Hedge".
+
 ## Small follow-ups
 
 - [x] The owner checks the phone layout and the order bubble on his own phone (owner, 1 Nov: "working").
@@ -347,9 +449,12 @@ Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers'
   evening: the app's requests got the continuous series too (Fyers sends it unless cont_flag=0). Fixed in **v0.30.1**.
 - [ ] Agri MCX contracts use the non-agri rates (low priority: Fyers doesn't offer agri commodities at present).
 - [ ] Ask Fyers in writing whether a second user's app may fetch market data from this server's IP (support request drafted 30 Oct).
+- [x] **FundingPips (owner):** answered 10 Nov 8:12 PM: no hedging in one account; news window ±5 min on Master only (item 8).
+- [ ] **The owner:** what FundingPips' "opposite trades on different instruments" covers (item 8's hedging check).
 
 ## Done
 
+- [x] **v0.34.0** (10 Nov): MT5 prices and charts through the owner's own bridge EA (item 8, stage a): `mt5/FTM_Bridge.mq5` (calls out only, no orders), Settings › MT5 bridge, MT5 in the Prices pill, MT5 symbols in Find, every chart type and Pine on the broker's own candles, the broker's day; paper trading refuses MT5 symbols until stage b.
 - [x] **v0.33.1** (5 Nov): a separate Telegram channel for Live trades' pictures (item 17): Journal › Settings › Pictures › Live trades' channel (optional; paper pictures stay in the journal's chat; Live only if that's empty).
 - [x] **v0.33.0** (5 Nov): the Live account is your Fyers account (item 16): the PAPER / LIVE switch at the top left (green / red, client ID + 2FA, per login, the server refusing Live changes from a Paper page); Fyers' own funds for the balance and every % rule (money in / out never a profit or a loss); every trade on the Fyers account shown and managed (placed here or in Fyers; a Fyers stop adopted; no stop: the red flag and Place my stop); delivery holdings (never squared off); old Live accounts back to Paper.
 - [x] **v0.32.0** (5 Nov): LiveTrader 1.24's changes (item 15): the RR box and lock under BUY / SELL (also the ticket and the phone; the stop for a moved target worked out net of all charges at the sized lots, with a message when the rules or the charges stop it); per-trade trailing like 1.24 (a typed R switches it on, the panel takes the trades back, own / as-the-panel, BE-T done); the tool gap.

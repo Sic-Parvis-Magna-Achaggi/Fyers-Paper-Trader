@@ -21,6 +21,7 @@ bash tests/server_conf_test.sh                        # each server's own settin
 FYERS_TEST_CONTAINER=1 bash tests/server_flow.sh      # a new server's first install + updates (startup.sh's scripts, update.sh) on a local "GitHub"; ONLY in a throwaway container, as root
 python3 tests/trail_rr_test.py                        # LiveTrader 1.24: per-trade trailing (typed R switches on, the panel takes trades back) and the RR lock's stop (net of charges, rules, too-close target)
 python3 tests/replay_test.py                          # trade replay: the stop's path, entry / exit set-ups (order's chart, layouts), code + drawings as then, old trades from the log, net ₹
+python3 tests/mt5_test.py                             # v0.34.0: the MT5 bridge without a browser: key, the EA's sync (account, clock, ticks), candles through HIST, symbols, offline, the broker's clock, paper refusing MT5
 
 python3 tests/make_old_data.py /tmp/fyers_test        # fresh v0.12-style data, admin password OldPass12345
 FYERS_HELPER_DATA=/tmp/fyers_test python3 tests/mock_server.py &   # the app on http://localhost:8766
@@ -43,6 +44,7 @@ FYERS_HELPER_DATA=/tmp/fyers_test node tests/jshots_flow.js        # journal pic
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/jinsights_flow.js     # journal v0.28.0: Insights, the weekly review, walk-through, calendar, Copy for Gemini, export / backup / restore, phone
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/mobile_flow.js        # the phone layout on an emulated Pixel 7: order sheet and its bubble, positions, tabs, full screen (resets the admin's paper account)
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/replay_flow.js        # trade replay: ▶ On chart (recorded chart + Pine code, nothing saved), ▶ Play, every chart type, History, the phone; ~5 min (resets the admin's paper account)
+FYERS_HELPER_DATA=/tmp/fyers_test node tests/mt5_flow.js           # v0.34.0: Settings › MT5 bridge (key with 2FA), a fake MT5 terminal connecting (fake_mt5.py), Find, an MT5 chart with every chart type + Volume + Pine, the broker's day, trading refused, MT5 off, the phone
 ```
 
 `mock_server.py` sends the same response headers as the server's Caddy (read from `server/Caddyfile`), so browser
@@ -71,3 +73,8 @@ must also delete `u/<user>/layouts.json` (with no page open), or the saved layou
 
 **Rule:** every indicator works on every chart type, P&F included. When the app gains a Pine feature, add a script
 that uses it to `tests/pine_compat.js`; `pine_compat_flow.js` then checks it on every chart type.
+
+`fake_mt5.py` is a fake MT5 terminal running the bridge EA's protocol (`mt5/FTM_Bridge.mq5`): `python3 tests/fake_mt5.py
+http://localhost:8766 <bridge key>` (a key from Settings › MT5 bridge). Its broker clock is GMT+2 / GMT+3 with US summer
+time, it has no weekend candles, and its prices are the same every run. `mt5_flow.js` starts it by itself.
+The mock's fake Fyers stream sends only what Fyers would (`feed.fy_wanted()`): never MT5 symbols.

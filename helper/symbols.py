@@ -198,7 +198,12 @@ def _refresh(force: bool = False) -> None:
         log.info("Symbol masters: %s (%s rows in all)", ", ".join(got) or "saved copies", f"{len(_rows):,}")
 
 
+EXTRA = None               # callable(ticker) -> row for symbols not in Fyers' masters (MT5:..., helper/mt5.py)
+
+
 def get(ticker: str):
+    if EXTRA and isinstance(ticker, str) and ticker.startswith("MT5:"):
+        return EXTRA(ticker)
     refresh()
     d = _dcache.get(ticker)
     if d is None:

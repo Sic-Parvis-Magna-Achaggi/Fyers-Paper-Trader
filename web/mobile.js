@@ -148,6 +148,7 @@ function mWarnings(){
   if(f.configured === false) w.push(`Fyers app not set up · <a href="#" data-w="set">Settings</a>`);
   else if(f.configured && !f.logged_in) w.push(`Not logged in to Fyers today · <a href="#" data-w="login">Log in</a>`);
   if(typeof liveOn === "function" && liveOn()) for(const x of ((P.snap.live || {}).warnings || [])) w.push("⚠ " + esc(x));
+  if(typeof mtPhoneWarn === "function"){ const m = mtPhoneWarn(); if(m) w.push(m); }        // an MT5 chart with MT5 off (mt5.js)
   const h = w.map(x => `<div>${x}</div>`).join("");
   if(el.innerHTML !== h) el.innerHTML = h;
   el.querySelectorAll("[data-w]").forEach(a => a.onclick = e => { e.preventDefault(); a.dataset.w === "login" ? fyersLogin() : openDrawer(); });
@@ -671,7 +672,7 @@ function mMore(){
       <button data-pg="trades"><span>Trades table<br><small>every position in one table</small></span>›</button>
       <button data-pg="book"><span>Order book</span>›</button>
       <button data-pg="log"><span>Log<br><small>fills, stops moved, refusals</small></span>›</button>
-      <button data-a="set"><span>Settings<br><small>Fyers app, security and 2FA, users, reset</small></span>›</button>
+      <button data-a="set"><span>Settings<br><small>Fyers app, MT5 bridge, security and 2FA, users, reset</small></span>›</button>
     </div>
     <div class="mh">Theme</div>
     <div class="mseg" id="mmTheme">${[["", "Auto"], ["dark", "Dark"], ["light", "Light"]].map(([t, n]) => `<button data-t="${t}" class="${theme === t ? "on" : ""}">${n}</button>`).join("")}</div>

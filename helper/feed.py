@@ -12,6 +12,7 @@ import time
 from . import store
 
 log = logging.getLogger("feed")
+MT5 = "MT5:"                            # symbols from the MT5 bridge (helper/mt5.py), never asked of Fyers
 
 
 class Client:
@@ -41,6 +42,7 @@ class Feed:
         self._ops = threading.Lock()
         self.extra = None               # callable -> symbols the paper engine needs, page open or not
         self.on_tick = None             # callable(tick), run on the event loop
+        self.mt5 = None                 # callable -> the MT5 bridge's state for the price pill (helper/mt5.py)
 
     # ------------------------------------------------------------ page side
     def start(self, loop):
@@ -67,7 +69,7 @@ class Feed:
         """One symbol, a list of up to 5, or None (no books)."""
         if isinstance(symbols, str):
             symbols = [symbols]
-        new = {x for x in (symbols or []) if isinstance(x, str) and ":" in x}
+        new = {x for x in (symbols or []) if isinstance(x, str) and ":" in x and not x.startswith(MT5)}   # MT5: no book
         new = set(sorted(new)[:5])
         added = new - c.depth
         c.depth = new
@@ -92,6 +94,10 @@ class Feed:
             except Exception as e:
                 log.warning(self._tag() + "engine symbols: %s", e)
         return (sorted(first) + sorted(u - first))[:95]   # Standard plan: 100 symbols on the data socket
+
+    def fy_wanted(self) -> list:
+        """What Fyers streams: everything wanted except MT5 symbols (those come from the MT5 bridge, helper/mt5.py)."""
+        return [s for s in self.wanted() if not s.startswith(MT5)]
 
     def _offer(self, c: Client, msg: dict):
         try:
@@ -138,7 +144,9 @@ class Feed:
     def publish(self, tick: dict):
         """Called from any thread."""
         self.last[tick["s"]] = tick
-        self.last_at[tick["s"]] = self.last_tick_at = time.time()
+        self.last_at[tick["s"]] = time.time()
+        if not tick["s"].startswith(MT5):          # (Fyers' own feed: its silence check must not count MT5's ticks)
+            self.last_tick_at = self.last_at[tick["s"]]
         if self.loop:
             self.loop.call_soon_threadsafe(self._fanout, tick)
 
@@ -217,7 +225,7 @@ class Feed:
     def _resync_blocking(self):
         with self._ops:
             try:
-                want, dwant = self.wanted(), self.wanted_depth()
+                want, dwant = self.fy_wanted(), self.wanted_depth()
                 if not want and not dwant:
                     return
                 self._ensure_socket()
@@ -261,7 +269,7 @@ class Feed:
                         self.publish_depth(d)
                 except Exception as e:
                     log.debug("depth poll failed: %s", e)
-            want = self.wanted()
+            want = self.fy_wanted()
             if not want or not self.link.token():
                 continue
             if not self.sock or not self.sock_up:
@@ -291,8 +299,16 @@ class Feed:
         return out
 
     def status(self) -> dict:
-        return {"socket": self.sock_up, "streaming": self.subscribed, "depth": self.dsubscribed, "last_tick_age": (
+        out = {"socket": self.sock_up, "streaming": self.subscribed, "depth": self.dsubscribed, "last_tick_age": (
             round(time.time() - self.last_tick_at, 1) if self.last_tick_at else None),
             "data_budget": self.link.data_budget.status()}
+        if self.mt5:
+            try:
+                m = self.mt5()
+                if m:
+                    out["mt5"] = m
+            except Exception as e:
+                log.debug("mt5 status: %s", e)
+        return out
 
 

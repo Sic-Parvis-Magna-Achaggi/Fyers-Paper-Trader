@@ -228,6 +228,8 @@ class Paper:
         r = symbols.get(sym)
         if not r:
             raise Refused(f"unknown contract {sym}")
+        if r.get("x") == "MT5":                     # roadmap 8: charts first (stage a); trading on MT5 is stage b
+            raise Refused("MT5 symbols are charts only for now: trading them through the bridge comes in the next step")
         return {**r, "prod": product} if product else r
 
     def px(self, sym):
