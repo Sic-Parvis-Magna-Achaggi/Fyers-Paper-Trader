@@ -229,7 +229,7 @@ class Paper:
         if not r:
             raise Refused(f"unknown contract {sym}")
         if r.get("x") == "MT5":                     # roadmap 8: charts first (stage a); trading on MT5 is stage b
-            raise Refused("MT5 symbols are charts only for now: trading them through the bridge comes in the next step")
+            raise Refused("paper accounts trade Fyers contracts: MT5 symbols trade on your MT5 accounts (MT5 at the top left)")
         return {**r, "prod": product} if product else r
 
     def px(self, sym):
@@ -972,8 +972,12 @@ class Paper:
         if pos.get("tp") is not None and pos["basis"] == "self" and side * (self._through(own, -side) - pos["tp"]) > 0:
             self.close(pos, pos["tp"], "tp")
             return True
+        return self._trail_pos(pos, row, b, udir)
 
-        # trailing (R in the stop's basis, from the first stop)
+    def _trail_pos(self, pos, row, b, udir) -> bool:
+        """Trail BE and Trail SL (R in the stop's basis, from the first stop). The MT5 engine uses this on its own: its
+        stops and targets are the broker's."""
+        side = pos["side"]
         if pos.get("first_sl") is None:
             return False
         R = abs(pos["basis_entry"] - pos["first_sl"])

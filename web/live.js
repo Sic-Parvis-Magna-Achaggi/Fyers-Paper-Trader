@@ -190,35 +190,50 @@ async function liveCard(){
   fill();
 }
 
-/* ---------------------------------------------------------------- the PAPER / LIVE switch (top left; phone: top bar) */
+/* ---------------------------------------------------------------- the PAPER / LIVE / MT5 switch (top left; phone: top bar)
+   v0.36.0: MT5 (roadmap 8 b1) is a third side of its own colour: the admin's MT5 accounts, kept apart from Fyers. */
+function sideNow(){ return typeof sideMT5 === "function" && sideMT5() ? "mt5" : sideLive() ? "live" : "paper"; }
 function sideRender(){
-  const admin = !!(S && S.user && S.user.role === "admin"), live = sideLive();
+  const admin = !!(S && S.user && S.user.role === "admin"), live = sideLive(), now = sideNow();
   let el = $("#sideSw");
   if(!el){
     const brand = document.querySelector("#app > header .brand");
     if(brand){ el = document.createElement("span"); el.id = "sideSw"; el.className = "sidesw";
-      el.innerHTML = `<button data-s="paper">PAPER</button><button data-s="live">LIVE</button>`; brand.after(el);
+      el.innerHTML = `<button data-s="paper">PAPER</button><button data-s="live">LIVE</button><button data-s="mt5">MT5</button>`; brand.after(el);
       el.querySelectorAll("button").forEach(b => b.onclick = () => sideClick(b.dataset.s)); }
   }
   if(el){
-    el.classList.toggle("hide", !admin); el.classList.toggle("live", live);
-    el.querySelector('[data-s="paper"]').classList.toggle("on", !live); el.querySelector('[data-s="live"]').classList.toggle("on", live);
+    el.classList.toggle("hide", !admin); el.classList.toggle("live", live); el.classList.toggle("mt5", now === "mt5");
+    for(const k of ["paper", "live", "mt5"]) el.querySelector(`[data-s="${k}"]`).classList.toggle("on", now === k);
     el.title = live ? "LIVE: this page trades on your Fyers account - every order is real. PAPER (one click) goes back to your paper accounts."
-      : "PAPER: this page trades your paper accounts. LIVE switches it to your Fyers account (client ID + a 2FA code).";
+      : now === "mt5" ? "MT5: this page shows your MT5 accounts (straight from MT5, kept apart from Fyers); moving a stop or closing changes the real trade at the broker. PAPER (one click) goes back."
+      : "PAPER: this page trades your paper accounts. LIVE switches it to your Fyers account (client ID + a 2FA code); MT5 to your MT5 accounts (a 2FA code).";
   }
   const top = $("#mTop");
   let m = $("#mSide");
   if(top && !m){ m = document.createElement("button"); m.id = "mSide"; const a = $("#mAcct"); a ? a.before(m) : top.prepend(m);
-    m.onclick = () => sideClick(sideLive() ? "paper" : "live"); }
+    m.onclick = sideMenu; }
   if(m){
-    m.classList.toggle("hide", !admin); m.classList.toggle("live", live); m.textContent = live ? "LIVE" : "PAPER";
-    m.title = live ? "Live: your Fyers account (tap: back to Paper)" : "Paper (tap: switch to Live)";
+    m.classList.toggle("hide", !admin); m.classList.toggle("live", live); m.classList.toggle("mt5", now === "mt5");
+    m.textContent = now.toUpperCase();
+    m.title = live ? "Live: your Fyers account (tap to switch)" : now === "mt5" ? "MT5: your MT5 accounts (tap to switch)" : "Paper (tap to switch to Live or MT5)";
     const ml = $("#mLive"); if(ml && admin) ml.classList.add("keephide");
   }
 }
+function sideMenu(){                           // the phone: PAPER / LIVE / MT5 in a small menu under the button
+  let d = $("#mSideMenu");
+  if(d){ d.remove(); return; }
+  d = document.createElement("div"); d.id = "mSideMenu"; d.className = "sidemenu";
+  d.innerHTML = ["paper", "live", "mt5"].map(k => `<button data-s="${k}" class="${k}${sideNow() === k ? " on" : ""}">${k.toUpperCase()}</button>`).join("");
+  document.body.append(d);
+  const r = $("#mSide").getBoundingClientRect(); d.style.left = r.left + "px"; d.style.top = (r.bottom + 4) + "px";
+  d.querySelectorAll("button").forEach(b => b.onclick = e => { e.stopPropagation(); d.remove(); sideClick(b.dataset.s); });
+  setTimeout(() => document.addEventListener("pointerdown", function x(e){ if(!d.contains(e.target)){ d.remove(); document.removeEventListener("pointerdown", x, true); } }, true), 0);
+}
 function sideClick(want){
-  if(want === (sideLive() ? "live" : "paper")) return;
+  if(want === sideNow()) return;
   if(want === "paper") return sideSet("paper");
+  if(want === "mt5") return mtSideDialog();
   sideDialog();
 }
 async function sideSet(side, confirm){
@@ -232,7 +247,31 @@ function sideApply(j){
   acctSetup();
   if(typeof acctMgrRender === "function") acctMgrRender();
   liveHeader();
-  toast(j.side === "live" ? "LIVE: this page now trades on your Fyers account" : "Paper: your paper accounts");
+  if(typeof mtDecorate === "function") mtDecorate();
+  toast(j.side === "live" ? "LIVE: this page now trades on your Fyers account" : j.side === "mt5" ? "MT5: your MT5 accounts" : "Paper: your paper accounts");
+}
+function mtSideDialog(){
+  let m = $("#mtSideDlg");
+  if(!m){ m = document.createElement("div"); m.id = "mtSideDlg"; document.body.append(m); }
+  const n = typeof mt5List === "function" ? mt5List().length : 0;
+  m.className = "modalwrap";
+  m.innerHTML = `<div class="ca mtcard"><b>Switch this page to MT5 · your MT5 accounts</b>
+    <p class="help">On MT5 this page shows your MT5 accounts, kept apart from Fyers: one for each MT5 login whose terminal runs the
+      FTM Bridge EA (1.10) on your laptop${n ? ` (${n} so far)` : " (none has called yet)"}. Positions, pending orders, balance and history come
+      straight from MT5, in the account's currency, net of commission and swap; trades you place in MT5 itself show too.</p>
+    <p class="help"><b>Moving a stop, BE, BE-T, TRAIL and ✕ change the real trade at the broker</b> (the first change on each account asks
+      for its login once). Placing new orders from here comes in the next step.</p>
+    <p class="help">Back to Paper is one click. Each browser or phone switches for itself.</p>
+    <div class="err" id="mtsErr"></div>
+    <div class="btns"><button class="primary mt5btn" id="mtsGo">Switch to MT5</button><button class="ghost" id="mtsX">Cancel</button></div></div>`;
+  m.classList.remove("hide");
+  sq("#mtsX").onclick = () => m.classList.add("hide");
+  sq("#mtsGo").onclick = async () => {
+    const j = await stepUp(() => api("/api/side", {body: {side: "mt5"}}));
+    if(!j.ok){ if(j.error !== "cancelled") sq("#mtsErr").textContent = j.error; return; }
+    m.classList.add("hide");
+    sideApply(j);
+  };
 }
 function sideFromServer(side){               // another page of this login switched (a tab, a grid chart)
   if(S && S.side !== side){ S.side = side; refreshState(); }

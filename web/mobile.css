@@ -30,6 +30,8 @@ body.mob #chart{flex:1;min-height:0}
 #mLive.keephide{display:none!important}
 #mSide{background:var(--up)!important;color:#fff!important;font-weight:700;font-size:11px;letter-spacing:.04em;border-radius:5px;min-height:26px!important;padding:2px 7px!important;flex:none}
 #mSide.live{background:var(--down)!important}
+#mSide.mt5{background:var(--mt5)!important}
+body.mob.is-mt5 #mTop{border-bottom:2px solid var(--mt5)}
 #mSheet .nsl{background:var(--down);border-color:var(--down);color:#fff;font-weight:700}
 #mLive{background:var(--down)!important;color:#fff!important;font-weight:700;font-size:11px;border-radius:5px;min-height:26px!important;padding:2px 7px!important}
 #mKill{background:var(--down)!important;color:#fff!important;font-weight:700;border-radius:6px;min-height:32px!important;padding:2px 10px!important}

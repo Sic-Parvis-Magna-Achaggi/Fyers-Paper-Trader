@@ -513,7 +513,7 @@ class Journal:
         changed = False
         backfill = not self.d["synced"]
         with self.lock:
-            accts = {a["id"]: a for a in urt.accounts()}
+            accts = {a["id"]: a for a in urt.accounts() if a.get("mode") != "mt5"}   # (MT5 accounts: roadmap 8 c)
             for aid, a in accts.items():
                 e = urt.engines.get(aid)
                 name, mode = a.get("name", ""), a.get("mode", "paper")
@@ -948,7 +948,7 @@ class Journal:
         a pillar on one trade can change the others of its session)."""
         by_id, sessions = self.computed()
         reps = self.reps(by_id)
-        names = {a["id"]: a for a in urt.accounts()}
+        names = {a["id"]: a for a in urt.accounts() if a.get("mode") != "mt5"}
         trades = []
         hid = set(self.d["hidden"])
         with self.lock:

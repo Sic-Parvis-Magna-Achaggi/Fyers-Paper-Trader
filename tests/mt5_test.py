@@ -206,14 +206,14 @@ async def main():
     ok("changing the rule is saved and clears MT5 candles", st["clock"] == "fixed" and not await_rows(uid))
     mt5.settings(uid, {"clock": "us"})
 
-    print("paper trading refuses MT5 (stage a)")
+    print("paper accounts refuse MT5 symbols")
     from helper.paper import Paper, Refused
     p = Paper.__new__(Paper)
     try:
         Paper.row(p, "MT5:XAUUSD")
         ok("Paper.row refuses MT5 symbols", False)
     except Refused as e:
-        ok("Paper.row refuses MT5 symbols", "charts only" in str(e), e)
+        ok("Paper.row refuses MT5 symbols (they trade on MT5 accounts)", "MT5 accounts" in str(e), e)
 
     print("revoked key")
     mt5.revoke(uid)

@@ -2,37 +2,59 @@
 //| FTM_Bridge.mq5                                                    |
 //| Connects this MT5 terminal to Fyers Trade Manager, my own         |
 //| charting app on my server, so its charts (Point & Figure, Renko,  |
-//| Pine scripts...) can show this broker's own prices.               |
+//| Pine scripts...) can show this broker's own prices, and so I can  |
+//| manage this account's trades from the app.                        |
 //|                                                                   |
 //| How it talks to the app: it only ever calls OUT, with WebRequest, |
 //| about 4 times a second (POST /api/mt5/sync). Nothing connects in  |
 //| to this computer, and the app never logs in to the broker.        |
 //|                                                                   |
 //| Each call sends: this account (login, server, balance...), the    |
-//| broker's clock, and the new ticks of the symbols the app asked    |
-//| for. The app answers with a few lines of text:                    |
+//| broker's clock, the new ticks of the symbols the app asked for,   |
+//| and (1.10) this account's open positions, pending orders, its     |
+//| deals since the app last had them, and the results of the app's   |
+//| requests. The app answers with a few lines of text:               |
 //|   OK <ms>                    call again after this many ms        |
 //|   SUB <sym1>,<sym2>,...      the symbols to send ticks for        |
 //|   HIST <id> <sym> <tf> <from> <to>                                |
 //|                              send candles (CopyRates) for that    |
 //|                              range, in broker server time         |
 //|   LIST                       send the broker's symbol list        |
+//|   DEALS <from>               send the deals from this server time |
+//|   MOD <tag> <ticket> <sl> <tp>     change a position's SL / TP    |
+//|   CLOSE <tag> <ticket> <volume>    close a position at market     |
+//|                                    (volume 0 = all of it)         |
+//|   CANCEL <tag> <ticket>            delete a pending order         |
+//|   OMOD <tag> <ticket> <price> <sl> <tp>  move a pending order     |
 //|   ERR <message>              a problem (shown on the chart)       |
+//| Each request has a tag; it is carried out once, and its result is |
+//| sent back with the next call (a tag seen again is not repeated).  |
 //|                                                                   |
-//| Version 1.00 (stage a): prices and candles only. It places,       |
-//| changes and closes NO orders.                                     |
+//| Version 1.10 (stage b, slice b1): manages trades that already     |
+//| exist (moves SL / TP, closes, cancels or moves pending orders),   |
+//| only when the app asks and only if AllowTrading is true. It OPENS |
+//| NO new trades (that is a later version).                          |
+//| Version 1.00 (stage a): prices and candles only.                  |
 //+------------------------------------------------------------------+
 #property copyright   "Ashwin Kumar"
-#property version     "1.00"
-#property description "FTM Bridge 1.00: sends this terminal's prices, candles and symbol list to your Fyers Trade Manager."
-#property description "Calls out only (WebRequest). Places no orders."
+#property version     "1.10"
+#property description "FTM Bridge 1.10: sends this terminal's prices, candles, symbol list and account to your Fyers Trade Manager,"
+#property description "and carries out the app's requests on existing trades (SL / TP, close, cancel). Opens no new trades."
+#property description "Calls out only (WebRequest)."
+
+#include <Trade\Trade.mqh>
 
 input string ServerURL = "https://68-183-245-178.sslip.io"; // App address (also add it in Tools > Options > Expert Advisors)
 input string BridgeKey = "";                                 // Bridge key (Settings > MT5 bridge in the app)
 input int    PollMs    = 250;                                // Call the app every ... ms
 input int    TimeoutMs = 5000;                               // WebRequest time-out (ms)
+input bool   AllowTrading   = true;                          // Let the app manage this account's trades (SL / TP, close, cancel)
+input int    SlippagePoints = 30;                            // Closing at market: most slippage accepted (points)
 
-#define EA_VER        "1.00"
+#define EA_VER        "1.10"
+#define MAGIC         20261110  // the magic number on the app's closing deals
+#define DEALS_PER_CALL 200      // deals per call (the app is told when there are more)
+#define TAGS_KEPT     200       // requests remembered, so a tag is never carried out twice
 #define MAX_TICKS     3000      // ticks per call, all symbols together
 #define TICKS_PER_SYM 500       // ticks per symbol per call
 #define BARS_PER_POST 20000     // candles per POST
@@ -56,6 +78,21 @@ string g_lastErr  = "";
 long   g_sent     = 0;          // ticks sent
 datetime g_okAt   = 0;
 
+CTrade g_trade;
+bool   g_dSet     = false;      // the app has set the deal cursor (DEALS)
+long   g_dCurMsc  = 0;          // the last deal the app has: its time (ms, server time) and ticket
+ulong  g_dCurTk   = 0;
+long   g_dNextMsc = 0;          // what the cursor becomes once the app has answered
+ulong  g_dNextTk  = 0;
+bool   g_dMore    = false;
+string g_res[];                 // results of the app's requests, waiting to be delivered
+int    g_resSent  = 0;
+string g_doneTag[];             // requests already carried out (tag -> result)
+string g_doneRes[];
+string g_lastCmd  = "";
+int    g_nPos     = 0;
+int    g_nOrd     = 0;
+
 //+------------------------------------------------------------------+
 int OnInit()
   {
@@ -72,6 +109,10 @@ int OnInit()
    g_pollMs = PollMs;
    if(g_pollMs < 100)
       g_pollMs = 100;
+   g_trade.SetExpertMagicNumber(MAGIC);
+   g_trade.SetDeviationInPoints(SlippagePoints);
+   g_trade.SetAsyncMode(false);
+   g_trade.LogLevel(LOG_LEVEL_ERRORS);
    if(!EventSetMillisecondTimer(g_pollMs))
      {
       Print("FTM Bridge: couldn't start the timer (error ", GetLastError(), ")");
@@ -99,6 +140,9 @@ void OnTimer()
      {
       ArrayCopy(g_lastMsc, g_nextMsc);       // the app has these ticks now (before Handle: SUB may change the list)
       g_sent += g_nextSent;
+      g_dCurMsc = g_dNextMsc;                // ... and these deals (before Handle: DEALS may move the cursor)
+      g_dCurTk = g_dNextTk;
+      DropResults(g_resSent);                // ... and these results
       g_okTick = GetTickCount64();
       g_fails = 0;
       g_okAt = TimeLocal();
@@ -175,7 +219,14 @@ void Show()
       s += "\n" + g_lastErr;
    if(ArraySize(g_pend) > 0)
       s += "\nWaiting for MT5 to download history (" + IntegerToString(ArraySize(g_pend)) + ")";
-   s += "\nPlaces no orders.";
+   if(g_state == "connected")
+      s += "\nThis account: " + IntegerToString(g_nPos) + " position(s), " + IntegerToString(g_nOrd) + " pending order(s)";
+   if(AllowTrading)
+      s += "\nManages this account's trades when the app asks: moves SL / TP, closes, cancels. Opens no new trades.";
+   else
+      s += "\nApp trading OFF (input AllowTrading = false): shows the account to the app, changes nothing.";
+   if(g_lastCmd != "")
+      s += "\nLast request: " + g_lastCmd;
    Comment(s);
   }
 
@@ -216,7 +267,7 @@ string SyncBody()
       mode = "netting";
    if(mm == ACCOUNT_MARGIN_MODE_EXCHANGE)
       mode = "exchange";
-   string b = "{\"v\":1,\"ea\":" + Js(EA_VER) + ",\"build\":" + IntegerToString(TerminalInfoInteger(TERMINAL_BUILD));
+   string b = "{\"v\":2,\"ea\":" + Js(EA_VER) + ",\"build\":" + IntegerToString(TerminalInfoInteger(TERMINAL_BUILD));
    b += ",\"srv\":" + IntegerToString((long)TimeTradeServer()) + ",\"gmt\":" + IntegerToString((long)TimeGMT());
    b += ",\"acct\":{\"login\":" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN));
    b += ",\"server\":" + Js(AccountInfoString(ACCOUNT_SERVER));
@@ -232,7 +283,15 @@ string SyncBody()
    b += ",\"trade_allowed\":" + Jb(AccountInfoInteger(ACCOUNT_TRADE_ALLOWED) != 0);
    b += ",\"ea_allowed\":" + Jb(AccountInfoInteger(ACCOUNT_TRADE_EXPERT) != 0);
    b += ",\"demo\":" + Jb(AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_DEMO);
-   b += "},\"ticks\":[" + Ticks() + "]}";
+   b += "},\"ticks\":[" + Ticks() + "]";
+   string syms[];
+   b += ",\"trade\":{\"on\":" + Jb(AllowTrading) + ",\"term\":" + Jb(TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) != 0)
+        + ",\"mql\":" + Jb(MQLInfoInteger(MQL_TRADE_ALLOWED) != 0) + "}";
+   b += ",\"pos\":[" + Positions(syms) + "]";
+   b += ",\"ord\":[" + Orders(syms) + "]";
+   b += ",\"sym\":{" + SymInfo(syms) + "}";
+   b += ",\"deals\":[" + Deals() + "],\"dmore\":" + Jb(g_dMore) + ",\"dcur\":" + IntegerToString(g_dSet ? g_dCurMsc : 0);
+   b += ",\"res\":[" + Results() + "]}";
    return(b);
   }
 
@@ -333,6 +392,19 @@ void Handle(const string reply)
                else
                   if(StringFind(ln, "ERR ") == 0)
                      g_lastErr = StringSubstr(ln, 4);
+                  else
+                     if(StringFind(ln, "DEALS ") == 0)
+                       {
+                        g_dCurMsc = StringToInteger(StringSubstr(ln, 6)) * 1000;
+                        g_dCurTk = 0;
+                        g_dNextMsc = g_dCurMsc;
+                        g_dNextTk = 0;
+                        g_dSet = true;
+                       }
+                     else
+                        if(StringFind(ln, "MOD ") == 0 || StringFind(ln, "CLOSE ") == 0 || StringFind(ln, "CANCEL ") == 0
+                           || StringFind(ln, "OMOD ") == 0)
+                           Command(ln);
      }
   }
 
@@ -580,5 +652,348 @@ void SendList()
         }
      }
    Print("FTM Bridge: sent the symbol list (", total, " symbols)");
+  }
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//| 1.10: this account for the app                                    |
+//+------------------------------------------------------------------+
+void AddSym(string &syms[], const string sym)
+  {
+   int n = ArraySize(syms);
+   for(int i = 0; i < n; i++)
+      if(syms[i] == sym)
+         return;
+   ArrayResize(syms, n + 1);
+   syms[n] = sym;
+  }
+
+//+------------------------------------------------------------------+
+//| [ticket, symbol, type (0 buy, 1 sell), volume, open price, SL,    |
+//|  TP, current price, swap, profit, open time ms, magic, comment,   |
+//|  position id]                                                     |
+//+------------------------------------------------------------------+
+string Positions(string &syms[])
+  {
+   string out = "";
+   int n = PositionsTotal();
+   g_nPos = 0;
+   for(int i = 0; i < n; i++)
+     {
+      ulong tk = PositionGetTicket(i);       // (selects it)
+      if(tk == 0)
+         continue;
+      string sym = PositionGetString(POSITION_SYMBOL);
+      int dg = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+      if(out != "")
+         out += ",";
+      out += "[" + IntegerToString((long)tk) + "," + Js(sym) + "," + IntegerToString(PositionGetInteger(POSITION_TYPE))
+             + "," + Jd(PositionGetDouble(POSITION_VOLUME), 4) + "," + Jd(PositionGetDouble(POSITION_PRICE_OPEN), dg)
+             + "," + Jd(PositionGetDouble(POSITION_SL), dg) + "," + Jd(PositionGetDouble(POSITION_TP), dg)
+             + "," + Jd(PositionGetDouble(POSITION_PRICE_CURRENT), dg) + "," + Jd(PositionGetDouble(POSITION_SWAP), 2)
+             + "," + Jd(PositionGetDouble(POSITION_PROFIT), 2) + "," + IntegerToString(PositionGetInteger(POSITION_TIME_MSC))
+             + "," + IntegerToString(PositionGetInteger(POSITION_MAGIC)) + "," + Js(PositionGetString(POSITION_COMMENT))
+             + "," + IntegerToString(PositionGetInteger(POSITION_IDENTIFIER)) + "]";
+      AddSym(syms, sym);
+      g_nPos++;
+     }
+   return(out);
+  }
+
+//+------------------------------------------------------------------+
+//| Pending orders: [ticket, symbol, type (2 buy limit ... 7 sell     |
+//| stop limit), volume at first, volume now, price, SL, TP, placed   |
+//| ms, magic, comment, stop-limit price]                             |
+//+------------------------------------------------------------------+
+string Orders(string &syms[])
+  {
+   string out = "";
+   int n = OrdersTotal();
+   g_nOrd = 0;
+   for(int i = 0; i < n; i++)
+     {
+      ulong tk = OrderGetTicket(i);          // (selects it)
+      if(tk == 0)
+         continue;
+      long typ = OrderGetInteger(ORDER_TYPE);
+      if(typ < ORDER_TYPE_BUY_LIMIT || typ > ORDER_TYPE_SELL_STOP_LIMIT)
+         continue;                           // (a market order on its way: it becomes a position)
+      string sym = OrderGetString(ORDER_SYMBOL);
+      int dg = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+      if(out != "")
+         out += ",";
+      out += "[" + IntegerToString((long)tk) + "," + Js(sym) + "," + IntegerToString(typ)
+             + "," + Jd(OrderGetDouble(ORDER_VOLUME_INITIAL), 4) + "," + Jd(OrderGetDouble(ORDER_VOLUME_CURRENT), 4)
+             + "," + Jd(OrderGetDouble(ORDER_PRICE_OPEN), dg) + "," + Jd(OrderGetDouble(ORDER_SL), dg)
+             + "," + Jd(OrderGetDouble(ORDER_TP), dg) + "," + IntegerToString(OrderGetInteger(ORDER_TIME_SETUP_MSC))
+             + "," + IntegerToString(OrderGetInteger(ORDER_MAGIC)) + "," + Js(OrderGetString(ORDER_COMMENT))
+             + "," + Jd(OrderGetDouble(ORDER_PRICE_STOPLIMIT), dg) + "]";
+      AddSym(syms, sym);
+      g_nOrd++;
+     }
+   return(out);
+  }
+
+//+------------------------------------------------------------------+
+//| For the app's money figures: "SYM":[tick value, tick size,        |
+//| volume step, contract size, digits] of the symbols traded         |
+//+------------------------------------------------------------------+
+string SymInfo(const string &syms[])
+  {
+   string out = "";
+   for(int i = 0; i < ArraySize(syms); i++)
+     {
+      string s = syms[i];
+      if(out != "")
+         out += ",";
+      out += Js(s) + ":[" + Jd(SymbolInfoDouble(s, SYMBOL_TRADE_TICK_VALUE), 10) + "," + Jd(SymbolInfoDouble(s, SYMBOL_TRADE_TICK_SIZE), 10)
+             + "," + Jd(SymbolInfoDouble(s, SYMBOL_VOLUME_STEP), 4) + "," + Jd(SymbolInfoDouble(s, SYMBOL_TRADE_CONTRACT_SIZE), 4)
+             + "," + IntegerToString(SymbolInfoInteger(s, SYMBOL_DIGITS)) + "]";
+     }
+   return(out);
+  }
+
+//+------------------------------------------------------------------+
+//| Deals after the cursor, oldest first, at most DEALS_PER_CALL:     |
+//| [ticket, order, position id, symbol, type, entry (0 in, 1 out,    |
+//|  2 in/out, 3 out by), volume, price, commission, swap, profit,    |
+//|  fee, time ms, magic, comment, reason]                            |
+//+------------------------------------------------------------------+
+string Deals()
+  {
+   g_dMore = false;
+   g_dNextMsc = g_dCurMsc;
+   g_dNextTk = g_dCurTk;
+   if(!g_dSet)
+      return("");
+   datetime from = (datetime)(g_dCurMsc / 1000) - 1;
+   if(!HistorySelect(from, TimeCurrent() + 86400))
+      return("");
+   int n = HistoryDealsTotal();
+   long  cm[];
+   ulong ct[];
+   char  used[];
+   ArrayResize(cm, n);
+   ArrayResize(ct, n);
+   int m = 0;
+   for(int i = 0; i < n; i++)
+     {
+      ulong tk = HistoryDealGetTicket(i);
+      if(tk == 0)
+         continue;
+      long msc = HistoryDealGetInteger(tk, DEAL_TIME_MSC);
+      if(msc < g_dCurMsc || (msc == g_dCurMsc && tk <= g_dCurTk))
+         continue;                           // the app has it already
+      cm[m] = msc;
+      ct[m] = tk;
+      m++;
+     }
+   ArrayResize(used, m);
+   if(m > 0)
+      ArrayInitialize(used, 0);
+   string out = "";
+   int sent = 0;
+   for(int k = 0; k < DEALS_PER_CALL; k++)
+     {
+      int best = -1;                         // the oldest not yet taken (time, then ticket)
+      for(int i = 0; i < m; i++)
+        {
+         if(used[i] != 0)
+            continue;
+         if(best < 0 || cm[i] < cm[best] || (cm[i] == cm[best] && ct[i] < ct[best]))
+            best = i;
+        }
+      if(best < 0)
+         break;
+      used[best] = 1;
+      ulong tk = ct[best];
+      string sym = HistoryDealGetString(tk, DEAL_SYMBOL);
+      int dg = (sym == "" ? 2 : (int)SymbolInfoInteger(sym, SYMBOL_DIGITS));
+      if(out != "")
+         out += ",";
+      out += "[" + IntegerToString((long)tk) + "," + IntegerToString(HistoryDealGetInteger(tk, DEAL_ORDER))
+             + "," + IntegerToString(HistoryDealGetInteger(tk, DEAL_POSITION_ID)) + "," + Js(sym)
+             + "," + IntegerToString(HistoryDealGetInteger(tk, DEAL_TYPE)) + "," + IntegerToString(HistoryDealGetInteger(tk, DEAL_ENTRY))
+             + "," + Jd(HistoryDealGetDouble(tk, DEAL_VOLUME), 4) + "," + Jd(HistoryDealGetDouble(tk, DEAL_PRICE), dg)
+             + "," + Jd(HistoryDealGetDouble(tk, DEAL_COMMISSION), 2) + "," + Jd(HistoryDealGetDouble(tk, DEAL_SWAP), 2)
+             + "," + Jd(HistoryDealGetDouble(tk, DEAL_PROFIT), 2) + "," + Jd(HistoryDealGetDouble(tk, DEAL_FEE), 2)
+             + "," + IntegerToString(cm[best]) + "," + IntegerToString(HistoryDealGetInteger(tk, DEAL_MAGIC))
+             + "," + Js(HistoryDealGetString(tk, DEAL_COMMENT)) + "," + IntegerToString(HistoryDealGetInteger(tk, DEAL_REASON)) + "]";
+      g_dNextMsc = cm[best];
+      g_dNextTk = tk;
+      sent++;
+     }
+   g_dMore = (m > sent);
+   return(out);
+  }
+
+//+------------------------------------------------------------------+
+//| Results of the app's requests, until the app has them             |
+//+------------------------------------------------------------------+
+string Results()
+  {
+   string out = "";
+   g_resSent = ArraySize(g_res);
+   for(int i = 0; i < g_resSent; i++)
+     {
+      if(i > 0)
+         out += ",";
+      out += g_res[i];
+     }
+   return(out);
+  }
+
+void DropResults(const int k)
+  {
+   int n = ArraySize(g_res);
+   if(k <= 0)
+      return;
+   if(k >= n)
+     {
+      ArrayResize(g_res, 0);
+      return;
+     }
+   for(int i = k; i < n; i++)
+      g_res[i - k] = g_res[i];
+   ArrayResize(g_res, n - k);
+  }
+
+void AddResult(const string r)
+  {
+   int n = ArraySize(g_res);
+   ArrayResize(g_res, n + 1);
+   g_res[n] = r;
+  }
+
+string Res(const string tag, const bool ok, const uint code, const string msg, const ulong ticket)
+  {
+   return("[" + Js(tag) + "," + (ok ? "1" : "0") + "," + IntegerToString(code) + "," + Js(msg) + "," + IntegerToString((long)ticket) + "]");
+  }
+
+bool Done(const uint rc)
+  {
+   return(rc == TRADE_RETCODE_DONE || rc == TRADE_RETCODE_DONE_PARTIAL || rc == TRADE_RETCODE_PLACED || rc == TRADE_RETCODE_NO_CHANGES);
+  }
+
+int DoneIndex(const string tag)
+  {
+   for(int i = ArraySize(g_doneTag) - 1; i >= 0; i--)
+      if(g_doneTag[i] == tag)
+         return(i);
+   return(-1);
+  }
+
+void Remember(const string tag, const string res)
+  {
+   int n = ArraySize(g_doneTag);
+   if(n >= TAGS_KEPT)
+     {
+      for(int i = 1; i < n; i++)
+        {
+         g_doneTag[i - 1] = g_doneTag[i];
+         g_doneRes[i - 1] = g_doneRes[i];
+        }
+      n--;
+     }
+   ArrayResize(g_doneTag, n + 1);
+   ArrayResize(g_doneRes, n + 1);
+   g_doneTag[n] = tag;
+   g_doneRes[n] = res;
+  }
+
+//+------------------------------------------------------------------+
+//| One request from the app (each tag carried out once)              |
+//+------------------------------------------------------------------+
+void Command(const string line)
+  {
+   string p[];
+   int n = StringSplit(line, ' ', p);
+   if(n < 3)
+      return;
+   string kind = p[0];
+   string tag = p[1];
+   int d = DoneIndex(tag);
+   if(d >= 0)
+     {
+      AddResult(g_doneRes[d]);               // asked again: the same result, nothing done twice
+      return;
+     }
+   ulong tk = (ulong)StringToInteger(p[2]);
+   string r;
+   if(!AllowTrading)
+      r = Res(tag, false, 0, "trading from the app is off in the EA's inputs (AllowTrading)", tk);
+   else
+      if(kind == "MOD" && n >= 5)
+         r = DoMod(tag, tk, StringToDouble(p[3]), StringToDouble(p[4]));
+      else
+         if(kind == "CLOSE" && n >= 4)
+            r = DoClose(tag, tk, StringToDouble(p[3]));
+         else
+            if(kind == "CANCEL")
+               r = DoCancel(tag, tk);
+            else
+               if(kind == "OMOD" && n >= 6)
+                  r = DoOmod(tag, tk, StringToDouble(p[3]), StringToDouble(p[4]), StringToDouble(p[5]));
+               else
+                  r = Res(tag, false, 0, "bad request: " + line, tk);
+   Remember(tag, r);
+   AddResult(r);
+   g_lastCmd = kind + " #" + IntegerToString((long)tk) + " " + TimeToString(TimeLocal(), TIME_SECONDS);
+   Print("FTM Bridge: ", line, " -> ", r);
+  }
+
+string DoMod(const string tag, const ulong tk, const double slv, const double tpv)
+  {
+   if(!PositionSelectByTicket(tk))
+      return(Res(tag, false, TRADE_RETCODE_POSITION_CLOSED, "position not found (closed already?)", tk));
+   string sym = PositionGetString(POSITION_SYMBOL);
+   int dg = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+   double pt = SymbolInfoDouble(sym, SYMBOL_POINT);
+   double sl = NormalizeDouble(slv, dg);
+   double tp = NormalizeDouble(tpv, dg);
+   if(MathAbs(PositionGetDouble(POSITION_SL) - sl) < pt / 2 && MathAbs(PositionGetDouble(POSITION_TP) - tp) < pt / 2)
+      return(Res(tag, true, TRADE_RETCODE_NO_CHANGES, "no changes", tk));
+   bool ok = g_trade.PositionModify(tk, sl, tp);
+   uint rc = g_trade.ResultRetcode();
+   return(Res(tag, ok && Done(rc), rc, g_trade.ResultRetcodeDescription(), tk));
+  }
+
+string DoClose(const string tag, const ulong tk, const double vol)
+  {
+   if(!PositionSelectByTicket(tk))
+      return(Res(tag, false, TRADE_RETCODE_POSITION_CLOSED, "position not found (closed already?)", tk));
+   string sym = PositionGetString(POSITION_SYMBOL);
+   double have = PositionGetDouble(POSITION_VOLUME);
+   g_trade.SetTypeFillingBySymbol(sym);
+   bool ok;
+   if(vol > 0 && vol < have)
+      ok = g_trade.PositionClosePartial(tk, vol, SlippagePoints);
+   else
+      ok = g_trade.PositionClose(tk, SlippagePoints);
+   uint rc = g_trade.ResultRetcode();
+   return(Res(tag, ok && Done(rc), rc, g_trade.ResultRetcodeDescription(), tk));
+  }
+
+string DoCancel(const string tag, const ulong tk)
+  {
+   if(!OrderSelect(tk))
+      return(Res(tag, false, TRADE_RETCODE_INVALID_ORDER, "order not found (filled or gone already?)", tk));
+   bool ok = g_trade.OrderDelete(tk);
+   uint rc = g_trade.ResultRetcode();
+   return(Res(tag, ok && Done(rc), rc, g_trade.ResultRetcodeDescription(), tk));
+  }
+
+string DoOmod(const string tag, const ulong tk, const double pricev, const double slv, const double tpv)
+  {
+   if(!OrderSelect(tk))
+      return(Res(tag, false, TRADE_RETCODE_INVALID_ORDER, "order not found (filled or gone already?)", tk));
+   string sym = OrderGetString(ORDER_SYMBOL);
+   int dg = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+   ENUM_ORDER_TYPE_TIME tt = (ENUM_ORDER_TYPE_TIME)OrderGetInteger(ORDER_TYPE_TIME);
+   datetime exp = (datetime)OrderGetInteger(ORDER_TIME_EXPIRATION);
+   double stl = OrderGetDouble(ORDER_PRICE_STOPLIMIT);
+   bool ok = g_trade.OrderModify(tk, NormalizeDouble(pricev, dg), NormalizeDouble(slv, dg), NormalizeDouble(tpv, dg), tt, exp, stl);
+   uint rc = g_trade.ResultRetcode();
+   return(Res(tag, ok && Done(rc), rc, g_trade.ResultRetcodeDescription(), tk));
   }
 //+------------------------------------------------------------------+

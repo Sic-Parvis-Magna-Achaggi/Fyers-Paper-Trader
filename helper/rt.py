@@ -3,17 +3,20 @@ for the admin a LiveEngine with real orders at Fyers, that keeps working - stops
 with the page closed). A user with a Live account also has one Fyers order-update socket.
 
 Files:  u/<user>/fyers.json, prefs.json, scripts.json, candles.db, accounts.json
-        u/<user>/a/<account>/paper.json, paper_rules.json, paper_trades.json (+ archives)"""
+        u/<user>/a/<account>/paper.json, paper_rules.json, paper_trades.json (+ archives)
+        u/<admin>/a/mt5-<login>/ (+ mt5_deals.json): an MT5 account (roadmap 8 b1), one per MT5 login whose terminal
+        runs the FTM Bridge EA; made the first time that terminal calls, the admin's only"""
 import logging
 import secrets
 import shutil
 import time
 
-from . import journal, mt5, store, users
+from . import journal, mt5, mt5acct, store, users
 from .feedcheck import FC
 from .feed import Feed
 from .fyers_link import FyersLink
 from .live import LiveEngine
+from .mt5acct import Mt5Engine
 from .paper import DEFAULT_RULES, Paper, Refused
 
 log = logging.getLogger("rt")
@@ -38,6 +41,7 @@ class UserRT:
         self.feed.extra = self.watch_symbols
         self.feed.on_tick = self.on_tick
         self.feed.mt5 = lambda: mt5.brief(uid)     # the MT5 bridge's state for the price pill
+        self._mt5_none = None                      # the MT5 side's empty account (before any terminal has called)
         self._migrate_live()
         for a in self.accounts():
             if not a.get("archived"):
@@ -53,7 +57,11 @@ class UserRT:
         store.save(self.dir + "accounts.json", {"accounts": lst})
 
     def paper_ids(self) -> list:
-        return [a["id"] for a in self.accounts() if not a.get("archived") and a["id"] != LIVE_ID and a["id"] in self.engines]
+        return [a["id"] for a in self.accounts() if not a.get("archived") and a["id"] != LIVE_ID and a.get("mode") != "mt5"
+                and a["id"] in self.engines]
+
+    def mt5_ids(self) -> list:
+        return [a["id"] for a in self.accounts() if a.get("mode") == "mt5" and a["id"] in self.engines]
 
     def _migrate_live(self):
         """v0.33.0: Live is no longer a paper account switched to Live. An account switched Live under the old design
@@ -89,6 +97,14 @@ class UserRT:
 
     def _open(self, a: dict) -> Paper:
         folder = f"{self.dir}a/{a['id']}/"
+        if a.get("mode") == "mt5":                 # an MT5 account (roadmap 8 b1): the admin's only, no journal yet (8 c)
+            if self.role != "admin":
+                return None
+            e = Mt5Engine(folder, self.uid, a.get("login") or 0, a.get("name", ""))
+            e.on_change = lambda ev, aid=a["id"]: on_engine_change and on_engine_change(self, aid, ev)
+            e.on_symbols = lambda: self.feed._resync()
+            self.engines[a["id"]] = e
+            return e
         if a["id"] == LIVE_ID:
             if self.role != "admin":
                 return None
@@ -184,9 +200,45 @@ class UserRT:
             self.feed._resync()
         return a
 
+    # ------------------------------------------------------------ MT5 accounts (roadmap 8 b1)
+    def ensure_mt5(self, login: int, info: dict | None = None):
+        """The account of an MT5 login, made the first time its terminal calls with the EA (the admin's only)."""
+        if self.role != "admin":
+            return None
+        login = int(login)
+        aid = f"{mt5acct.PREFIX}{login}"
+        info = info or {}
+        lst = self.accounts()
+        a = next((x for x in lst if x["id"] == aid), None)
+        keep = {k: info.get(k) for k in ("server", "company", "demo", "currency") if info.get(k) is not None}
+        if not a:
+            a = {"id": aid, "name": str(login), "mode": "mt5", "kind": "mt5", "login": login, "created": time.time(), **keep}
+            lst.append(a)
+            self._save_accounts(lst)
+            users.audit(self.uid, "MT5 account added", f"{login} {info.get('server', '')}")
+            log.warning("[%s] MT5 account %s (%s) added", self.label, login, info.get("server", ""))
+        elif any(a.get(k) != v for k, v in keep.items()):
+            a.update(keep)
+            self._save_accounts(lst)
+        e = self.engines.get(aid)
+        if e is None:
+            e = self._open(a)
+            self.feed._resync()
+        return e
+
+    def mt5_none(self):
+        if self._mt5_none is None:
+            self._mt5_none = mt5acct.empty(self.uid)
+        return self._mt5_none
+
+    def engine_id(self, e) -> str:
+        return next((k for k, v in self.engines.items() if v is e), mt5acct.NONE_ID if isinstance(e, Mt5Engine) else "")
+
     def engine(self, aid: str | None) -> Paper:
         if aid and aid in self.engines:
             return self.engines[aid]
+        if aid and str(aid).startswith(mt5acct.PREFIX):  # an MT5 account that isn't there (yet): the empty one, never paper
+            return self.mt5_none()
         ids = self.paper_ids()                       # an unknown account: the first paper account (never the Live one)
         if not ids:
             self.create_account("Paper", DEFAULT_RULES["size"])
@@ -198,13 +250,18 @@ class UserRT:
         for a in self.accounts():
             e = self.engines.get(a["id"])
             row = dict(a)
-            row["mode"] = "live" if a["id"] == LIVE_ID else "paper"
-            if a["id"] == LIVE_ID and not e:
+            row["mode"] = "live" if a["id"] == LIVE_ID else "mt5" if a.get("mode") == "mt5" else "paper"
+            if (a["id"] == LIVE_ID or row["mode"] == "mt5") and not e:
                 continue
             if e:
                 row.update(balance=e.balance(), equity=e.equity(), open=len(e.positions), orders=len(e.orders))
                 if isinstance(e, LiveEngine) and not e._F():       # (no Fyers funds read yet: no made-up balance)
                     row.update(balance=None, equity=None)
+                if isinstance(e, Mt5Engine):
+                    row.update(online=e.online(), currency=e.ccy(), ea=e.ea, server=e.info.get("server") or a.get("server"),
+                               demo=e.info.get("demo", a.get("demo")))
+                    if not e.info:
+                        row.update(balance=None, equity=None)
             out.append(row)
         return out
 
@@ -215,7 +272,7 @@ class UserRT:
         if capital <= 0:
             raise Refused("capital must be above 0")
         lst = self.accounts()
-        if len([a for a in lst if not a.get("archived") and a["id"] != LIVE_ID]) >= 20:
+        if len([a for a in lst if not a.get("archived") and a["id"] != LIVE_ID and a.get("mode") != "mt5"]) >= 20:
             raise Refused("20 accounts at most - archive one first")
         if any(a["name"].lower() == name.lower() and not a.get("archived") for a in lst):
             raise Refused(f'you already have an account called "{name}"')
@@ -242,6 +299,8 @@ class UserRT:
             raise Refused("no such account")
         if aid == LIVE_ID:
             raise Refused("the Live account is your Fyers account itself (named by its client ID): it can't be renamed or archived")
+        if a.get("mode") == "mt5":
+            raise Refused("an MT5 account is your MT5 login itself (it appears when its terminal runs the EA): it can't be renamed or archived")
         if name is not None:
             name = name.strip()[:40]
             if not name:
@@ -256,7 +315,7 @@ class UserRT:
                 e = self.engines.get(aid)
                 if e and (e.positions or e.orders):
                     raise Refused("close its positions and cancel its orders first")
-                if len([x for x in lst if not x.get("archived") and x["id"] != LIVE_ID]) <= 1:
+                if len([x for x in lst if not x.get("archived") and x["id"] != LIVE_ID and x.get("mode") != "mt5"]) <= 1:
                     raise Refused("keep at least one paper account")
                 a["archived"] = time.time()
                 old = self.engines.pop(aid, None)
@@ -328,6 +387,40 @@ def get(uid: str) -> UserRT:
         if _loop:
             r.attach(_loop)
     return r
+
+
+# ---------------------------------------------------------------- the MT5 bridge's hooks (helper/mt5.py's sync call)
+def _mt5_report(uid, bridge, body):
+    r = get(uid)
+    if r.role != "admin":
+        return []
+    e = r.ensure_mt5(bridge.login, bridge.info)
+    if e is None:
+        return []
+    if "pos" not in body:                          # EA 1.00: prices only - the account shows, its trades need 1.10
+        e.seen, e.ea = time.time(), str(body.get("ea") or "")[:12]
+        e.M["info"] = {**(bridge.info or {}), "at": time.time()}
+        return []
+    return e.on_report(body, bridge)
+
+
+def _mt5_watch(uid, login):
+    r = RT.get(uid)
+    e = r and r.engines.get(f"{mt5acct.PREFIX}{int(login)}")
+    return [s[len(mt5.PREFIX):] for s in e.watch_symbols()] if e else []
+
+
+def _mt5_tick(uid, login, tick):
+    r = RT.get(uid)
+    e = r and r.engines.get(f"{mt5acct.PREFIX}{int(login)}")
+    if e:
+        try:
+            e.on_tick(tick)
+        except Exception as ex:
+            log.exception("[%s] MT5 tick: %s", r.label, ex)
+
+
+mt5.REPORT, mt5.WATCH, mt5.TICK = _mt5_report, _mt5_watch, _mt5_tick
 
 
 def make_broker(link):

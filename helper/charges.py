@@ -161,8 +161,45 @@ def value(row: dict, qty: float, price: float) -> float:
     return abs(price) * qty * (row.get("mult") or 1)
 
 
+# ---------------------------------------------------------------- MT5 accounts (roadmap 8 b): $, net of commission and swap
+# An MT5 account's engine (helper/mt5acct.py) passes rows with x == "MT5" and these keys:
+#   tick, tv     MT5's tick size and the value of one tick for 1 lot, in the account's currency (SYMBOL_TRADE_TICK_VALUE)
+#   vstep        the volume step (0.01 lot): the engine's qty is a whole number of steps, so lots stay exact
+#   comm         {"in": $ per lot on an opening deal, "out": $ per lot on a closing deal}, learned from MT5's own deals
+# No Indian charge applies: an MT5 trade pays the broker's commission (and swap, kept on the position by the engine);
+# the spread is paid through the bid / ask fills, as in MT5.
+def is_mt5(row: dict) -> bool:
+    return row.get("x") == "MT5"
+
+
+def mt5_vol(row: dict, qty: float) -> float:
+    return qty * float(row.get("vstep") or (row.get("mt5") or {}).get("vstep") or 0.01)
+
+
+def mt5_comm(row: dict, qty: float, leg: str = "in") -> dict:
+    """The broker's commission for `qty` volume steps on an opening ("in") or closing ("out") deal, as a charges dict."""
+    rate = float((row.get("comm") or {}).get(leg) or 0.0)
+    c = {k: 0.0 for k in FIELDS}
+    c["commission"] = round(rate * mt5_vol(row, qty), 4)
+    c["swap"] = 0.0
+    c["total"] = round(c["commission"], 2)
+    c["value"] = 0.0
+    c["tax_name"] = ""
+    return c
+
+
+def mt5_gross(row: dict, side: int, qty: float, entry: float, exit_: float) -> float:
+    """Profit in the account's currency, like MT5: price move / tick size x tick value x lots."""
+    tick = float(row.get("tick") or 0.01)
+    tv = float(row.get("tv") or (row.get("mt5") or {}).get("tick_value") or 0.0)
+    return side * (exit_ - entry) / tick * tv * mt5_vol(row, qty)
+
+
 def order(row: dict, side: int, qty: float, price: float) -> dict:
-    """Charges for one executed order. side: 1 buy, -1 sell. Returns the breakdown and its total."""
+    """Charges for one executed order. side: 1 buy, -1 sell. Returns the breakdown and its total.
+    (MT5: the commission of an opening deal.)"""
+    if is_mt5(row):
+        return mt5_comm(row, qty, "in")
     r = rates_for(row)
     v = value(row, qty, price)
     if qty <= 0:
@@ -188,12 +225,17 @@ def order(row: dict, side: int, qty: float, price: float) -> dict:
 
 def add(a: dict, b: dict) -> dict:
     out = {k: round(a.get(k, 0) + b.get(k, 0), 4) for k in FIELDS}
+    for k in ("commission", "swap"):
+        if k in a or k in b:
+            out[k] = round(a.get(k, 0) + b.get(k, 0), 4)
     out["total"] = round(a.get("total", 0) + b.get("total", 0), 2)
     out["tax_name"] = a.get("tax_name") or b.get("tax_name")
     return out
 
 
 def gross(row: dict, side: int, qty: float, entry: float, exit_: float) -> float:
+    if is_mt5(row):
+        return mt5_gross(row, side, qty, entry, exit_)
     return side * (exit_ - entry) * qty * (row.get("mult") or 1)
 
 
@@ -201,7 +243,7 @@ def net_at(row: dict, side: int, qty: float, entry: float, exit_: float, paid: f
     """Net P&L if a position (side, qty, average entry) exits at exit_.
     paid: entry charges already paid (a position with adds); otherwise one entry order at `entry` is assumed."""
     ent = paid if paid is not None else order(row, side, qty, entry)["total"]
-    ex = order(row, -side, qty, exit_)["total"]
+    ex = mt5_comm(row, qty, "out")["total"] if is_mt5(row) else order(row, -side, qty, exit_)["total"]
     g = gross(row, side, qty, entry, exit_)
     return {"gross": round(g, 2), "charges": round(ent + ex, 2), "net": round(g - ent - ex, 2),
             "entry_charges": round(ent, 2), "exit_charges": round(ex, 2)}
@@ -231,8 +273,10 @@ def breakeven(row: dict, side: int, qty: float, entry: float, paid: float | None
         else:
             hi = mid
     px = round_tick(hi, tick, side)                        # never on the losing side
-    while net_at(row, side, qty, entry, px, paid)["net"] < 0:
-        px = round(px + side * tick, 6)
+    for _ in range(10000):                                 # (bounded: an MT5 symbol whose tick value isn't known yet)
+        if net_at(row, side, qty, entry, px, paid)["net"] >= 0:
+            break
+        px = round(px + side * tick, 8)
     return round(px + side * tick * buffer_ticks, 6)
 
 

@@ -197,8 +197,15 @@ function tempPw(){ const a = "abcdefghjkmnpqrstuvwxyz", A = a.toUpperCase(), d =
    paper account only. */
 let ACCT = null;
 try{ ACCT = localStorage.getItem("ftm.acct") || null; }catch(e){}
-function acctList(){ return (S && S.accounts || []).filter(a => !a.archived && a.mode !== "live"); }
+function acctList(){ return (S && S.accounts || []).filter(a => !a.archived && a.mode !== "live" && a.mode !== "mt5"); }
 function sideLive(){ return !!(S && S.side === "live" && S.live && S.user && S.user.role === "admin"); }
+/* v0.36.0 (roadmap 8 b1): the MT5 side lists the MT5 accounts only, one per MT5 login whose terminal runs the EA */
+function sideMT5(){ return !!(S && S.side === "mt5" && S.user && S.user.role === "admin"); }
+function mt5List(){ return (S && S.accounts || []).filter(a => a.mode === "mt5"); }
+function mtCash(n, c, dp){ const k = (c || "USD").toUpperCase(), sy = k === "USD" ? "$" : k === "EUR" ? "€" : k === "GBP" ? "£" : k + " ";
+  return n == null || isNaN(n) ? "–" : (n < 0 ? "−" : "") + sy + Math.abs(n).toLocaleString("en-US", {minimumFractionDigits: dp ?? 2, maximumFractionDigits: dp ?? 2}); }
+function mt5Label(a){ return `${a.online ? "●" : "○"} ${a.name}${a.demo ? " · DEMO" : ""}${a.balance != null ? " · " + mtCash(a.balance, a.currency) : ""}`; }   // (the server: in its title; the top bar has no room)
+function mt5Title(a){ return `MT5 ${a.name} · ${a.server || ""}${a.demo ? " · DEMO" : ""} · ${a.online ? "connected" : "not connected"}`; }
 function acctById(id){ return ((S && S.accounts) || []).find(a => a.id === id); }
 function acctReload(){
   if(typeof P !== "undefined"){ P.snap = null; P.posKey = P.ordKey = ""; P.ticketLoaded = false; }
@@ -207,8 +214,14 @@ function acctReload(){
   api("/api/paper").then(j => { if(j.paper){ paperUpdate(j.paper); if(typeof pagesPaper === "function") pagesPaper([]); } if(typeof PG !== "undefined" && PG.page !== "chart") pgShow(PG.page, true); });
 }
 function acctSetup(){
-  const list = acctList(), before = ACCT, live = sideLive();
+  const list = acctList(), before = ACCT, live = sideLive(), mt = sideMT5(), ml = mt5List();
   if(live) ACCT = S.live.id;
+  else if(mt){
+    if(!ml.find(a => a.id === ACCT)){
+      let saved = null; try{ saved = localStorage.getItem("ftm.acct.mt5"); }catch(e){}
+      ACCT = ml.find(a => a.id === saved) ? saved : (ml.length ? ml[0].id : "mt5-none");
+    }
+  }
   else if(!list.find(a => a.id === ACCT)){
     let saved = null; try{ saved = localStorage.getItem("ftm.acct"); }catch(e){}
     ACCT = list.find(a => a.id === saved) ? saved : (list.length ? list[0].id : null);
@@ -217,6 +230,15 @@ function acctSetup(){
   if(typeof sideRender === "function") sideRender();
   const sel = sq("#acctSel"); if(!sel) return;
   const rsx = n => n == null ? "" : " · ₹" + Math.round(n).toLocaleString("en-IN");
+  if(mt){
+    sel.disabled = false;
+    sel.title = "Your MT5 accounts (each MT5 login whose terminal runs the FTM Bridge EA). Back to your paper accounts: PAPER at the top left";
+    const cur0 = ml.find(a => a.id === ACCT); if(cur0) sel.title = mt5Title(cur0) + ". " + sel.title;
+    sel.innerHTML = ml.length ? ml.map(a => `<option value="${a.id}" title="${sesc(mt5Title(a))}" ${a.id === ACCT ? "selected" : ""}>${sesc(mt5Label(a))}</option>`).join("")
+      : `<option value="mt5-none" selected>No MT5 account yet</option>`;
+    sel.onchange = () => acctSwitch(sel.value);
+    return;
+  }
   if(live){
     const a = acctById(ACCT) || {name: S.live.name};
     sel.innerHTML = `<option value="${ACCT}" selected>● ${sesc(a.name || "Fyers")}${rsx(a.balance)}</option>`;
@@ -234,6 +256,11 @@ function acctSetup(){
 }
 function acctSwitch(id){
   if(!id || id === ACCT || sideLive()) return;              // (on the Live side the page shows the Live account only)
+  if(sideMT5()){                                            // (on the MT5 side: its MT5 accounts only)
+    const a = mt5List().find(x => x.id === id); if(!a) return;
+    ACCT = id; try{ localStorage.setItem("ftm.acct.mt5", id); }catch(e){}
+    acctReload(); toast("MT5 account: " + a.name); return;
+  }
   const a = acctList().find(x => x.id === id); if(!a) return;
   ACCT = id; try{ localStorage.setItem("ftm.acct", id); }catch(e){}
   acctReload();
@@ -242,7 +269,7 @@ function acctSwitch(id){
 async function acctRefresh(){ const j = await api("/api/accounts"); if(j.ok){ S.accounts = j.accounts; acctSetup(); } return j; }
 function acctMgrRender(){
   const box = sq("#acctMgr"); if(!box) return;
-  const all = ((S && S.accounts) || []).filter(a => a.mode !== "live"), rsx = n => n == null ? "–" : "₹" + Math.round(n).toLocaleString("en-IN");
+  const all = ((S && S.accounts) || []).filter(a => a.mode !== "live" && a.mode !== "mt5"), rsx = n => n == null ? "–" : "₹" + Math.round(n).toLocaleString("en-IN");
   const lv = S && S.user && S.user.role === "admin" ? `<p class="help">Live trading isn't a paper account: it's your Fyers account itself${S.live ? ` (<b class="mono">${sesc(S.live.name)}</b>)` : ""}, switched with <b>PAPER / LIVE</b> at the top left.</p>` : "";
   box.innerHTML = `<h3 class="pg-h3" style="margin-top:0">Your paper accounts</h3>${lv}
     <div class="alist">${all.map(a => `<div class="arow ${a.archived ? "arch" : ""}" data-id="${a.id}"><div><b>${sesc(a.name)}</b> ${a.id === ACCT ? '<span class="tag">showing</span>' : ""}${a.archived ? '<span class="tag">archived</span>' : ""}

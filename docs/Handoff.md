@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 10 Nov 2026, version **0.35.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 10 Nov 2026, version **0.36.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -68,6 +68,7 @@ and roadmap updated too.
   v0.20.3: the ticket sheet can shrink to a bubble (`M.min`, `mMin()`, `mBubFill()`; body class `tkmin` hides `#mBar`
   and shows `#mBub` in its slot, so the chart's size never changes). A pointerdown on `#chart` while the sheet is up
   shrinks it; pref `mobTicket` ("full" / "bubble") is what SELL / BUY open.
+- `helper/mt5.py` (the MT5 bridge, v0.34.0) and `helper/mt5acct.py` + `web/mt5acct.js` (MT5 accounts, v0.36.0): sections below.
 - `helper/jshots.py` + `web/jshots.js`: the journal's pictures and their Telegram copy (v0.27.0, section below).
 - `web/jinsights.js`: the journal's Insights, weekly review, walk-through, calendar, Copy for Gemini, export (v0.28.0).
 - `tests/`: the test kit (fake Fyers feed and order API, route check, engine tests incl. `live_test.py`, browser
@@ -96,10 +97,84 @@ per run (the app remembers handled ids, as for real Fyers).
 `jinsights_flow.js`'s three Copy for Gemini checks (today / this week) fail when run between midnight and the account's
 reset hour (2 Nov, 01:00 IST: trades belong to the previous trading day, Gemini's "today" is the calendar day). Run it in
 the daytime. (Roadmap follow-up.)
+`mt5_flow.js`'s "no stray extra candles from the ticks" fails on most first runs on fresh data (10 Nov: v0.35.0 too, 1747 -> 2004;
+passes on re-runs): the chart's second 5m history answer lands inside the check's 3 s window. A test-timing issue; re-run.
+`replay_flow.js` failed once (10 Nov, v0.36.0 full run; passed alone, 48/48): its tightened paper stop was hit by the mock's
+random walk before the second move. `multichart_flow.js`'s crosshair check failed once in the full run (passed alone).
 `replay_flow.js` turns the mock's round-the-clock candles on (`/_mock/allday`) and off at the end; it sets the journal's
 automatic pictures off itself (other suites turn them on).
 `indicator_settings_flow.js`'s "at the start of a contract's history it stops asking" failed once in 2 runs on 1 Nov
 (v0.22.0; passed on re-run, 37/37). Same advice.
+
+## MT5 accounts (v0.36.0, roadmap 8 b, slice b1)
+
+- **What:** each MT5 login whose terminal runs FTM Bridge **1.10** is an account of its own (`mt5-<login>`, the admin's only),
+  on a third side of the top-left switch (PAPER | LIVE | MT5). b1 = see and manage; **placing from the app is b2** (`plan()` /
+  `place()` refuse with `Mt5Engine.B2`).
+- **EA 1.10** (`mt5/FTM_Bridge.mq5`, `mt5/README.md`): still calls out only. The sync body (`v` 2) adds `trade` {on: input
+  AllowTrading, term: TERMINAL_TRADE_ALLOWED, mql: MQL_TRADE_ALLOWED}, `pos` [[ticket, sym, type 0/1, volume, open, sl, tp,
+  current, swap, profit, time_msc, magic, comment, identifier]], `ord` [[ticket, sym, type 2-7, vol0, vol, price, sl, tp,
+  setup_msc, magic, comment, stoplimit]], `sym` {name: [tick_value, tick_size, vstep, contract, digits]}, `deals` [[ticket,
+  order, position_id, sym, type, entry, volume, price, commission, swap, profit, fee, time_msc, magic, comment, reason]] (at
+  most 200 after its cursor; `dmore`), `dcur` (cursor msc; 0 = not set), `res` [[tag, ok, retcode, msg, ticket]]. Answer
+  lines: `DEALS <from srv sec>` (sets the cursor), `MOD <tag> <ticket> <sl> <tp>`, `CLOSE <tag> <ticket> <vol, 0 = all>`,
+  `CANCEL <tag> <ticket>`, `OMOD <tag> <ticket> <price> <sl> <tp>` (0 = none). Ticks, deals and results count as delivered
+  only after a 200 (`DropResults`, the cursor commit, before `Handle`). The EA remembers the last 200 tags (`Remember`): a tag
+  seen again re-sends its result, never runs twice. CTrade with magic 20261110, `SetTypeFillingBySymbol` before a close.
+  **Never compiled here**: the owner compiles it. Things only MT5 can confirm are listed in "Next job".
+- **Server, `helper/mt5acct.py`:** `Mt5Engine(Paper)`. `mt5.py`'s sync calls the hooks rt.py sets: `REPORT` ->
+  `rt._mt5_report` -> `UserRT.ensure_mt5(login, info)` (makes the accounts.json row {id, mode "mt5", kind, login, server,
+  demo, currency}) -> `on_report(body, bridge)` -> answer lines; `WATCH` (the account's symbols: a non-price terminal's `SUB`)
+  and `TICK` (a non-price terminal's ticks go only to its own account). Ticks carry `lg` (the login); `Mt5Engine.on_tick`
+  takes only its own login's. EA 1.00 (no `pos`): the account shows with a warning, changes refused.
+  - **on_report order:** results -> `sym` -> deals (`_take_deals`: stored in `mt5_deals.json`, `_learn` commission, `_in_deal`
+    real entry commission, `_book_out` closes) -> positions (`_take_positions`: `_adopt`, MT5's SL / TP vs `b_sl` / `b_tp`,
+    `_adopt_stops` when changed in MT5 with no MOD in flight, volume checks, `gone` -> `_book_gone` estimate after GONE_SEC)
+    -> orders -> size from the first deposit (until typed) -> day start -> `DEALS` if `dcur == 0` or a resync -> `_lost()` ->
+    `_push_all()` (desired sl / tp vs MT5's: MOD / OMOD; an unsent one takes the newest values) -> `_out()` (rate 30/min,
+    MOD_GAP 2 s per ticket, CLOSE / CANCEL expire after 20 s undelivered, MOD after 300 s; marks `sent` and saves first).
+  - **Positions:** id `P<ticket>`, `pid_mt` = position identifier (deals match on it), qty = volume steps (`row.vstep`),
+    `comm_in` (from the opening deal, else estimated: `comm_est`), `paid` = comm_in − swap, `b_sl` / `b_tp` (MT5's), `mt`
+    (MT5's sl / tp / price / profit / swap), `exiting` {why, tag, tries}, `mt_err`, `retry_at` / `backoff` (2.5 s doubling to
+    60 s), `outside`, `found`. History records: MT5's exact profit, `charges` {commission, swap (cost +), total, FIELDS 0},
+    `ticket`, `deals`, `ccy`, `part`, `from_history`, `est`.
+  - **Reasons:** the deal's reason (4 sl -> sl / be / trail sl, 5 tp, 6 stop out, 0-2 closed in MT5, 3 by an EA), or the
+    app's `exiting.why` for its own CLOSE.
+  - **`_check_pos`:** no paper exits; best / worst; if the desired SL / TP is passed and MT5's isn't at least as tight ->
+    `_close` (market) "sl (the app's stop: MT5 hadn't taken it yet)"; then `Paper._trail_pos` (split out of `_check_pos` this
+    release). `_check_order` never fills. `exit_mark` falls back to MT5's current price before the first tick.
+  - **Money:** `charges.py`'s MT5 branch (`is_mt5`, `mt5_comm(row, qty, leg)`, `mt5_gross`): rows from `Mt5Engine.row()` carry
+    `tick`, `tv` (tick value), `vstep`, `comm` {in, out} (learned per symbol and leg: `M.comm`, tolerance for MT5's cent
+    rounding 0.0051 / volume; the bigger deal's figure wins; a real change -> `diff` + a warning; else `comm_default`).
+    `breakeven()`'s loop is bounded now (a tick value of 0).
+  - **Account figures:** MT5's balance / equity / margin / free. `trading_day()` = the broker's date; `_midnight_balance()` =
+    balance − every deal's profit + commission + swap + fee since the broker's midnight. `floors()`: daily = base − daily% ×
+    (base or size: `daily_of`), base by `day_from`; max = size × (1 − max%) static or peak − size × max% trailing. Rules:
+    `MT5_RULES` defaults (5000, 5%, 10%), settable keys `MT5_KEYS` (+ `daily_of`, `phase`, `comm_default`); `FIXED` keeps
+    Fyers' square-off off. `size_set` once typed.
+  - **Writes** (`_writable`): no account / EA < 1.10 / offline / AllowTrading off / Algo Trading off -> refused;
+    unconfirmed -> `NeedLogin` (app.py's `_paper` answers `need_login`; the page's dialog posts `/api/mt5acct/confirm`).
+    `set_trail` needs it only with positions open. `M.confirmed` per account.
+- **rt.py:** `paper_ids()` excludes MT5; `mt5_ids()`; `engine(aid)`: an unknown `mt5-...` id -> `mt5_none()` (an empty
+  `Mt5Engine`, `none`, never saved), never a paper account; `engine_id(e)`; `account_list()` mode "mt5" + online, currency,
+  ea, server, demo; MT5 rows can't be renamed / archived and don't count against the 20 paper accounts. No journal hooks.
+- **app.py:** `/api/side` takes `mt5` (admin + step-up); `_eng(write)` refuses an MT5 account unless the session is on MT5
+  (403); `/api/mt5acct/confirm`, `/api/mt5acct/resync`; MT5 CSV columns; `/ws` uses `engine_id`. **users.py:** sessions'
+  `side` may be `mt5` (admin). **journal.py:** skips `mode == "mt5"` accounts (roadmap 8 c).
+- **Page:** `web/mt5acct.js` (after mt5.js): `mtState` / `mtLine` (each trade at MT5: panel `#posList`, Trades page),
+  `mtBanner` (`#mtWarn` in the header: no account, MT5 off, old EA, AllowTrading / Algo Trading off, limits breached), `mtPanel`,
+  `mtFoot` (`#mtFoot`: the floors), `mtTicketHint`, `mtConfirm` (`#mtConfDlg`), `mtAccountPage` (wraps `pgAccount`), the
+  rules form (`MT5_RULES`, `mtRulesHTML`; wraps `renderRules`; `saveRules` takes `data-t="s"` as a word now), `papi` wrapped
+  (need_login -> the dialog -> the same request again). `security.js`: `sideMT5()`, `mt5List()`, `mtCash()`, `mt5Label()` /
+  `mt5Title()`, `acctSetup` / `acctSwitch` on the MT5 side (localStorage `ftm.acct.mt5`; `mt5-none` before any account).
+  `live.js`: `sideNow()`, three buttons in `#sideSw`, `sideMenu()` (`#mSideMenu`, the phone), `mtSideDialog()` (step-up).
+  `paper.js`: `CUR()` / `CURLOC()`: `rs` / `rsS` in the snapshot's `ccy`; `breakdown` names commission / swap; `short()`
+  strips `MT5:`. `mobile.js`: `mAcctSheet` on MT5. CSS: `--mt5` (#8b5cf6), `body.is-mt5`, `.sidesw.mt5`, `.mtline`, `.mtwarn`.
+  The switcher's label is short (the server in its tip): the top bar has no room at 1500 px otherwise.
+- **Tests:** `tests/mt5acct_test.py` (85, in-process), `tests/mt5acct_flow.js` (37, browser; fake_mt5 `--ctl 8769
+  --history`). `tests/fake_mt5.py`: an MT5 Hedge account + the 1.10 protocol + `--ctl` (open / pending / modify / close /
+  shift / swap / refuse / trade / comm / jitter, GET /state); tickets unique per run. On re-runs over one data folder the
+  login is already confirmed (the flow then skips the dialog) and earlier runs' fake trades vanish (booked "est.").
 
 ## ƒx search and the Settings page (v0.35.0, roadmap 18 and 19)
 
@@ -194,605 +269,26 @@ automatic pictures off itself (other suites turn them on).
 - **Tests:** `tests/fake_mt5.py` (the EA's protocol; GMT+2/+3; `bars()` = CopyRates with open times in [from, to]),
   `tests/mt5_test.py` (in-process, 52), `tests/mt5_flow.js` (browser, 44; makes a key through the page, starts
   fake_mt5.py). `mock_server.py`'s Fyers stream uses `fy_wanted()`.
-- **Next (stage b, the owner's answer 10 Nov: "$, net of FundingPips costs"):** MT5 accounts in the app (one per login),
-  orders through the EA (real SL / TP on each Hedge-mode position, moved by the app; the EA keeps trailing if the link
-  drops), $ net of commission (typed per symbol, checked against MT5's deals) and swap, **no opposite trades** in one
-  account or across his FundingPips accounts (FundingPips, 10 Nov: no hedging even in Hedge mode), the news guard (Master:
-  no opening / closing ±5 min of high-impact news on the symbol's currencies; evaluation: a warning), FundingPips'
-  drawdown rules (his 21182752 is Phase 1 of the 2-Step). To agree first: a news calendar feed, and what "opposite trades
-  on different instruments" covers (roadmap 8).
-
-## Live trades' Telegram channel for journal pictures (v0.33.1, roadmap 17)
-
-- `helper/jshots.py`: setting `tg_chat_live` (in `DEFAULTS`, validated by `clean_cfg` like `tg_chat`; changing it re-stamps
-  `tg_since`). `chat_for(c, t)` = the Live channel for a trade with `mode == "live"` when set, else `tg_chat`; "" = not
-  copied. `tg_on(c)` = backup on with either chat. `review_chat(c)` = `tg_chat`, else the Live channel (the weekly
-  summary). Used by `after_add`, `_job_tg` (the copy's `tg.chat` is the chat it went to, so deletes go there),
-  `tg_send_missing`, `startup`, `tg_review`, and the Pictures route's `unsent` count. `tg_test(uid, chat, live)`.
-- `web/jshots.js`: `jsChatFor(t, cfg)` (the same rule) for the ✈… marks and the viewer; the Pictures card's `#jsChatLive`,
-  `#jsChatLiveSave`, `#jsTgTestLive` (admin only). `web/jinsights.js`: the review's Telegram line counts either chat.
-- Tests: `jshots_test.py` (section after "Send a test"), `jshots_flow.js`.
-
-## The Live account is the Fyers account (v0.33.0, roadmap 16)
-
-- **Accounts (`helper/rt.py`):** `LIVE_ID` = "live" (`u/<admin>/a/live/`), the row `{id, name: client ID, mode: "live", kind:
-  "live", client_id}` in accounts.json.
-  - **Made** by `ensure_live(client_id)` (refuses a different client ID than the row's, and anyone but the admin).
-  - **Opened** by `_open()` only for the admin (a live row in a user's file is ignored), with `client_id`.
-  - **`paper_ids()`** is what every "first account" / "keep one" / "20 at most" rule counts; `engine(unknown)` never
-    returns the Live one.
-  - **`_migrate_live()`** (in `__init__`): any `mode: "live"` account that isn't `LIVE_ID` goes back to Paper: history
-    archived as `paper_trades_until_<date>_live.json`, positions / orders dropped, a fresh ledger at its capital, the old
-    `live` part of paper.json gone.
-  - `account_list()` marks the Live row `mode: "live"` and gives no balance before Fyers' funds are read.
-- **The switch (per login):** `users` sessions carry `side` (`set_side`, `session_side`; `check()` returns `side`,
-  admin only). `POST /api/side` {side, confirm}: Live = admin + today's Fyers login + client ID typed + step-up
-  (`_stepped`), then `ensure_live` and a first funds read; it sends `{"side"}` to that session's other sockets
-  (`client.sess` set in `/ws`), whose pages call `sideFromServer` -> `refreshState`. `/api/state` gives `side` and `live`
-  {id, name, client_id}.
-- **Enforced on the server:** `_eng(request, b, write=True)` (every `_paper()` route and `/api/paper/place`) refuses a
-  Live-account request from a session on Paper (HTTP 403). `_live()` (the `/api/live/*` routes) always uses
-  `r.live_engine()`; resume needs the Live side, kill never does. `/api/accounts/mode` stays (it refuses).
-- **Money (`helper/live.py`):**
-  - **Funds:** `L["funds"]` = `{eq, co, at, date, t0}` from `FyersBroker.funds()` (`broker.parse_funds`: rows by title ->
-    `FUND_KEYS`, both ledgers). `_a_funds` runs every `FUNDS_SEC` (60) / `IDLE_SEC` (300 with nothing open and no market
-    hours) and 3 s after every fill (`_jn` override). `_apply_funds()` does the rest.
-  - **Size and money moved:** the first read sets `acct.size` (start + today's transfer), `live_v`, `since`. Later, a
-    change in the day's "Fund Transfer" (`acct.transfers[date]`) moves `size` and `peak` by it. `rules.size` mirrors
-    `size` (`set_rules` drops a typed size).
-  - **Today's start:** `day.start_bal` is replaced by Fyers' start once its funds for the trading day's calendar date
-    arrive (`day.fy`). `_transfer_today()` adds that day's transfer to the daily floor's base (`floors()` override).
-  - **Figures:** `balance()` = both ledgers' start + transfer + `_net_since(F.t0)` (closed trades' net since IST midnight
-    of the funds' date); `margin_used()` = Fyers' used; `free_margin(row)` = the commodity ledger's available for MCX
-    (the capital ledger's if the commodity ledger is empty), else the capital ledger's.
-  - **Before the first read:** `plan()` blocks.
-- **Trades placed outside the app:**
-  - **`on_update`:** an order id / tag the app doesn't know goes to `_outside(u)` (only after `L["base"]`: the first full
-    read). Its new fill quantity (`L["xfilled"][oid]`, kept across restarts) goes to `_outside_fill`, which opens / adds
-    with `fill()` (`pos.outside`, `how` "Fyers (…)") or closes against the position (`_split` + `Paper.close` reason
-    "closed in Fyers"; past flat: the rest opens the other way).
-  - **Still pending:** a stop (type 3 / 4) against a position with no Fyers stop -> `_adopt_stop` (kind "stop",
-    `stop_type`, `stop_adopted`; with no sl / first_sl it sets them and `init_risk`). Anything else -> `_adopt_order`: an
-    order with `outside`, `oid`, `fy_type`, `fy_limit`, kind "xorder" -> `_u_xorder`.
-  - **`_claim_stops(pos)`** turns an outside stop shown as an order into the stop once its position appears. During the
-    kill switch an adopted order is cancelled and an adopted position closed.
-  - **`_a_entry_mod`:** an outside order keeps its Fyers type; an SL-L keeps its trigger-to-limit gap. `_a_sync`'s modify
-    keeps `stop_type` (SL-M -> no limit); a stop the app places resets it to SL-L.
-- **The books:**
-  - **`_a_poll`:** reads every row now. The first read (`L["base"]` unset) records finished orders as done and their
-    fills as booked (no replay), then adopts still-pending outside orders.
-  - **`_a_fysync`** (every `FYSYNC_SEC` = 30): `_a_poll` first (the order book explains what it can, exactly), then
-    `positions` and, every `HOLD_SEC` / when a CNC position is open, `holdings`.
-    - **Fyers' quantity per (symbol, product)** = netQty, plus for CNC the holding's `quantity` (start of day).
-      `_fyers_position` was fixed the same way.
-    - **A difference:** acted on only when read twice >= 2.9 s apart (`self._mm`) and `_busy()` is false (exiting, a stop
-      in transit or pending tag, a fill within `FILL_LAG_SEC` (60), an app order on it, a kill order in flight). Then
-      `_reconcile` (adopt at netAvg / costPrice with `holding`; add at the implied price; part close / close at the mark;
-      each marked an estimate).
-- **Holdings:** `pos.holding`. `close_all()` and `kill()` skip them; square-off never touches CNC. `live_problems()` gives
-  one "nosl_hold" line for holdings without a stop (`alerts.SKIP` has it: no Telegram message) and "nosl:<id>" for any
-  other trade without one. `alerts.watched(e)` leaves out holdings with no stop (heartbeat, feed alerts, the watchdog).
-- **Booked-order memory:** `L["done"]` / `L["xfilled"]` keep everything in today's Fyers order book (pruned hourly to the
-  ids that book still lists; an empty answer prunes nothing), so no order in it is booked twice.
-- **`_other_client()`:** Fyers' cached profile `fy_id` vs `client_id` -> a warning and `plan()` blocked.
-- **Page:**
-  - **security.js:** `acctList()` = paper accounts only; `sideLive()`, `acctById()`, `acctReload()`. `acctSetup()` puts
-    `ACCT` = live id on the Live side (switcher locked, "● XT0001 · ₹balance"); localStorage keeps the last paper account.
-  - **live.js:** `sideRender()` (`#sideSw` after `.brand`; phone `#mSide` before `#mAcct`, `#mLive` gets `keephide`),
-    `sideClick` / `sideDialog` / `sideSet` / `sideApply` / `sideFromServer`; `liveBadge` hidden while the switch shows.
-    - **Positions:** `fyStopText()` prefixes From Fyers / Holding and says NO STOP for `p.nostop`. `fyLine()` (rebuilt only
-      when its text changes) adds the Place my stop button. `liveBars()` adds the red NO STOP button to the entry line's
-      bar.
-    - **Place my stop:** `myStop(p)` = prefs `sl_dist[(u || s) + (":OPT")]` (as `distKey()` with own-price stops), else
-      `max(10 ticks, 0.3%)`, from the avg, or from the mark if passed; `placeMyStop()` sends it as `modify` sl.
-    - **Account page:** `liveCard()` shows `P.snap.fyfunds` (`funds_view()`); `liveRules()` makes the size read-only.
-  - **mobile.js:** `#mpMyStop` in the position sheet; `mTopBar()` calls `sideRender()`.
-- **Paper engine changes (`helper/paper.py`):** `free_margin(row)` (used by `plan()` and the snapshot); `modify_pos`: a
-  trade's first stop sets `first_sl` / `init_risk`, skips the widening guards and isn't `own_stop`; history records carry
-  `src: "fyers"` / `holding`. CSVs: History `placed_in`, journal `Placed in` (journal trades `outside`).
-- **Tests:**
-  - `tests/live_account_test.py` (engine + rt). FakeBroker additions: `fund`, `hold`, `edis`, the position book's
-    `netAvg`, `outside()`.
-  - `tests/mock_server.py`: `POST /_mock/outside`, `GET /_mock/book`.
-  - `tests/live_flow.js` rewritten. `live_test.py`'s `make()` reads the fake funds first (as the switch does).
-- **Not seen for real yet** (roadmap 16's open item):
-  - **Funds:** Fyers' titles and both ledgers; whether "Fund Transfer" is signed for withdrawals and resets daily.
-  - **Holdings:** `quantity` vs `remainingQuantity` next to a CNC position the same day.
-  - **Outside orders:** whether they come on the order socket with an empty `orderTag`; an SL-M placed in Fyers moved by
-    the app (type 3 kept); Fyers' real eDIS refusal text.
-  - **Carried F&O:** whether netAvg for carried positions is the real average or yesterday's settlement (MTM).
-
-## LiveTrader 1.24: RR lock, per-trade trailing, tool gap (v0.32.0, roadmap 15)
-
-The EA in this project is now 1.24 (from 1.21). Its three changes, as built here:
-- **RR lock:**
-  - **Engine** (`helper/paper.py`): `Paper.plan(req)` takes `lock_tp`. `_lock_sl(req)` bisects the stop distance for the
-    widest stop whose net reward / net risk (from `plan()` itself with that stop and `tp=lock_tp`, so lots, cuts and
-    every charge count) is >= `tp_r`, rounded towards the entry. It returns `(sl, note)`, and the plan then runs with
-    that stop and `tp_r` (so its tp lands at the dragged price within a tick or two).
-  - **The notes** (`plan.lock_note`, also in `notes`): the rules stop the stop going wider (the next tick wider sizes to 0
-    lots), or the target is too close for that RR even with a 1-tick stop (then the closest stop).
-  - **Saved:** `rr_lock` is in `DEFAULT_TICKET`.
-- **Page** (`web/paper.js`):
-  - **State:** `P.T.rr_lock` and `P.T.lockTp` (the target being moved).
-  - **Moving the target:** `lockOn()` (lock on and basis self); `lockTo(tp)` sets tpMode r, lockTp, and a provisional
-    slDist from `rrK()` (the last plan's target / stop price ratio). `tpNow()` returns lockTp while set.
-  - **The exact answer:** `ticketBody()` sends `lock_tp`. `preview()` takes the answer's `sl` as slDist, clears lockTp
-    and toasts the note.
-  - **R mode now scales with the stop:** in r mode, `tpNow()` is `slDist * rrK()` (it was a fixed distance from the last
-    plan), so the target follows a stop being dragged, locked or not.
-  - **Controls:** the TP drag, `#tkTp` typing (and so the phone's ± target) go through `lockTo` when locked. `setRR`,
-    `rrLockToggle`, `renderLock` (`#cLock`, `#tkLock`, `#mtLock`, `#cRR`), `lockSvg`.
-  - **Markup:** `#ctools` is a 2-column grid with `.ctrr` (padlock + RR box) under BUY / SELL.
-- **Per-trade trailing:**
-  - **Engine:** `set_pos_trail` turns a lone `be_r` / `sl_r` into on, and marks `tr.own_be` / `tr.own_sl`. `set_trail`
-    copies the panel's switch + R for each touched group (be / sl) to every open trade and clears its own flag.
-  - **Page:** `trailTips(p)` (paper.js) words the BE-T / TRAIL tooltips and `beDone` (be_on and be_done or at_be), used
-    by the entry-line bar, the Trades page (pages.js) and the phone's position sheet (mobile.js, plus the
-    `[data-f="trwho"]` line).
-- **Tool gap:** `CHART_DEFAULTS.toolGap` (30) and its Chart settings row. `drawZones()`: the tool's x is the live
-  candle's x + barSpacing / 2 + toolGap, still clamped to the pane's width - 170.
-- **Not changed (owner's choice, roadmap 15):** unlocked, the target stays in R mode until dragged (LiveTrader 1.24
-  unlocked keeps its target price).
-- **Tests:**
-  - `tests/trail_rr_test.py` (engine) and `tests/rr_lock_flow.js` (browser). The browser test drags the lines with a real
-    mouse aimed at a price on every step, because the price scale rescales while a line moves.
-  - It uses a limit entry for the locked drags (a market tool moves with every price), and a fresh account, because
-    losing test trades on Main trip the journal's 2% lockout for later tests.
-
-## Servers: the owner's and new ones (v0.31.0, roadmap 14)
-
-- **Each server's own settings:** `/etc/fyers/server.conf` (not in Git): `FYERS_HOST`, `FYERS_OUT_IP`, `FYERS_BRANCH`,
-  `FYERS_REPO`, `FYERS_PYTHON`.
-  - **`server/serverconf.sh`** (sourced by install.sh and update.sh) reads the file as data, never sourced: known keys,
-    validated values. `conf_resolve` fills gaps in this order: environment > file > Caddyfile's address > DigitalOcean
-    reserved IP (metadata) > public IP (`FYERS_IPLOOKUP`: ipify, ifconfig.me, icanhazip; then the route's source
-    address if public) as `<ip>.sslip.io`. The outgoing IP is the public IP lookup.
-  - **Strict shell:** must stay safe under `set -euo pipefail` (a failing `grep` in a `$(...)` once stopped install.sh
-    silently).
-  - **`install.sh`** writes the file (`conf_write`) and uses `C_HOST` for the Caddyfile. It has no fallback address any
-    more.
-  - **The helper** gets the values through `EnvironmentFile=-/etc/fyers/server.conf` in `fyers-helper.service`.
-    `/api/state` gives `server.out_ip` (logged in only), which `web/live.js`'s switch-to-LIVE dialog shows; without it,
-    general wording.
-- **`server/update.sh`:** follows `origin/$FYERS_BRANCH` when set (`rev-parse --verify`; a missing branch takes nothing),
-  else `origin/HEAD`.
-- **`server/startup.sh`:** a new server, any Linux with systemd, apt or dnf. User data or `sudo bash startup.sh
-  owner/name [branch] [host]`.
-  - **Installs:** packages, a Python 3.10+, Caddy (cloudsmith repo / distro / copr / GitHub download), the firewall
-    (ufw with the live SSH ports, firewalld, or Oracle's netfilter-persistent rules), swap if under 2 GB and none, IST,
-    the `helper` user and its deploy key.
-  - **Then:** writes `/etc/fyers/server.conf` (repo, branch, host, python) and three things of its own (heredocs inside
-    startup.sh, so they exist before the repo can be cloned):
-    - `/usr/local/sbin/fyers-firstinstall` + `fyers-firstinstall.timer` (every 30 s: `git ls-remote` with the key; once
-      accepted, clone (as helper, `-b` the branch) and `install.sh`, then the timer switches itself off; a failed
-      install is retried);
-    - `/usr/local/bin/fyers-status` (states in `/var/lib/fyers-setup/state`: booting, bootfailed, waiting, installing,
-      failed, done; `--wait` redraws only when the step changes);
-    - `/etc/profile.d/zz-fyers-status.sh` (root sees the status at login; sudo users a one-line hint).
-  - **By hand:** a run over SSH ends in `fyers-status --wait`.
-- **The owner's server:** unchanged by startup.sh (it only runs on new servers). Its first update to v0.31.0 wrote its
-  server.conf (address kept from the Caddyfile; outgoing IP looked up, expected 134.209.159.171).
-- **Tests:**
-  - `tests/server_conf_test.sh` (safe anywhere).
-  - `tests/server_flow.sh` (a throwaway container only: it creates the helper user).
-  - `live_flow.js` with and without `FYERS_OUT_IP`.
-  - Not tested: a real boot at a provider (cloud-init, real systemd, Caddy's certificate, firewalld / SELinux on a
-    RHEL-family server). The friend's first boot is the first real run (roadmap 14's open item).
-- **User-facing steps:** `docs/New_Server_Guide.md`: the 3 ways to get the code (the owner's repo with a second deploy
-  key, a fork + Sync fork, or an own copy filled with `tools/github_upload.html`), providers' start-up boxes and
-  firewalls, `stable` for the owner, backups, troubleshooting.
-
-## Indicator read-outs (v0.30.3)
-
-`legendFill()` (index.html) builds each `.lgd.lind` row as chevron + `.lname` + `.lacts` (eye, ⚙, { }, ✕) + `.lvals`.
-The buttons sit after the name (TradingView's order) and use `visibility` (not `display`) so their space is kept and
-nothing reflows on hover; `@media (hover:none)` shows them. `legendPlace()` (also every second) sets each row's
-`max-width` to the chart width minus the right price scale and the row's left offset; `.lgd.lind` wraps
-(`white-space: normal`; `.lname` / `.lacts` stay on one line). `legendFill` re-runs `legendPlace` when a candle-pane row's
-height changes (wrapping), so rows on the candles never overlap. Test: `tests/legend_flow.js`.
-
-## Trade replay (v0.29.0, roadmap 4c)
-
-- **Server, `helper/jreplay.py`.** `note_order(uid, aid, b)` (from `/api/paper/place`, before `engine.place`; dropped again
-  on a refusal: `drop_pending`) keeps the PLACE body's `setup` (the chart keys `KEYS` = cur, tf2, ctype, chart, indicators,
-  lgdMin0, as layouts hold them; `clean_setup`, 300 KB at most) and `from` {lay, cell} in `replay/pending.json` under
-  "aid|contract|product" (10 days). `capture(urt, key, ph, t)` is called from `journal.on_trade` right before
-  `jshots.phase` (entry / exit): entry = the pending set-up (`src` "order") else `_from_layouts` (the {lay, cell} asked, the
-  active layout's chart of the contract, other layouts', prefs if they show it, else the active chart's set-up on this
-  contract = "other"); exit = the entry's layout chart if it still shows the contract, else the same search, else the
-  entry's chart ("entry"). `snapshot()` adds every saved script as {id, name, h} (code in `replay/code/<sha1>.json`) and
-  the contract's drawings (`replay/draw/<sha1>.json`); written to `replay/t/<key file>.json` {entry, exit};
-  `replay/index.json` lists recorded trades (`recorded()`, the journal's `row.replay`). `full()` puts code / drawings back.
-- **The stop's path:** `Paper._path_scan()` runs at the start of every `save()`: each position's `path` = [[t, sl, tp,
-  kind]], a point added whenever (sl, tp) differ from the last; kind from `pos["_pk"]` (set in `_set_be` "be", the trail
-  "trail", an add "add"; anything else "edit"), popped before saving. `close()` puts the path (plus a last point if needed)
-  on the history record; `LiveEngine._split` gives the part its own copy. `Journal.ingest_close` keeps the longest path on
-  the trade, `upsert_open` the open one; `view()` leaves `path` out of the list. `trade_path()`: "recorded", else
-  `log_path()` from `engine.events` (messages "<short>: stop to break-even + costs X", "stop now X", "SL X, TP Y" between
-  opened and closed; "log" / "log-part"), else "ends".
-- **Routes:** `GET /api/journal/replay?id=` (syncs the journal if the trade isn't there yet) -> `jreplay.view()` {trade facts,
-  closes, path, path_src, be (`charges.breakeven` like the engine), row, setup {entry, exit} in full}; `POST
-  /api/journal/replay/net` {id, pts [[t, p]] <= 5000} -> net ₹ (`net_series`: entries up to t, closes up to t, the rest at p
-  with its share of the entry charges) and R (net / init_risk).
-- **Page, `web/replay.js` + `web/replay.css`** (after jinsights.js, before mobile.js). Every page: `papi("place")` gets
-  `setup` (prefGet of the chart keys: in a grid frame that's the frame's own chart) and `from`. Main page: `rpOpen(key, ph)` /
-  `rpClose()`; `#rpWrap` iframe `/?replay=<key>&ph=&code=`; `rpKeyOf(h)` = ACCT + ":" + base id; postMessage {rp: "close"}.
-  journal.js card button `data-act="replay"`; pages.js History detail `.rp-open`; mobile.js History detail `.mrp`.
-- **The replay frame** (`window.FTM_REPLAY`, set in index.html's head script; html classes `cell replay` = chart only):
-  `loadPrefs` wrapped to fetch the replay and set `RP.C` (the snapshot's chart, or the current chart keys with the trade's
-  contract); `prefGet` / `prefSet` for chart keys live in `RP.C`, other prefs only in `PREF` (nothing to the server or
-  localStorage); `connectWS`, `dataCheck` off; `paperUpdate` sees no positions / orders; `arm` refused; `pineLoad` returns
-  the snapshot's scripts ("Pine as recorded"); `drSymbol` loads the snapshot's drawings (locked) + the trade itself as a
-  drawing of type `rptrade` (`DT.rptrade.geom`; `drHit` ignores it); `drSaveSoon/Now` no-ops; layouts.js, mobile.js and
-  jshots.js skip themselves when `FTM_REPLAY` is set. `DrawPrim.prototype.autoscaleInfo` takes the trade's prices into the
-  price scale. `loadHistory` replaced: `/api/history` back to the trade's opening + `histDays()` (asked again up to 8 times as
-  the server reaches further back), `renderCandles`, `rpFrame()` (trade in view).
-- **▶ Play:** `rpPrepare()` (start 30 candles before the entry's, end 15 after the exit's or now; sub-candles `subResFor`: 1m
-  up to 1h charts, 5m for 2h-4h, 15m for D/W/M, via `/api/history`; `RP.steps` = each sub-candle's end), `rowsAt(T)` (Fyers
-  rows closed by T + the forming row built from sub-candles), `rpSeek(T)` (full redraw, `showRaw`), `rpStepTo(T)` (one step:
-  RAW replaced, `dispLive()` - the live path, so Pine updates its live bar and re-runs on a new bar), `rpNextBar`, `rpJump`
-  (first step at or after the fill / close), `rpStop`. `pineNeed` wrapped (other-timeframe candles cut at T, the forming one
-  rebuilt from the chart's bars, another contract's forming one dropped), `pineBar` (a non-time chart's last bar closes at T).
-  `rpNetLoad()` asks the server for the net at each step's close. `window.rpTest` is for the tests.
-- **Item 10:** replays get candles only through `/api/history`; when item 10 patches that route with recorded live candles,
-  replays follow. Not seen for real yet: a replay on real Fyers candles (the mock's live prices and its candles differ, so
-  test trades sit off their candles).
-
-## Journal: Insights, review, Gemini, export (v0.28.0, roadmap item 4: last of three releases)
-
-- `web/jinsights.js` (after jshots.js), all computed in the page from `JN.d` (the server's trades with their audit and
-  sessions): `jiInsights()` (the Insights tab; `jFiltered({ignoreOct: true})`; `jiPerf()` = Octagon's advancedStats on net
-  ₹, daily returns over the account size(s) in view), `jiReview()` / `jiWeek()` / `jiCalendar()` (`JI.rv`; mode in prefs
-  `jn.rvMode`; weeks by close day IST, `jiWeekStart`), `jiWalk()` (`#jiWalk`, saves reflections through
-  `/api/journal/trade` {rvRight, rvWrong, review}), `jiAiOpen()` / `jiAiText()` (Copy for Gemini, by trading day `t.day`
-  and session `t.skey`), `jiDataCard()` (Settings: CSV, backup, restore). Hooks: wraps `jnSettings`, `jnToday` (the focus).
-  journal.js: tabs trades / insights / review / settings; `jnTrades()` hands the insights tab to `jiInsights`; `jnRender()`
-  the review tab to `jiReview`; list action `ai`.
-- Server: `Journal.set_review(week, b)` (Monday only; well / broke / focus / focusKept), `set_review_msg`; `jshots.tg_review()`
-  posts the summary (text made by the page) to the journal's chat and edits it in place (`reviews[week].msg`); `csv_text()`,
-  `backup_zip(path)` (journal.json + pictures/), `restore(path)` (adds only what's missing; picture files only with a
-  matching id / type; logged in the security log). Routes `/api/journal/review`, `/export.csv`, `/backup.zip`, `/restore`
-  (streamed to `data/tmp/`, 500 MB at most).
-- 4c became the trade replay (v0.29.0, above); the hidden-browser picture idea was dropped.
-
-## Journal pictures (v0.27.0, roadmap item 4: second of three releases)
-
-- `helper/jshots.py`: a trade's pictures are `t["shots"]` in journal.json = [{id, kind server / chart / upload, phase entry /
-  exit / None, tf label, src, at, w, h, bytes, ext, name, tg}], files `u/<user>/jshots/<trade key>/<id>.<ext>` (+ `<id>_t.jpg`
-  thumbnails, made on first request). Settings: journal `settings.shots` = `jshots.DEFAULTS` {auto, res, bars, chart, tg,
-  tg_chat, tg_since}; `clean_cfg()` validates; `tg_since` is stamped when the backup is turned on / its chat changes.
-- **One worker thread** (`queue(job, delay)`, a heap; jobs `("draw", uid, key, phase, manual[, tries])`, `("tg", uid, key, sid,
-  tries)`, `("tgdel", uid, chat, msg)`) does the slow parts one at a time. Journal saves now take `Journal.lock` (the worker
-  changes trades); the worker deep-copies a trade under the lock before reading it.
-- **Automatic pictures are off since v0.29.0** (`DEFAULTS` auto / chart False; `cfg()` switches settings saved before it off
-  once, `clean_cfg()` marks `v29` so turning them on again sticks).
-- **Entry / exit:** `journal.on_trade` sees a new trade ("open", none before) -> `jshots.phase(urt, key, "entry")`; a close that
-  makes it "closed" -> "exit". `phase()` queues the server drawing (DELAY 3 s) and broadcasts `{"jshot": {id, phase, s, acct}}`
-  on the user's sockets. Backfilled trades get nothing automatic (Draw at entry / exit by hand: `/api/journal/shot/draw`).
-- **Server drawing:** `candles_for()` = `candles.get(urt.link, s, res, days)` (the user's own Fyers budget; falls back to
-  `candles.saved()`); `render()` (Pillow, 1280×720, fonts in `helper/fonts/`, DejaVu Sans Mono with ₹). A failure ->
-  `t["shot_err"][phase]`, retried at 2 and 4 min. Stop on the underlying (`basis` != self): no SL / TP lines.
-- **Browser:** `web/jshots.js` (after journal.js): `jsStrip(t)` (card and audit form), `jsAct` (journal.js's list click and the
-  form delegate to it), uploads / paste / drop (`jsUpload`: raw body to `/api/journal/shot/add?id&tf&kind=upload&name`),
-  the viewer (`jsView`, `#jsView`), `jsShotReq(m)` (index.html's socket handler: a page whose `cur.s` is the contract and whose
-  chart is on screen - not the outer page of a grid - waits 1.5 s, `chart.takeScreenshot(true)` + a header band, sends
-  kind=chart; the server keeps one per (phase, tf) and answers others `dup`), `jsSnap` (📷 `#bSnap`, before ⛶; not in grid
-  frames), `jsSettings` (wraps `jnSettings`: the Pictures card).
-- **Telegram:** `send_file()` (multipart sendDocument, stdlib), caption HTML; message id kept in `sh.tg`; delete ->
-  `deleteMessage`. Uses `telegram.load(uid)`'s bot (Settings › Telegram alerts is admin-only, so effectively the admin only).
-  `tg_journal.json` keeps the last send / error. Start-up (`jshots.startup`) re-queues unsent pictures since `tg_since`.
-- Not seen for real yet: the server's picture on real Fyers candles (the forming candle at entry: the mock's history stops at
-  the last finished candle, so its marker sits just past the candles); a real Telegram channel taking documents and deletes.
-- Pillow: added to requirements.txt; `update.sh` runs `install.sh`, which pip-installs it. Without it, drawing answers "Pillow
-  isn't installed" and Settings › Pictures says so.
-
-## The journal (v0.26.0, roadmap item 4: first of three releases)
-
-- `helper/journal.py`: the Octagon port. `Journal(uid)` per user (`journal.get(uid)`), file `u/<user>/journal.json` =
-  {trades: {"<acct>:<pos id>": trade}, settings: {rules, pillars, p1}, practice, reviews, ended, hidden, synced}. A trade =
-  the engine's facts (s, side, product, lots, qty, entries, avg, exit, opened, closed, first_sl, sl, tp, gross, charges, net,
-  init_risk, r, planned_r, balance_after, day, base = account size, status open / closed / removed, parts / closes) + the
-  annotations (direction, wait, execution, zen, target, regime, bias, ke, p1Checks, execFaults, numberRunning,
-  payoutPressure, setup, notes, review, claimedAt...). Live parts (`P...p1`) merge into the base id (`base_id()`).
-- How trades arrive: `Paper._jn()` at the end of `fill()` ("open") and `close()` ("close"); rt wires `journal_hook`,
-  `journal_guard`, `journal_lock` on every engine. `sync(urt, full)` reads the engines' history and open positions; `full`
-  (start-up in `rt.start`, and the first time) also archived accounts and `paper_trades_until_*.json` (marked claimed). An
-  open trade whose position disappeared without a close (a reset) becomes "removed".
-- The audit: `metrics()`, `session_engine()`, `audit_trade()`, `compute_audit()` are line-by-line ports of Octagon's
-  `metrics / sessionEngine / auditTrade / computeAudit`, in seconds and IST; R / planned R are the app's net figures.
-  `tests/journal_test.py` runs Octagon's own JS (`tests/fixtures/octagon_core.js`, extracted from octagon_journal.html) on
-  the same random trades and compares every pillar and session figure: keep it passing when touching the audit.
-- One source of truth: the server computes the audit and sessions; the page only shows them (`POST /api/journal/audit`
-  previews an edit for the form, nothing saved). Edits answer with the trades of the affected session (`view(only=...)`);
-  the page merges (`jnMerge`).
-- Lockouts: `today_state(aid, day)` -> lock {kind dd / afk / end, on (switch), until, text}; `lock_reason()` is what
-  `Paper.guard_new` returns (so plan / preview / PLACE refuse with it); `check_lock(urt, aid, before)` after a close, an
-  annotation, a settings change or `/api/journal/end` cancels waiting entry orders when a lock starts (switch
-  `cancel_pending`; on the event loop). The snapshot carries `jlock` (header pill `#pJLock`).
-- `journal.on_change` -> app `_journal_changed` -> `{"journal": 1}` on the user's sockets -> page `jnPush()` reloads.
-- Page: `web/journal.js` + `web/journal.css` (loaded before mobile.js). `JN` state; `jnShow()` (pgShow wrapper), Trades
-  (`jnReps`, `jnToday`, `jnGoal`, strip, `jCard`), the audit form (`jnForm`, a modal), Settings (`jnSettings`). Filters in
-  prefs `jn`. Never rebuild under a held button (`JN.holding`: a rebuild cancelled holds in testing). The phone: a row
-  added to More (wraps `mMore`).
-- v0.27.0 (pictures + Telegram backup) and v0.28.0 (Insights, review, Gemini, export) shipped, see above: the Octagon port
-  is complete. 4b (prop-firm journals) and 4c (full-layout pictures from a hidden browser) wait for the owner's yes.
-
-## Telegram alerts (v0.25.0)
-
-- `helper/telegram.py`: per-user bot settings `u/<user>/telegram.json` = {token (sealed), bot, chat, chat_title, alerts,
-  hc: {url, key (sealed)}, link}; `call()` / `send()` (stdlib urllib, `TELEGRAM_API` env for tests); `send_user(uid, text,
-  silent, who)` records its last send / error in `u/<user>/tg_<who>.json` (one file per process, so helper and watchdog
-  never rewrite each other's file); `trade_lines()`, `market_open(sym, t)` (weekdays; MCX 09:00-23:30 / 23:55 US summer,
-  currency 09:00-17:00, the rest 09:15-15:30; no holidays).
-- `helper/alerts.py` (in the helper, every 5 s from app.py's `_engine_loop` via `alerts.tick`): `heartbeat()` writes
-  `watch.json` (live accounts with positions / orders, per user); `check()` sends live warnings (`LiveEngine.live_problems()`
-  keys; "stream" and "halted" skipped; nostop states waiting for the market / expired / no login skipped) after `warn_sec`,
-  and "no prices" (`feed.last_at` older than `feed_sec`, in market hours, ticked earlier that day); "Sorted" when it clears.
-  State is in memory (`_state`): a helper restart re-sends a still-open problem after its wait.
-- `helper/watchdog.py` = `fyers-watchdog.service` (venv python, user helper). Every 5 s (5 s while down too): GET
-  `/api/ping` (5 s timeout) + `watch.json` age (> 30 s = "background work stopped"). Down `down_sec` with live trades in the
-  last heartbeat -> message per user, reminders every `repeat_min`, "answering again". Silent outside market hours.
-  Outside heartbeat (`_hc`): pings the URL every 60 s while that user has a live trade (always, without an API key or a
-  UUID URL); flat with a key -> `POST <api>/api/v3/checks/<uuid>/pause` once (a ping un-pauses). Writes `watchdog.json`
-  (the page shows running / not, and its hc state).
-- Page: `web/tgalerts.js` (Settings › Telegram alerts, `#tgSec`, admin only; wraps `secRender` and `liveCard`).
-- On the real server (owner, 1 Nov): deployed, bot set up, the test message arrived, "Watchdog: running" (so the service
-  installed through `install.sh` and the droplet reaches Telegram). Not yet seen for real: an outage message during a live
-  trade; Healthchecks.io's real pause API (written to its docs: `POST /api/v3/checks/<uuid>/pause`, `X-Api-Key`).
-
-## Live candles, watchlists, seconds (agreed 1 Nov, roadmap 10-12)
-
-Design for item 10 is agreed (see the roadmap; its original reason, a day "rewritten" by Fyers, turned out to be the
-continuous series, fixed in v0.30.1 - the owner was asked on 2 Nov whether item 10 still comes next): server-side 1-minute candles from the live feed for every watchlist,
-positions / orders and open charts; used for a day only when the data check fails and the recording has no gaps; kept
-1 year by default (settable). Today the server streams without a browser only `rt.watch_symbols()` (positions / orders,
-plus the order-flow check's contracts for the admin); browsers add theirs through `feed.want()` (20 a page). Fyers
-Standard: **100 contracts** on the data socket (5,000 on Prime); seconds history (5S-45S) is Prime-only, 30 trading
-days. Item 11 (multiple watchlists) comes right after item 10; item 12 (seconds / tick charts) is decided after
-Monday's order-flow check.
-
-## Multi-charts (v0.24.0)
-
-- `web/multichart.js` + `web/multichart.css`, loaded after layouts.js. A layout has `grid` ("1", "2v", "2h", "3", "4" =
-  `MC_GRIDS`), `charts[]` and `sync` ({cross}). **Desktop grid = frames:** each chart is this same page loaded as
-  `/?cell=N` (`window.FTM_CELL`, `html.cell`: chart and its bar only), so all the single-chart code runs unchanged per
-  chart. Why: everything (index.html, paper.js, pine.js, draw.js, indset.js) lives on one set of globals - one chart per
-  page; a real multi-instance refactor would touch nearly every line.
-- **A frame** (`cellMode()`): its set-up lives in `charts[N]`, not the shared prefs - `prefGet` / `prefSet` overridden for
-  `MC_CELL_KEYS` (cur, tf2, ctype, chart, indicators, lgdMin0) and the drawing toolbar's `tb`; changes go to the page
-  around with `mcCellSet(N, state)` (150 ms). It streams only its contract (`sendWant`), sends toasts up (deduped), marks
-  itself active on pointerdown (`mcActive`), sends its crosshair (`mcCross`), tells the others when it saved drawings
-  (`mcDrawn` -> `cellDrawReload`), and exposes `cellAddPine`, `cellScripts`, `cellCrossShow/Clear`, `cellInfo()` (tests:
-  let-variables like `cur` / `DISP` aren't window properties, so the page around reads them through it).
-- **The page around** (`mcRender`): `body.multi`, its own chart hidden (still loaded with charts[0]), `#mcGrid` of
-  `.mc-cell > iframe`. Wrapped while a grid is on: `openSymbol` (-> active frame), `arm` (BUY / SELL -> active frame),
-  `peAdd` / `peSave` (Pine -> active frame / all frames), `acctSwitch`, `applyTheme`, `toast` (dedupe 3 s). layouts.js:
-  `layTouch` does nothing on a desktop grid (the frames report), `LAY.cell` = the active chart; `layApplyChart(c)`.
-- **Phone:** no frames. The page's own chart shows `charts[LAY.cell]` (`mcPhoneCell(k)` applies it); `layTouch` saves into
-  that index. The body class `mob` switching on / off re-renders (MutationObserver).
-- boot() now waits for DOMContentLoaded before `loadPrefs()` (so a frame never starts with the shared prefs: its
-  overrides are in place first).
-- Sync (v0.24.1), `L.sync` = {cross, sym, tf, range}: contract - the page's `openSymbol` wrapper opens on every frame;
-  timeframe - a frame's `setTf` wrapper calls `mcTf` (frames get `cellSetTf`, which doesn't relay back); date range - a
-  frame's `subscribeVisibleTimeRangeChange` while the mouse is on it -> `mcRange` -> others `cellRange` (setVisibleRange;
-  a frame with the mouse on it ignores relays). Ticking one: `mcLineUp(k)` from the active chart. Phone: `mcAfterTouch`
-  (called from `layTouch` / `laySave`) copies cur / tf2 into the layout's other charts. A chart click in a frame closes
-  the page's popovers (`mcActive`: frames' clicks never reach the page's own "click outside" handlers).
-
-## Layouts (v0.23.0)
-
-- `web/layouts.js` (loaded after drawui.js, before mobile.js), CSS `#layPick` / `#bLay` in index.html, server
-  `/api/layouts` (`u/<user>/layouts.json` = {layouts: [{id, name, grid: "1", charts: [chart], updated}], active}; ops
-  put / del / active, one layout at a time). A chart = `layNow()`: prefs `cur`, `tf2`, `ctype`, `chart`, `indicators`,
-  `lgdMin0` (`LAY_KEYS`) + `tb` (drawing toolbar). `charts` is a list so multi-charts (item 6) add charts[1..] and `grid`.
-- `prefSet` is wrapped: a change to one of those keys (or `draw.tb`) calls `layTouch()` -> the open layout (900 ms debounce,
-  `layFlush`). By hand (pref `layAuto` false): `LAY.dirty` (● on the button; `layEq` against the saved chart), Save /
-  Ctrl+S (`laySave`), switching asks first (`guard` in `layRender`).
-- `layApply(L)` puts a layout's chart on screen (prefs, `buildChart()`, `openSymbol`) with `LAY.applying` set (no saving
-  meanwhile); `layOpen(id)` = apply + send prefs now (`layPrefsNow`) + mark active + touch.
-- `layPost` merges the server's answer: the open layout keeps the page's own object (only `name` / `updated` taken), so a
-  change made while a save was on its way isn't lost (v0.24.1 fix; `layouts_flow.js` holds saves 1 s to prove it).
-- **The saved layout wins, at start-up:** `boot()` (index.html) calls `layBoot()` right after `loadPrefs()`, before the chart is
-  built: a chart that disagrees with the open layout takes the layout's set-up straight into the prefs (`layToPrefs`), so
-  the chart opens as the layout with nothing rebuilt afterwards. (A first version applied it after the chart had loaded:
-  that rebuilt the chart a second or two later and wiped whatever was done meanwhile; three test suites caught it.)
-  `layInit()` / `layApply()` is only the late fallback.
-  Found in testing: the opposite rule ("the chart wins") copied a layout into another when a page closed right after a
-  switch (the active mark reached the server, the prefs didn't). `pagehide` sends what's waiting (fetch keepalive).
-- Tests that set chart prefs through `/api/prefs` must delete `layouts.json` (no page open) first, or the layout puts its
-  chart back (tests/README.md).
-- Note (1 Nov): this release's first draft of layouts.js / the route was found already in the folder when work started
-  (an earlier interrupted attempt in the same session); it was reviewed line by line, completed (saving by hand, the
-  copy of the chart as shown) and fixed (the load rule above) before release.
-
-## Drawing tools and the measure (v0.22.0)
-
-- `web/draw.js` (engine), `web/drawui.js` (screens), `web/draw.css`. Loaded after the inline script, before mobile.js.
-  Hooks: `buildChart()` calls `drAttach()` (attaches `DrawPrim` to the new series; also on chart-type rebuilds);
-  drawui.js wraps `openSymbol` (-> `drSymbol(s)`: saves the old contract's drawings, loads the new) and `renderCfg`
-  (adds Chart settings › Drawings). State: `DR` (items of the contract on screen, sel, tool, draft, drag, meas).
-- A drawing: `{id, type, pts: [{t, p}], st, text, lock, hide, lots}`; t is chart time (epoch + IST, like the bars).
-  `t2L(t, free)` / `L2t(L)` map time <-> logical bar index on `DISP` (snapped: the bar holding t, on any timeframe or
-  chart type; past the last bar: bars of `drBarSec()`; the brush is `free`, fractional). x = `drView().xL(L)`.
-- Tools are `DT[type]` = {name, g (group), n (points; -1 path, -2 brush), st (default style), geom(A), handles,
-  axP / axT (axis labels), pos / levels / fill / text / ext flags}. `drGeom()` builds lines / polys / ellipses / text
-  boxes / handles once per frame; `drPaint()` draws them and `drHitG()` hit-tests the same geometry (`DR.geo`).
-  Adding a tool = one `DT` entry + an icon in `DR_ICONS` + its group in `DR_GROUPS`.
-- Events: capture listeners on `#chart`'s parent (mousedown / touchstart run before LWC and paper.js's trade-line drag;
-  `drNearTradeLine()` lets the SL / TP / entry lines win). Keyboard: window capture listener in drawui.js.
-- Saved: `/api/drawings` (per user, one file per contract under `u/<user>/drawings/`, 500 a contract, 400 KB), whole list
-  each save (700 ms debounce). Prefs `draw` = {mag, stay, lockAll, hideAll, tb (toolbar shown, desktop), styles (per-tool
-  defaults), last (last tool per group), lots (measure)}. Phone: body class `dtbm` = the strip is open (not saved).
-- Net ₹: `drMoney(legs)` batches to `POST /api/measure` (charges.net_at; nothing placed) and caches; labels show "…"
-  until it answers. R: `drRefTrade()` (an open position on this contract with a stop on its own price, else the armed
-  BUY / SELL tool). Position drawings: `drPosEval()` on `RAW` (real candles), from the candle after the entry to the box's
-  end; a candle reaching both levels = "both" (counted as the stop); opened past a level = its open.
-- Angles (v0.23.1): style key `ang` on trend / ray / extl / arrow / channel / regr, tool `angle` (always on). `angleGeom()`
-  draws the arc and label; `drAngleInfo()` = screen degrees (P&F: boxes / columns) + slope per bar. ∠ on the selection bar.
-- Settings dialog (`drSettings(d, tab)`, drawui.js): tabs style / text / lv / xy. Coordinates come from `drCoordDefs(d)`
-  (which points have a price, a time, or both); typed IST date + time -> chart time with `drPartsTime()`; `drBarNote()`
-  says which bar it lands on. Everything is checked before anything changes.
-- After Ctrl+Z, `DR.items` holds new copies: UI handlers look a drawing up by id when clicked (`drFind(id)`), never keep
-  the object (a v0.22.0 bug found in testing: 🔒 locked a stale copy).
-- Not built (roadmap item 9's last line): Inside pitchfork, Gann square, Fib circles / spiral, Elliott / XABCD,
-  per-drawing timeframe visibility, sharing drawings across a future's expiries.
-
-## Watchlists (v0.21.0)
-
-index.html: prefs `wlists` = [{id, name, items: [symbol rows]}] and `wl` (the list on screen); `watch` is that list's
-items (other code - sendWant, pages.js - reads `watch`, so it still means "the list on screen"); `wlLoad()` (boot; the
-old pref `watch` becomes "Watchlist"), `wlSave()` (also mirrors `watch`), `wlSwitch()`, `renderWlBar()` (switcher,
-＋, ⋯ menu, inline name editor). 10 lists x 30.
-v0.30.0: a contract's lists. `wlItems(L)` (the list on screen is `watch`, the others `L.items`: always go through it),
-`wlHas` / `wlInAny` / `wlPut` (30 cap) / `wlDrop`, `wlChanged()` (save, re-render, stream, chain stars). `wlPick(row,
-anchor, from)` is the picker (`#wlPop` + `#wlPopBg`; a bottom sheet under `body.mob`); with `from` (a list id) it adds Move
-and Remove. Watchlist rows are wrapped by `wlWrap()` in `.wrow` (swipe actions `.swa` behind the `.row`; touch handlers,
-`touch-action: pan-y`; a capture-phase click guard stops a swiped row opening the chart). ⋯ is `.x.m` on the row;
-right-click on a row opens the picker. Option chain: header `#chainHead` (`#cU`, `#cExp`, `#cAtm`), strikes scroll in
-`#chainBox` (thead sticky); `chainRef` (spot, else future) is streamed via `chainWant()` while the tab is open;
-`chainMark()` highlights, `chainToAtm()` scrolls only `#chainBox` (never `scrollIntoView`, which moved the pane);
-`chainTick()` scrolls once if the price arrives late and the strikes haven't been scrolled; `chainMarks()` sets ＋ / ★. Feed: `want()` 40 a page; `wanted()` puts `extra()` (trades / orders,
-order-flow check) first, then the rest, cut at 95; `_poll()` batches quotes by 50. Item 10 will record the union of all
-lists' items from prefs `wlists` server-side.
-
-## Users on the server
-
-- **admin** = the owner (live trading is the owner's only). Other users are paper-only, each with their own
-  Fyers app for prices (SEBI / Fyers static-IP rules; see the roadmap).
-- Still open with Fyers support: whether a second user's app may fetch market data from this server's IP.
-
-## Project instructions
-
-`docs/Project_Instructions.md` is the text of this project's instructions in claude.ai (the owner pastes it there).
-
-## Where live mode stands (v0.14.0)
-
-Built to the agreed design and tested against the fake Fyers order API (`tests/live_test.py`, 61 checks;
-`tests/live_flow.js` in a browser). **Not yet run against real Fyers.** Things only a real trade can confirm:
-- the order-update socket's messages (field names per Fyers' docs and the SDK's map; the order book poll is the
-  fallback either way);
-- that Fyers accepts SL-L -> market modification on NSE / BSE (its support page says yes) and refuses type changes
-  on MCX (the app cancels and re-sends there anyway);
-- the exact refusal texts and how market-price protection shows in the order book;
-- whether the positions API reports `netQty` for carried (NRML) positions the way the overnight check expects.
-- the holdings API's field names (`quantity` / `remainingQuantity`) for overnight delivery (CNC) stops.
-
-Known limit: one Fyers worker per account runs actions one at a time (exits first). A Fyers call that hangs (up to
-15 s, plus up to 30 s queued on the order budget) holds up the rest of that account's actions meanwhile.
-
-Safety principles in `live.py` (keep them when changing it): an order's tag and its "sent" / pending mark are saved
-before it's sent; an order Fyers didn't confirm is looked up by tag, never re-sent; every fill of a stop or exit is
-booked once per Fyers order id (`L["filled"]`); any open app order that nothing is waiting for is cancelled
-(`_stray`); an exit is never larger than what Fyers holds; MCX exits wait for the stop's cancel to be confirmed.
-
-## Order flow (v0.16.0)
-
-The owner wants a real footprint only, never an estimate. Fyers' API documents no trade feed (the tick-by-tick
-socket is depth-only, NSE / NFO, 1 symbol on Standard). **Measured 2 Nov 2026** (the open to 10:43 IST): exact volume
-NIFTY fut 6.6% (one snapshot held 16,640 qty), CRUDEOIL fut 25.1%, GOLDPETAL fut 18.0%; about one snapshot a second.
-So no footprint from this feed. **Parked by the owner** ("Let's park it for now", 2 Nov). Recording is off on the
-server (2 Nov 10:42; the contract list, now with GOLDPETAL26NOVFUT, is kept). Fyers' own Order Flow (Smart Charts,
-Aug 2026) uses per-trade data with buy / sell inferred from the book; Fyers said (community, 31 Aug) it isn't in the API
-and pointed to the TBT socket. If resumed: ask Fyers for a time & sales feed (NFO, MCX), or test whether the TBT
-socket's `quote` block (`ltq`, `vtt_diff`, msg.proto) is filled per trade on NIFTY futures (TBT has no MCX).
-
-## Indicators, Pine libraries and chart history (v0.20.0)
-
-- **Settings per indicator** live on its entry in prefs `indicators`: `inputs`, `style` (Pine: `{plots|hlines|fills|bg|
-  barcolor|shapes: {name: {off, colors: {"#RRGGBBAA": "#RRGGBBAA"}, width, type, ls, pl, lv}}, prec, lbl, sv, inl}`;
-  Volume: `{up, down, maWidth, maLs}`), `vis` (`{m|h|D|W|M: [on, from, to]}`), `tf` / `gaps` (Pine's indicator
-  timeframe). `pineApply()` lays `style` over the script's own look and fills `P.raw` (what the Style tab lists, the
-  script's own colours as `#RRGGBBAA` keys). An indicator not shown on the chart's timeframe gets `r.offTf` (built
-  hidden; `indVisCheck()` on a timeframe change rebuilds only when that changes).
-- **Indicator timeframe:** the worker reads `indicator(timeframe =)` (PineTS keeps it in `ind._sourcePropArgs` /
-  `ind.prop`, but doesn't act on it), runs the script on that timeframe's candles (asked of the page like
-  request.security) and maps values onto the chart bars in `mapToChart()`. Such sessions re-run in full on ticks.
-- **v0.20.1:** the Timeframe field is offered for every Pine script (the worker applies `props.timeframe` whether or
-  not the script declares it). Bars of history "Auto" (`pineBarsFor()`): 1,500 bars, then `P.reach` = all loaded when
-  the view's left edge passes the script's first bar (`pineViewCheck()` on every visible-range change, 500 ms
-  debounce). Keep the full re-run on each new bar: PineTS updateTail alone drifts on `var` / stateful values across
-  bars that arrived tick by tick (checked: up to 12 points on a running total, 0 within a bar).
-- **v0.20.8 data check:** `dcIssues(rows, t, o)` (index.html, pure: Fyers' rows vs live figures {ltp, o, h, l, vol}) and
-  `dataCheck(force, tick)` (runs after each history load / refresh and on ticks, every 5 s at most) -> `dcShow()` (the
-  `#dcPill` note and `#dcBox` at the chart's bottom). Needs the day's high and low from Fyers (socket, or polled quotes:
-  `open_price` / `high_price` / `low_price` / `prev_close_price` in `feed._poll()`: those key names are Fyers' documented
-  quote fields but not yet seen on this server). `mktClosedNow()`: weekends and outside `sessRange()` (no holidays).
-  **v0.30.2:** with the market closed and the candles' last day before today, `dcIssues` works out which day Fyers'
-  live figures belong to from `t.pc` (Fyers' previous close = the close of the day before theirs; nearer the candles' last
-  close than the day before's = a later day): a later day during `o.preopen` (a weekday, the 30 min before `sessRange()`'s
-  start, set in `dataCheck`) -> nothing; a later day otherwise -> "Latest day" (history missing a day); else compared as
-  before. No `pc`: pre-open skipped, else as before. `liveBar()` returns early for intraday plans when the tick is before
-  `sessStart()` (no pre-open candle; the bid / ask / last lines still move). Found 3 Nov at 09:14 on NIFTY 50.
-  Test-kit note: the mock's ticks run round the clock, so between 00:00 and 09:00 IST they now make no intraday candles
-  (MCX's session starts 09:00); suites that wait for live candles may behave differently if run then (not tried yet).
-  The mock sends no day open / high / low (its random walk doesn't follow its candles). To confirm on real Fyers: no false
-  warnings in a normal session (NSE's official close vs LTP after 15:30 is the likeliest; tolerance 0.5%).
-- **v0.30.1: every history request sends `cont_flag=0`** (`fyers_link.history_range`). Fyers' API gives its continuous
-  series (each date = that day's near-month contract) when cont_flag is LEFT OUT as well as with "1": checked on the server
-  2 Nov (GOLDPETAL NOV 30 Oct 15m: none / "1" = 319 lots, close 14,201, the expiring OCT contract; "0" = 314,649 lots, low
-  13,699, close 13,960). Fyers' own charts have a "Continuous Futures" setting, on by default since July 2025 (Fyers Web:
-  profile › Settings › Charts): turn it off to compare. `candles.FETCH_V` "3" dropped saved FUT / CE / PE candles once;
-  browser store "fyers-candles-3" (older ones deleted). The mock flags any history request without cont_flag "0"
-  ("CONT_FLAG ASKED" in its log). The two notes below about a Fyers "rewrite" were wrong (it was the continuous series);
-  kept for history.
-- **v0.20.6 / v0.20.7:** history is never asked with `cont_flag` (with it, GOLDPETAL NOV's 29 Oct had ~165,000 lots that
-  Fyers' own chart doesn't show; without it the app matches Fyers' charts). `candles.py`: `_migrate()` (meta `fetch_v`
-  = "2") dropped saved FUT / CE / PE candles once; `_replace()` deletes the whole days it re-fetched before saving
-  Fyers' answer (not on an empty answer); each new-candles fetch starts `RECHECK_DAYS` (7) before the last saved day,
-  so a day Fyers corrects later is replaced. Browser: IndexedDB store "fyers-candles-3" since v0.30.1 (older ones deleted);
-  `loadHistory()` asks the server from 7 days before its last saved candle and replaces its copy from there.
-  **Not a Fyers data issue (resolved 2 Nov, v0.30.1, see above):** GOLDPETAL26NOVFUT's 30 Oct in Fyers' history is a thin day (trading until ~17:00,
-  then 14,201) while its live prices are 13,951 / 13,958 and the real Friday fell to 13,960 on heavy volume (Fyers'
-  history sent that during Friday). Fyers' own chart shows the thin day too. Reported to Fyers by the owner. The
-  roadmap's "live candles" item is the safeguard.
-- **v0.20.5:** `noTradeDrop(rows)` (index.html) runs in `aggBars()` and in pine.js `pineNeed()`: rows with no volume
-  whose O / H / L / C differ from the last kept close are dropped (Fyers' after-close candles at the closing price).
-  Chart pref `hideNoTrade` (default true). `HROWS` keeps Fyers' rows as sent; the server's candles.db is untouched.
-- **v0.20.4:** `PfPrim` never draws P&F columns as lines: square X / O while a glyph is >= 5 px; zoomed out ("flat"),
-  each X / O is as wide as the column and as tall as the box; under 1.8 px a box ("block"), X columns are solid bars
-  and O columns hollow ones. `PF_PRIM.mode` / `.bh` / `.sp` say which (tests/navigation_flow.js checks all three).
-- **v0.20.2:** chart navigation in index.html (`goToOpen()` / `goTo(t)` / `goToNow()` / `navWatch()`; buttons `#goBtn`,
-  `#nowBtn`; Alt+G). `goTo` loads older candles in a loop through `histPrepend()` (shared with the scroll-back) and
-  centres the view with setVisibleLogicalRange (not scrollToRealTime, which stopped short after a manual zoom). P&F:
-  `pfZoom()` picks the opening bar spacing; `pfFixed()` gives the fixed box per contract and timeframe
-  (`pfBox["CRUDEOIL@1D"]`), the old per-contract key only where ATR / box <= 8.
-- **Imports:** the page resolves them (`pineLibs()` in pine.js: a saved script named like the import path, then a
-  saved `library("Name")`, then `PINE_BUILTIN_LIBS`) and sends `{path: source}` with each run; the worker gives
-  PineTS a resolver over that. `TradingView_ta.pine` is our own implementation (standard formulas; ta.supertrend's
-  port checked equal to Pine's built-in). PineTS quirk found writing it: a history reference with a parameter index
-  inside a ternary branch (`c ? x[length] : y`) evaluated wrong in a library function: compute it into a variable first.
-- **Chart history:** `HX[symbol|res].days` is how far back a chart reaches after you scroll left (`histMore()`:
-  `/api/history?...&until=<oldest>`; only user scrolling triggers it, `histUserAt`); `HROWS` are the raw rows on
-  the chart. `fyers_link._check()` treats Fyers' `{"s": "no_data"}` as an empty answer (it used to fail whole
-  chunked requests reaching back before a contract's listing).
-- **Not confirmed against real Fyers:** that Fyers really answers `no_data` (per its community examples) for ranges
-  before listing and how far back its intraday candles go; the owner's real Pivot Points / Chandelier scripts on
-  real candles.
-
-## Rule: every indicator on every chart type (owner, 31 Oct 2026)
-
-Volume, every Pine script and every future indicator / Pine feature must work on every chart type, P&F included.
-How it holds: indicators only ever read `DISP` (the shown bars); Pine gets them through `pineBar()` in pine.js (closeTime
-= next bar's open for non-time types; P&F `close` = middle or last box). Before every release run
-`tests/pine_compat_flow.js`; when a Pine feature is added, add a script using it to `tests/pine_compat.js`.
-The P&F toolkit is `CT.pfTools` (ctype.js: lines, signals, anchors, counts, hcounts, patterns) drawn by `PfToolsPrim`
-(index.html, built-in indicator "pftools"; labels go through a priority queue so they never overlap).
-v0.27.0 fix: after a break the next 45° line starts at the X top / O bottom with the most `hi + column` / least `lo - column`
-in the move (the tangent no later column has crossed); `ctype_test.js` checks on random walks that no line is crossed
-before its break and none is made twice. Keep that check passing when touching the lines.
-
-## Chart types (v0.15.0, Point & Figure v0.16.0)
-
-Done and tested (`tests/ctype_test.js`, `tests/charttypes_flow.js`). Indicators run on the displayed bars, as on
-TradingView. If the owner wants indicators on the real candles under a Heikin-Ashi / Renko chart, that's a per-
-indicator option to add (not built).
+- **Stage b:** slice b1 shipped in v0.36.0 (next section); the agreed design for b2 / b3 is in the roadmap's item 8 (b).
+  FundingPips (10 Nov): no hedging even in Hedge mode; his 21182752 is Phase 1 of the 2-Step; news: ForexFactory (owner).
 
 ## Next job
 
-**Roadmap 8 stage a shipped in v0.34.0** (MT5 prices and charts through the owner's own bridge EA). Next, the owner:
-compiles `mt5/FTM_Bridge.mq5` in MetaEditor (send any errors), sets it up on the FundingPips demo (Settings › MT5 bridge),
-and checks a few MT5 charts against MT5's own (candle times and prices, the daily candles). Then stage b (above).
+**Roadmap 8 b1 shipped in v0.36.0** (MT5 accounts, managed from the app). Next, the owner:
+1. **Updates the server**, downloads FTM_Bridge.mq5 1.10 (Settings › MT5 bridge), puts it over 1.00 in `MQL5\Experts` and
+   compiles it (send any errors: it has never been compiled here). On the chart: the EA's Common tab "Allow Algo Trading"
+   ticked, MT5's Algo Trading button on, input AllowTrading true.
+2. Switches a page to **MT5** (top left, a 2FA code): account 21182752 should be there with its balance, MT5's history of
+   the last 90 days on the History page, and the floors under the figures (check them against the FundingPips dashboard).
+3. On the demo: places a small XAUUSD trade **in MT5** with an SL, then from the app: drags the SL, BE, BE-T / TRAIL, ✕ (the
+   first change asks for the login). Also a pending order in MT5: move it, cancel it here. Reports anything odd.
+**Not seen on a real MT5 yet** (only the fake): that 1.10 compiles; `POSITION_TIME_MSC` / `DEAL_FEE` / `DEAL_REASON` as
+used; deals arriving in time order from `HistorySelect`; FundingPips' commission (per side or all on the opening deal; how
+MT5 rounds it) and swap on the closing deal; `PositionModify` / `PositionClose` / `OrderModify` / `OrderDelete` retcodes on
+FundingPips-SIM1 (stops level, filling mode); the broker's midnight balance vs the dashboard's daily figure; how fast MT5
+reports a closed position's deal. Then **b2** (placing orders from the app, the no-hedging check), b3.
+
+**Roadmap 8 stage a shipped in v0.34.0**: the owner compiled 1.00 and saw XAUUSD on the app (10 Nov, 21:45).
 
 **Roadmap 16 shipped in v0.33.0** (the Live account is the Fyers account). Next, the owner:
 - **Updates the server** and switches a page to LIVE (top left): the Account page's Live card should show his real Fyers

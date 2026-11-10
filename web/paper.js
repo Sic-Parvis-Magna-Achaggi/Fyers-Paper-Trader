@@ -7,10 +7,13 @@ const P = {
   T: {s: null, side: 1, follow: true, price: null, slDist: null, tpDist: null, tp_r: 2, tpMode: "r", basis: "self", ref: null,
       mode: "pct", risk_pct: 1, risk_amt: 250, lots: 1, product: "INTRADAY", rr_lock: false, lockTp: null}
 };
-const rs = n => n == null || isNaN(n) ? "–" : (n < 0 ? "−₹" : "₹") + Math.abs(n).toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2});
-const rsS = n => n == null || isNaN(n) ? "–" : (n > 0 ? "+" : n < 0 ? "−" : "") + "₹" + Math.abs(n).toLocaleString("en-IN", {maximumFractionDigits: 0});
+/* money in the account's currency: ₹ for paper and Fyers, the MT5 account's own ($) on the MT5 side (v0.36.0) */
+const CUR = () => { const c = P.snap && P.snap.ccy; return !c || c === "INR" ? "₹" : c === "USD" ? "$" : c === "EUR" ? "€" : c === "GBP" ? "£" : c + " "; };
+const CURLOC = () => CUR() === "₹" ? "en-IN" : "en-US";
+const rs = n => n == null || isNaN(n) ? "–" : (n < 0 ? "−" : "") + CUR() + Math.abs(n).toLocaleString(CURLOC(), {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const rsS = n => n == null || isNaN(n) ? "–" : (n > 0 ? "+" : n < 0 ? "−" : "") + CUR() + Math.abs(n).toLocaleString(CURLOC(), {maximumFractionDigits: CUR() === "₹" ? 0 : 2});
 const cls = n => n > 0 ? "up" : n < 0 ? "down" : "";
-const short = s => (s || "").replace(/^[A-Z]+:/, "");
+const short = s => (s || "").replace(/^[A-Z][A-Z0-9]*:/, "");   // (NSE:, MCX:, MT5:)
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const num = v => { const n = parseFloat(String(v).replace(/,/g, "")); return isNaN(n) ? null : n; };
 const roundTick = (p, t) => { t = t || 0.05; return +(Math.round(p / t) * t).toFixed(6); };
@@ -238,7 +241,8 @@ function placeLabel(p){
 }
 function breakdown(c, title){
   if(!c) return "";
-  const names = {brokerage: "Brokerage", exchange: "Exchange txn", clearing: "Clearing", tax: c.tax_name || "CTT/STT", stamp: "Stamp duty", sebi: "SEBI fee", ipft: "IPFT", gst: "GST 18%", dp: "DP (delivery sell)"};
+  const names = {brokerage: "Brokerage", exchange: "Exchange txn", clearing: "Clearing", tax: c.tax_name || "CTT/STT", stamp: "Stamp duty", sebi: "SEBI fee", ipft: "IPFT", gst: "GST 18%", dp: "DP (delivery sell)",
+    commission: "Commission (MT5)", swap: "Swap (a credit shows as minus)"};
   return `<div class="bdt">${esc(title)}${c.value ? ` · value ${rs(c.value)}` : ""}</div>` +
     Object.entries(names).filter(([k]) => c[k]).map(([k, n]) => `<div><span>${n}</span><span>${rs(c[k])}</span></div>`).join("") +
     `<div class="tot"><span>Total</span><span>${rs(c.total)}</span></div>`;
@@ -927,6 +931,7 @@ async function saveRules(sel = "#rulesForm", msgSel = "#rulesMsg"){
   document.querySelectorAll(sel + " [data-k]").forEach(el => {
     const k = el.dataset.k; let v = el.value;
     if(k === "sl_required" || k === "squareoff_on") v = v === "true";
+    else if(el.dataset.t === "s"){}                                  // (a word: MT5's daily % of, phase)
     else if(!["max_mode", "day_from"].includes(k) && !/^(expiry_exit|squareoff_cd|fy_sq)/.test(k)) v = num(v);
     body[k] = v;
   });

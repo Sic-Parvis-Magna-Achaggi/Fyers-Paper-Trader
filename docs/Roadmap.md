@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 10 Nov 2026 (v0.35.0: items 18-20, the ƒx search, the Settings page, the version at the top). This is the one task list for the project.
+Updated 10 Nov 2026 (v0.36.0: item 8 b1, MT5 accounts on their own side, managed from the app). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -226,10 +226,51 @@ fallback"):** item 8 is built now, stage by stage. Stage a shipped in **v0.34.0*
      - [x] (a) MT5 prices and charts only (no trading): the bridge EA `mt5/FTM_Bridge.mq5` 1.00 (calls out only, places no
        orders; walk-through for FundingPips in `mt5/README.md`), Settings › MT5 bridge (key with 2FA, terminals, price
        source, the broker's clock), MT5 in the Prices pill, Find (MT5 button), every chart type / Volume / Pine on MT5 candles, the
-       broker's day for candles, the phone. *(v0.34.0)* Still to do: the owner compiles the EA (never compiled here) and
-       tries it on the FundingPips demo.
-     - [ ] (b) Trading through the bridge.
+       broker's day for candles, the phone. *(v0.34.0)* **The owner compiled the EA and it streams XAUUSD from the
+       FundingPips demo into the app (10 Nov 2026, 21:45: "It compiled and I'm seeing the gold chart on the app").**
+     - [ ] (b) Trading through the bridge. **Design agreed 10 Nov 2026** (the owner's answers marked), built in slices:
+       - **Several MT5 accounts, apart from Fyers** (owner: "it need not be limited to 1 mt5 account. We need a way to
+         switch between accounts. And I don't want to confuse this with the fyers side"): a third side on the top-left
+         switch, **PAPER | LIVE | MT5** (MT5 in its own colour). On the MT5 side the account switcher lists only the MT5
+         accounts, one per login whose terminal has called (each MT5 terminal on the laptop runs the EA): "● 21182752 ·
+         FundingPips-SIM1 · DEMO · $5,012.50". Fyers never appears there and MT5 accounts never on the Live side. Going
+         to MT5: a fresh 2FA code, and the login typed the first time an account trades. The admin only.
+       - **Each MT5 account is its own account:** its own rules, history, journal account, kill switch (that account
+         only). Prices for charts still come from the price terminal (Settings › MT5 bridge).
+       - **Money: $, net** (owner, 10 Nov): gross from MT5's tick value; **commission learned from MT5's real deals**
+         per symbol (owner's answer), a typed default until the first trade, a warning if a later deal differs; swap from
+         the position. Spread paid through bid / ask fills.
+       - **Loss limits like FundingPips** (owner's answer): daily loss from the balance at the broker's midnight; max loss
+         from the account's starting size, typed once (e.g. $5,000); the percentages per account; the phase (evaluation /
+         Master) per account.
+       - **Orders at the broker:** market, limit, stop, each with its real SL and TP in MT5 from the start; BE, BE-T and
+         TRAIL move the broker's SL (never below BE + costs, never backwards); a close is a market close at MT5. Volume in
+         the symbol's steps (0.01 lot). **No opposite trade on the same symbol** in an account or across the MT5 accounts
+         (FundingPips, 10 Nov); different symbols are fine (owner, 10 Nov).
+       - **Trades placed in MT5 itself** show and are managed like the app's (as with Fyers).
+       - Slices: **b1** the MT5 side and accounts; positions, orders, balance and history read from MT5; manage them
+         from the app (SL / TP, close, BE, BE-T, TRAIL); net $; the FundingPips limits shown. **b2** placing orders from
+         the app (ticket, chart tool, PLACE) with sizing, the guards and the no-hedging check. **b3** the EA keeps
+         trailing if the link drops; the news guard (**ForexFactory**, owner 10 Nov: Master blocks opening / closing
+         ±5 min of high-impact news on the symbol's currencies, evaluation warns); the MT5 kill switch.
+       - [x] **b1** *(v0.36.0)*: PAPER | LIVE | MT5 (purple; a fresh 2FA code); one account per MT5 login whose terminal
+         runs FTM Bridge **1.10** (made when it first calls; the switcher lists only them on the MT5 side); positions,
+         pending orders, balance / equity / margin and history straight from MT5 (MT5's last 90 days the first time, then
+         every close booked from MT5's own deal); trades placed in MT5 shown and managed; SL / TP drags, BE, BE-T, TRAIL,
+         ✕ and pending orders moved / cancelled change the real trade through the EA (MOD / CLOSE / CANCEL / OMOD, each tag
+         run once; paced 2 s per trade, 30 a minute: FundingPips' no server spamming); a stop moved in MT5 adopted; the app's
+         stop passed before MT5 took it -> a market close; the login typed once per account; $ net of commission (learned
+         per symbol and side from MT5's deals; typed default; a change flagged) and swap; FundingPips' daily floor (the
+         broker's-midnight balance, from MT5's deals) and max floor (typed starting size) shown. EA 1.10 calls out only and
+         **opens no new trades** (input AllowTrading). The journal leaves MT5 accounts out until (c). **Not run on a real
+         MT5 yet** (the owner compiles 1.10 and tries it on the demo: see Handoff).
+       - [ ] **b2** placing orders from the app (ticket, chart tool, PLACE) with sizing, the guards and the no-hedging check.
+       - [ ] **b3** the EA trailing on its own if the link drops; the news guard (ForexFactory); the MT5 kill switch.
      - [ ] (c) The journal for prop accounts (joins 4b) and FundingPips' rules.
+     - [ ] (d) **Copy trades between MT5 accounts, later** (owner, 10 Nov: "in the roadmap, we can also have copy trades for
+       a later stage"). FundingPips allows copying between your own FundingPips accounts (and out to an external
+       account), not into one from outside; and no hedging across accounts, so copies only ever go the same way. Design
+       when we get there (lead / followers, lot scaling by balance or equity).
    - Backup prices when MT5 is off (analysis only, labelled as not the firm's prices): a free API (Twelve Data: 800
      requests / day, 8 stream symbols "trial"; or AllTick's free stream) for a few forex / gold symbols.
 
@@ -473,6 +514,7 @@ marked before relying on it.
 
 ## Done
 
+- [x] **v0.36.0** (10 Nov): MT5 accounts (item 8 b1): PAPER | LIVE | MT5 at the top left; each MT5 login with FTM Bridge 1.10 an account of its own (positions, orders, balance, history from MT5; trades placed in MT5 too); SL / TP, BE, BE-T, TRAIL, ✕ and pending orders managed at the broker through the EA (the login typed once); $ net of commission learned from MT5's deals and swap; FundingPips' daily (broker's midnight) and max (typed size) floors shown. EA 1.10 opens no new trades.
 - [x] **v0.35.0** (10 Nov): the ƒx search, like TradingView (item 18: filter as you type, marks, ↑ / ↓ / Enter, Esc, "/") and Settings as a page of its own (item 19: sections listed on the left, cards, ← Back / Esc, #settings; chips on the phone); the version at the top (item 20).
 - [x] **v0.34.0** (10 Nov): MT5 prices and charts through the owner's own bridge EA (item 8, stage a): `mt5/FTM_Bridge.mq5` (calls out only, no orders), Settings › MT5 bridge, MT5 in the Prices pill, MT5 symbols in Find, every chart type and Pine on the broker's own candles, the broker's day; paper trading refuses MT5 symbols until stage b.
 - [x] **v0.33.1** (5 Nov): a separate Telegram channel for Live trades' pictures (item 17): Journal › Settings › Pictures › Live trades' channel (optional; paper pictures stay in the journal's chat; Live only if that's empty).

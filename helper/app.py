@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 
 from fastapi.staticfiles import StaticFiles
 
-from . import alerts, charges, charges_watch, fyers_link, journal, jreplay, jshots, logbuf, mt5, rt, store, symbols, telegram, users
+from . import alerts, charges, charges_watch, fyers_link, journal, jreplay, jshots, logbuf, mt5, mt5acct, rt, store, symbols, telegram, users
 from .feedcheck import FC
 from . import candles as candles_store
 from .paper import Refused
@@ -179,6 +179,8 @@ def _eng(request: Request, b: dict | None = None, write: bool = False):
     e = r.engine(aid)
     if write and getattr(e, "mode", "paper") == "live" and users.session_side(_tok(request)) != "live":
         raise HTTPException(403, "this page is on Paper - switch to Live (top left) to trade on your Fyers account")
+    if write and getattr(e, "mode", "paper") == "mt5" and users.session_side(_tok(request)) != "mt5":
+        raise HTTPException(403, "this page isn't on MT5 - switch to MT5 (top left) to manage your MT5 accounts")
     return e
 
 
@@ -538,8 +540,12 @@ async def side_switch(request: Request):
     u, r = _urt(request)
     b = await _body(request)
     side = str(b.get("side") or "")
-    if side not in ("paper", "live"):
-        return _err("side: paper or live")
+    if side not in ("paper", "live", "mt5"):
+        return _err("side: paper, live or mt5")
+    if side == "mt5":                                  # MT5 accounts (roadmap 8 b1): the admin, with a fresh 2FA code
+        if u["role"] != "admin":
+            return _err("MT5 accounts are for the admin only", 403)
+        _stepped(request)
     if side == "live":
         if u["role"] != "admin":
             return _err("Live trading is for the admin only (SEBI / Fyers static-IP rules)", 403)
@@ -566,8 +572,8 @@ async def side_switch(request: Request):
     except ValueError as e:
         return _err(e, 401)
     users.audit(u["uid"], f"page side: {side.upper()}", "", _ip(request))
-    if side == "live":
-        log.warning("%s switched a page to LIVE", u["username"])
+    if side in ("live", "mt5"):
+        log.warning("%s switched a page to %s", u["username"], side.upper())
     sess = (users.check(_tok(request)) or {}).get("session")
     for c in list(r.feed.clients):                     # this login's other pages (tabs, grid charts) follow
         if sess and getattr(c, "sess", None) == sess:
@@ -633,6 +639,41 @@ async def live_resync(request: Request):
     _same_origin(request)
     b = await _body(request)
     e = _live(request, b)
+    e.resync()
+    return _ok(e)
+
+
+# ------------------------------------------------------------------ MT5 accounts (roadmap 8 b1: managed through the EA)
+def _mt5e(request: Request, b: dict | None = None):
+    e = _eng(request, b, write=True)
+    if getattr(e, "mode", "") != "mt5":
+        raise HTTPException(400, "not an MT5 account")
+    return e
+
+
+@app.post("/api/mt5acct/confirm")
+async def mt5acct_confirm(request: Request):
+    """The first change on an MT5 account: its login typed once (the 2FA code was asked when the page went to MT5)."""
+    _same_origin(request)
+    u = _user(request)
+    b = await _body(request)
+    e = _mt5e(request, b)
+    try:
+        e.confirm(b.get("login"))
+    except Refused as ex:
+        return _err(ex)
+    users.audit(u["uid"], "MT5 account confirmed", str(e.login), _ip(request))
+    return _ok(e)
+
+
+@app.post("/api/mt5acct/resync")
+async def mt5acct_resync(request: Request):
+    """Ask the EA for MT5's deals again (90 days); anything already in the history is skipped."""
+    _same_origin(request)
+    b = await _body(request)
+    e = _mt5e(request, b)
+    if e.none:
+        return _err("no MT5 account yet")
     e.resync()
     return _ok(e)
 
@@ -1004,6 +1045,8 @@ async def _paper(request: Request, fn):
     engine = _eng(request, b, write=True)
     try:
         res = fn(engine, b)
+    except mt5acct.NeedLogin as e:                     # an MT5 account's first change: the page asks for its login
+        return JSONResponse({"ok": False, "error": str(e), "need_login": e.login, "paper": engine.snapshot()}, status_code=400)
     except Refused as e:
         return _err(e)
     except (KeyError, TypeError, ValueError) as e:
@@ -1160,11 +1203,25 @@ async def paper_csv(request: Request):
     import io
     f = io.StringIO()
     w = csv.writer(f)
+    fmt = lambda ts: time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts)) if ts else ""
+    if engine.mode == "mt5":                           # an MT5 account: $ (its currency), commission and swap
+        w.writerow(["ticket", "symbol", "side", "lots", "open_price", "close_price", "opened_ist", "closed_ist", "broker_day",
+                    "reason", "first_sl", "sl", "tp", "profit", "commission", "swap", "costs_total", "net", "init_risk", "r",
+                    "best", "worst", "balance_after", "currency", "placed_in", "from_mt5_history"])
+        for h in engine.history:
+            c = h.get("charges") or {}
+            w.writerow([h.get("ticket"), h["s"].split(":", 1)[-1], "BUY" if h["side"] > 0 else "SELL", h.get("lots"), h["avg"],
+                        h["exit"], fmt(h["opened"]), fmt(h["closed"]), h.get("day"), h["reason"], h.get("first_sl"), h.get("sl"),
+                        h.get("tp"), h["gross"], c.get("commission", 0), -c.get("swap", 0), c.get("total", 0), h["net"],
+                        h.get("init_risk"), h.get("r"), h.get("best"), h.get("worst"), h.get("balance_after"), h.get("ccy", ""),
+                        "MT5" if h.get("src") == "mt5" else "app", "yes" if h.get("from_history") else ""])
+        name = "".join(ch for ch in (engine.name or "mt5") if ch.isalnum() or ch in "-_") or "mt5"
+        return Response(f.getvalue(), media_type="text/csv",
+                        headers={"Content-Disposition": f'attachment; filename="MT5_{name}_trades.csv"'})
     cols = ["id", "symbol", "side", "product", "lots", "qty", "avg_entry", "exit", "opened_ist", "closed_ist", "reason",
             "first_sl", "sl", "tp", "gross", "brokerage", "exchange", "clearing", "ctt_stt", "stamp", "sebi", "ipft",
             "gst", "dp", "charges_total", "net", "init_risk", "r", "best", "worst", "balance_after", "placed_in"]
     w.writerow(cols)
-    fmt = lambda ts: time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
     for h in engine.history:
         c = h["charges"]
         w.writerow([h["id"], h["s"], "BUY" if h["side"] > 0 else "SELL", h["product"], h["lots"], h["qty"], h["avg"],
@@ -1172,7 +1229,6 @@ async def paper_csv(request: Request):
                     h["gross"], c["brokerage"], c["exchange"], c["clearing"], c["tax"], c["stamp"], c["sebi"],
                     c["ipft"], c["gst"], c.get("dp", 0), c["total"], h["net"], h["init_risk"], h["r"], h["best"], h["worst"],
                     h["balance_after"], "Fyers" if h.get("src") == "fyers" else "app"])
-    from fastapi.responses import Response
     name = "".join(ch for ch in (engine.name or "paper") if ch.isalnum() or ch in "-_") or "paper"
     return Response(f.getvalue(), media_type="text/csv",
                     headers={"Content-Disposition": f'attachment; filename="{name}_trades.csv"'})
@@ -1853,8 +1909,9 @@ async def ws(socket: WebSocket):
             if not isinstance(msg, dict):
                 continue
             if "acct" in msg:
-                client.acct = r.engine(msg.get("acct")).dir.rstrip("/").split("/")[-1]
-                feed._offer(client, {"paper": r.engines[client.acct].snapshot(), "acct": client.acct, "events": []})
+                e = r.engine(msg.get("acct"))
+                client.acct = r.engine_id(e)
+                feed._offer(client, {"paper": e.snapshot(), "acct": client.acct, "events": []})
             if isinstance(msg.get("want"), list):
                 feed.want(client, msg["want"])
             if "depth" in msg:

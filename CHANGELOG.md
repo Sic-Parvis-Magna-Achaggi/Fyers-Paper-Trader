@@ -1,5 +1,72 @@
 # Changelog
 
+## v0.36.0 — 10 Nov 2026 — MT5 accounts: your MT5 logins on a side of their own, managed from the app (FundingPips, stage b1)
+
+Added
+- **MT5 accounts** (roadmap 8 b, slice b1; owner, 10 Nov: "it need not be limited to 1 mt5 account. We need a way to switch
+  between accounts. And I don't want to confuse this with the fyers side").
+  - **PAPER | LIVE | MT5** at the top left (MT5 in purple; the phone's button opens the three). Going to MT5 asks for a
+    fresh 2FA code. The admin only. Each browser or phone switches for itself; the server refuses changes to an MT5 account
+    from a page that isn't on MT5 (403).
+  - **One account per MT5 login** whose terminal runs FTM Bridge 1.10, made the first time it calls. On the MT5 side the
+    account switcher lists only them ("● 21182752 · DEMO · $5,012.50", the server in its tip); Fyers never appears there
+    and MT5 accounts never on PAPER or LIVE. Before any terminal has called, the MT5 side says how to set one up.
+  - **Straight from MT5:** positions, pending orders, balance, equity, margin and history, about 4 times a second. Trades
+    placed in MT5 itself show at once ("Placed in MT5", "Already open in MT5"). The History page has MT5's own closed trades
+    (the last 90 days the first time, marked MT5) and every trade closed since, booked from MT5's closing deal: its price,
+    profit, commission and swap, exactly.
+  - **Managed from the app, at the broker:** dragging SL / TP, BE, BE-T, TRAIL and ✕ (the entry line's bar, the panel, the
+    Trades page, the phone) change the real trade in MT5 through the EA; pending orders placed in MT5 can be moved (their
+    SL / TP with them) or cancelled. Each trade's line says what MT5 has ("MT5 SL … ✓", "→ moving to …", "MT5 refused: …",
+    "closing in MT5…"). A stop moved by hand in MT5 becomes the trade's stop (the trail leaves it alone, as a stop you set
+    yourself). **The first change on each account asks for its login**, once.
+  - **Money in the account's currency ($), net** of the broker's commission and the trade's swap: SL, TP, risk, P&L, R, BE
+    (BE + commission both ways). The commission per lot is **learned from MT5's real deals**, per symbol and per side
+    (opening / closing); a typed default until a symbol has traded; a later deal that charged differently is flagged in the
+    Log and used from then on (a small deal's rounding to the cent isn't taken for a change).
+  - **FundingPips' loss limits shown** under the account figures and on the Account page: the daily floor from the balance
+    at the broker's midnight (worked out from MT5's deals since), minus the daily % (5% by default) of that balance or of
+    the starting size; the max floor from the **starting size you type** (the first deposit in MT5's history until then),
+    minus the max % (10%, static or trailing); equity under a floor shows in red. The phase (evaluation / Master) is kept for
+    the news guard.
+  - **The Account page of an MT5 account:** MT5's figures, the EA and whether the app may change trades, the limits and
+    their form, the commission learned per symbol, trailing defaults, Read MT5's history again. Settings' rules form shows
+    the MT5 account's own limits. CSV: MT5 columns (profit, commission, swap, ticket).
+- **FTM Bridge 1.10** (`mt5/FTM_Bridge.mq5`; walk-through updated in `mt5/README.md`). Still calls out only (WebRequest), as
+  described to FundingPips. Each call now also carries the account's positions, pending orders, its deals (from where the
+  app asks, `DEALS`, at most 200 a call) and the results of the app's requests. New answer lines: `MOD`, `CLOSE`, `CANCEL`,
+  `OMOD` (each with a tag; a tag is carried out once, the EA remembers the last 200), with MT5's standard `CTrade`.
+  **It opens no new trades.** New inputs: **AllowTrading** (false: show the account, change nothing) and **SlippagePoints**
+  (closing at market). The chart's corner says how many positions / orders the account has and the last request.
+
+Changed
+- **Safety (helper/mt5acct.py), as the Live design:** each request's tag and its "sent" mark are saved before it goes; a
+  request with no result after 20 s is never sent again as it was - MT5's own reports show what happened (a stop that still
+  differs is asked for again; a close of a still-open position once more: closing a ticket twice can't close anything else).
+  A close or cancel that couldn't reach MT5 within 20 s is dropped, never sent late. If the app's stop or target is passed
+  before MT5 has taken it, the app closes the trade at market. Pacing (FundingPips: no server spamming): one change per trade
+  every 2 s at most, 30 requests a minute per account.
+- Prices: each MT5 account takes its prices from its own terminal (a second terminal streams its own trades' symbols to its
+  own account); the charts still use the price terminal.
+- `charges.py`: an MT5 branch ($ from MT5's tick value, commission per lot on opening / closing deals). Paper accounts still
+  refuse MT5 symbols ("MT5 symbols trade on your MT5 accounts"). Settings › MT5 bridge explains 1.10 and flags an older EA.
+- The journal leaves MT5 accounts out until roadmap 8 (c) (the prop-firm journal).
+- Money on the page follows the account's currency (₹ on paper and Fyers, $ on MT5). `short()` strips "MT5:" too.
+
+Tests
+- `tests/mt5acct_test.py` (new, 85 checks, no browser): the account made per login (admin only; EA 1.00 shows it with a
+  warning; a second terminal its own account and its own prices), MT5's history (exact net), a trade placed in MT5 adopted
+  (1R, $ at SL / TP, BE + commission), the login once, MOD / CLOSE / CANCEL / OMOD reaching the fake MT5, a stop moved in MT5
+  adopted, BE / Trail BE / Trail SL moving MT5's stop and the 2 s pacing, MT5's own SL hit, a refused change and its retry, a
+  lost result (no tag run twice), offline (a close never sent late), the app's stop passed first, a part closed in MT5, a
+  position gone without a deal (estimate, then replaced), commission learned and a change flagged, the floors, restart.
+- `tests/mt5acct_flow.js` (new, browser): the three-way switch with 2FA, the switcher, $, the limits, a trade from MT5 on
+  the panel and the chart, the login dialog, SL / BE / TRAIL / ✕ from the entry line's bar reaching MT5, a pending order
+  moved and cancelled, 403 from a Paper page, History, the Account page, Settings' rules, back to PAPER, the phone.
+- `tests/fake_mt5.py`: an MT5 Hedge account (positions, orders, deals, commission, swap, SL / TP on bid / ask, pending fills,
+  invalid stops), the 1.10 protocol, `--old` (1.00), `--history`, and a control API (`--ctl`) for the browser test.
+- `tests/mt5_flow.js` and `tests/mt5_test.py`: their stage-a wording checks updated (1.10 manages trades; paper refuses MT5).
+
 ## v0.35.0 — 10 Nov 2026 — Search in the indicators menu; Settings as a page of its own; the version at the top
 
 Added

@@ -11,7 +11,10 @@ logs in to the broker.
 The EA proves who it is with a bridge key (X-FTM-Key), made in Settings › MT5 bridge (2FA) and pasted into the EA's inputs.
 Only a hash of the key is kept.
 
-Stage (a) is prices and charts only: no orders go to MT5, and paper trading refuses MT5 symbols (stage b).
+Stage (a) is prices and charts. Stage (b), slice b1 (EA 1.10): each MT5 login is an account of its own (helper/mt5acct.py):
+the sync call also carries its positions, pending orders, deals and the results of the app's commands, and the answer
+carries the commands (MOD / CLOSE / CANCEL / OMOD, each with a tag) and where MT5's deal history should start (DEALS).
+rt.py wires REPORT / WATCH / TICK below to the user's MT5 accounts. Paper accounts still refuse MT5 symbols.
 
 Symbols are "MT5:<the broker's name>" (MT5:XAUUSD). Prices: ltp = the bid (MT5 draws its candles from the bid), bid / ask
 as MT5 has them. Candles come from MT5 itself (CopyRates), saved in the user's candles.db like Fyers' candles. Times here
@@ -42,7 +45,7 @@ MAX_BARS = 200_000        # per request
 RES_MIN = {"1": 1, "2": 2, "3": 3, "5": 5, "10": 10, "15": 15, "20": 20, "30": 30, "60": 60, "120": 120, "180": 180,
            "240": 240, "D": "D"}          # MT5's own timeframes; "45" is built here from M15
 NAME_RE = re.compile(r"^[A-Za-z0-9._#&+\-!$%@^~]{1,40}$")
-EA_LATEST = "1.00"
+EA_LATEST = "1.10"
 STORE_V = "1"             # how MT5 candles are stored (times, daily stamps): a change drops them once, they load again
 _checked: set = set()     # candle folders whose MT5 candles have been checked against STORE_V
 
@@ -51,6 +54,11 @@ _fails: dict = {}             # ip -> [count, first]
 _U: dict = {}                 # uid -> UserMT5
 _ALL: dict = {}               # "MT5:NAME" -> row, the latest seen for any user (symbols.get falls back to it)
 _hid = [0]
+
+# Set by rt.py (the MT5 accounts, roadmap 8 b1). None in tests of the bridge alone.
+REPORT = None   # (uid, bridge, body) -> list of answer lines (DEALS, commands) for this login's account
+WATCH = None    # (uid, login) -> MT5 symbol names this login's account needs prices for (its positions and orders)
+TICK = None     # (uid, login, tick) -> a tick from a terminal that isn't the price source, for its own account
 
 
 class Offline(Exception):
@@ -361,44 +369,60 @@ def sync(uid: str, body: dict, ip: str, feed) -> str:
         _save_cfg(uid, c)
     pb = u.price_bridge()
     lines = [f"OK {POLL_MS}"]
-    if pb is b:
-        clock = u.clock(b)
-        prev = dict(b.last_msc)                               # (several ticks in one call can share a millisecond)
-        for t in (body.get("ticks") or [])[:MAX_TICKS]:
-            try:
-                name, msc, bid, ask = str(t[0]), _f(t[1]), _f(t[2]), _f(t[3])
-            except (IndexError, TypeError):
-                continue
-            if not NAME_RE.match(name) or bid <= 0 or ask <= 0 or msc <= 0:
-                continue
-            if msc <= prev.get(name, 0):                      # sent again: the EA's last call failed
-                continue
-            if msc > b.last_msc.get(name, 0):
-                b.last_msc[name] = msc
-            last = _f(t[4]) if len(t) > 4 else 0
-            vol = _f(t[5]) if len(t) > 5 else None
-            tick = {"s": PREFIX + name, "ltp": bid, "bid": bid, "ask": ask, "t": round(msc / 1000.0 - clock.offset, 3),
-                    "vol": vol, "src": "mt5"}
-            if last:
-                tick["last"] = last
-            b.ticks += 1
+    rep = []
+    if REPORT:
+        try:
+            rep = REPORT(uid, b, body) or []
+        except Exception as e:                                # (the prices must keep flowing whatever happens)
+            log.exception("[%s] MT5 account %s: %s", uid, a["login"], e)
+    own = []
+    if WATCH:
+        try:
+            own = [n for n in (WATCH(uid, a["login"]) or []) if NAME_RE.match(n)]
+        except Exception as e:
+            log.exception("[%s] MT5 account %s symbols: %s", uid, a["login"], e)
+    clock = u.clock(b)
+    prev = dict(b.last_msc)                                   # (several ticks in one call can share a millisecond)
+    for t in (body.get("ticks") or [])[:MAX_TICKS]:
+        try:
+            name, msc, bid, ask = str(t[0]), _f(t[1]), _f(t[2]), _f(t[3])
+        except (IndexError, TypeError):
+            continue
+        if not NAME_RE.match(name) or bid <= 0 or ask <= 0 or msc <= 0:
+            continue
+        if msc <= prev.get(name, 0):                          # sent again: the EA's last call failed
+            continue
+        if msc > b.last_msc.get(name, 0):
+            b.last_msc[name] = msc
+        last = _f(t[4]) if len(t) > 4 else 0
+        vol = _f(t[5]) if len(t) > 5 else None
+        tick = {"s": PREFIX + name, "ltp": bid, "bid": bid, "ask": ask, "t": round(msc / 1000.0 - clock.offset, 3),
+                "vol": vol, "src": "mt5", "lg": a["login"]}
+        if last:
+            tick["last"] = last
+        b.ticks += 1
+        if pb is b:
             if feed:
-                feed.publish(tick)
-        names = sorted({s[len(PREFIX):] for s in (feed.wanted() if feed else []) if s.startswith(PREFIX)})
-        lines.append("SUB " + ",".join(n for n in names if NAME_RE.match(n)))
+                feed.publish(tick)                            # charts, watchlists, and every account (each keeps its own login's)
+        elif TICK:
+            TICK(uid, a["login"], tick)                       # another terminal: only its own account's trades
+    if pb is b:
+        names = {s[len(PREFIX):] for s in (feed.wanted() if feed else []) if s.startswith(PREFIX)} | set(own)
+        lines.append("SUB " + ",".join(sorted(n for n in names if NAME_RE.match(n))))
         if (not u.specs or time.time() - u.list_at > LIST_EVERY) and time.time() - b.list_asked > 120:
             b.list_asked = time.time()
             lines.append("LIST")
         while b.q:
             lines.append(b.q.popleft())
     else:
-        lines.append("SUB")                                   # another terminal gives the prices
+        lines.append("SUB " + ",".join(sorted(own)) if own else "SUB")   # another terminal gives the chart prices
         while b.q:                                            # (a history request for a bridge that stopped being it)
             x = b.q.popleft()
             hid = x.split()[1] if x.startswith("HIST ") else None
             h = b.hist.pop(hid, None) if hid else None
             if h and not h["fut"].done():
                 h["fut"].set_exception(Offline("the price source changed; try again"))
+    lines += rep
     return "\n".join(lines) + "\n"
 
 

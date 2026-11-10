@@ -9,6 +9,7 @@ const mesc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&l
 
 function mtAgo(t){ if(!t) return "never"; const s = Math.max(0, Math.round(Date.now() / 1000 - t));
   return s < 90 ? `${s} s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : new Date(t * 1000).toLocaleString("en-GB", {timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit"}); }
+function mtVer(v){ const m = /^(\d+)\.(\d+)/.exec(String(v || "")); return m ? +m[1] * 1000 + +m[2] : 0; }
 function mtMoney(v, c){ return v == null ? "–" : Number(v).toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2}) + (c ? " " + c : ""); }
 function mtMsg(id, text, ok){ const el = mq5(id); if(!el) return; el.className = ok ? "ok-msg" : "err"; el.textContent = text || ""; }
 
@@ -24,12 +25,16 @@ async function mtRender(){
       <div class="help">${mesc(b.company || "")}${b.mode ? " · " + mesc(b.mode === "hedge" ? "Hedge" : b.mode === "netting" ? "Netting" : b.mode) : ""}
         · balance ${mtMoney(b.balance, b.currency)} · equity ${mtMoney(b.equity, b.currency)}</div>
       <div class="help">${b.online ? '<span class="up">● connected</span>' : '<span class="down">● not connected</span> · last heard ' + mesc(mtAgo(b.seen))}
-        ${b.ip ? " · from " + mesc(b.ip) : ""}${b.ea ? " · EA " + mesc(b.ea) : ""}${b.prices ? " · <b>prices from here</b>" : ""}</div></div>`).join("");
+        ${b.ip ? " · from " + mesc(b.ip) : ""}${b.ea ? " · EA " + mesc(b.ea) : ""}${b.prices ? " · <b>prices from here</b>" : ""}</div>
+      ${b.ea && mtVer(b.ea) < mtVer(j.ea_latest) ? `<div class="help warnc">EA ${mesc(b.ea)}: install ${mesc(j.ea_latest)} (step 1-2 below) to see and manage this account's trades here.</div>` : ""}</div>`).join("");
   const keyLine = j.key_set ? `<p class="help">Bridge key: <span class="up">set</span> (made ${mesc(mtAgo(j.key_made))}).</p>`
     : `<p class="help">Bridge key: <b>none yet</b>. Make one (step 3) to connect the EA.</p>`;
   box.innerHTML = `<p class="help">Prices and charts from your own MT5 terminal (FundingPips), through the <b>FTM Bridge</b> EA on
       your laptop. Every chart type, indicator and Pine script works on them. The EA only calls out to this server; nothing
-      connects in to your laptop, and this server never logs in to your broker account. <b>This version places no orders.</b></p>
+      connects in to your laptop, and this server never logs in to your broker account.</p>
+    <p class="help"><b>Version ${mesc(j.ea_latest || "1.10")}</b> also makes each terminal's account an <b>MT5 account</b> in this app (MT5 at the top
+      left): its positions, orders, balance and history from MT5, managed from here (SL / TP, BE, trailing, close, cancel) only when you
+      ask and only while its <b>AllowTrading</b> input is on. <b>It opens no new trades</b> (placing orders from the app comes next).</p>
     <div class="note">FundingPips: run MT5 and the EA only on your own laptop at home. No VPS, no VPN.</div>
     ${rows ? `<h4>Terminals</h4>${rows}` : `<p class="help"><b>No terminal has connected yet.</b></p>`}
     ${j.bridges && j.bridges.length > 1 ? `<p class="help">Prices come from the ticked terminal while it's connected, otherwise from the one heard from last.</p>` : ""}
@@ -47,7 +52,9 @@ async function mtRender(){
         <li>In MT5: <b>Tools › Options › Expert Advisors</b>: tick <b>Allow WebRequest for listed URL</b> and add
           <div class="copy"><input id="mtUrl" class="mono" readonly value="${mesc(url)}"><button id="mtUrlCopy">Copy</button></div></li>
         <li>Drag <b>FTM_Bridge</b> from the Navigator onto any chart. In its <b>Inputs</b>, paste the key into <b>BridgeKey</b>
-          (ServerURL is already this address). The chart's corner then says <i>connected</i>, and the terminal shows up above.</li>
+          (ServerURL is already this address). The chart's corner then says <i>connected</i>, and the terminal shows up above.
+          To manage its trades from here: tick <b>Allow Algo Trading</b> in the EA's <b>Common</b> tab and keep MT5's <b>Algo Trading</b>
+          button on (input <b>AllowTrading</b> = false keeps the app's hands off: it only shows the account).</li>
       </ol>
       <p class="help">Then search for a symbol in <b>Find</b> (the MT5 button shows only these) and open it. MT5 adds the symbols you
         open to its Market Watch: it only sends prices for symbols there.</p></details>
@@ -118,10 +125,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if(typeof curMT5 === "function" && curMT5()){ const box = mq5("#bookBox");
       if(box && typeof P !== "undefined" && P.tab === "book") box.innerHTML = `<div class="empty">No order book for MT5 symbols.</div>`; return; }
     return rb.apply(this, arguments); }; }
-  // the ticket's hint on an MT5 chart (stage a: charts only)
+  // the ticket's hint on an MT5 chart: paper accounts trade Fyers contracts; MT5 trades are on the MT5 side (mt5acct.js has its own hint)
   if(typeof paperOnSymbol === "function"){ const po = paperOnSymbol; paperOnSymbol = function(row){
     const r = po.apply(this, arguments), h = mq5("#tkHint");
-    if(h){ if(!h.dataset.txt) h.dataset.txt = h.textContent;
-      h.textContent = row && isMT5(row.s) ? "MT5 symbols are charts only for now: trading through the bridge comes in the next step." : h.dataset.txt; }
+    if(h && !(typeof mtOn === "function" && mtOn())){ if(!h.dataset.txt) h.dataset.txt = h.textContent;
+      h.textContent = row && isMT5(row.s) ? "MT5 symbols aren't traded on paper accounts: your MT5 trades are on the MT5 side (top left). Placing orders from the app comes in the next step." : h.dataset.txt; }
     return r; }; }
 });

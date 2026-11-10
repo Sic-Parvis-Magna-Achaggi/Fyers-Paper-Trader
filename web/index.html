@@ -12,7 +12,7 @@
 <style>
 :root{
   --bg:#0f1216; --panel:#161a20; --panel2:#1c2129; --line:#262c35; --text:#e6e9ee; --muted:#8b94a3;
-  --accent:#4f8cff; --up:#22a06b; --down:#e2483d; --warn:#d99a1e; --chip:#222833;
+  --accent:#4f8cff; --up:#22a06b; --down:#e2483d; --warn:#d99a1e; --chip:#222833; --mt5:#8b5cf6;
   --mono:"IBM Plex Mono",ui-monospace,monospace; --sans:"IBM Plex Sans",system-ui,sans-serif;
 }
 @media (prefers-color-scheme: light){:root:not([data-theme="dark"]){
@@ -609,6 +609,26 @@ button.place.live,#tool .tp.live{outline:2px solid var(--down);outline-offset:2p
 .sidesw button[data-s="paper"].on{background:var(--up);color:#fff}
 .sidesw button[data-s="live"].on{background:var(--down);color:#fff}
 .sidesw.live{border-color:var(--down)}
+/* v0.36.0: MT5, a third side in its own colour (roadmap 8 b1) */
+.sidesw button{padding:3px 8px}
+.sidesw button[data-s="mt5"].on{background:var(--mt5);color:#fff}
+.sidesw.mt5{border-color:var(--mt5)}
+body.is-mt5 header{border-bottom:2px solid var(--mt5)}
+body.is-mt5 #panel{box-shadow:inset 3px 0 0 var(--mt5)}
+.tag.tag-mt5{background:var(--mt5);color:#fff;font-weight:600}
+.mtcard{border-color:var(--mt5)!important}
+button.mt5btn{background:var(--mt5);border-color:var(--mt5);color:#fff}
+.mtline{font-size:12px;margin-top:4px} .mtline.sm{font-size:11px;white-space:nowrap}
+.mtwarn{flex-basis:calc(100% + 28px);margin:0 -14px -8px;background:color-mix(in srgb,var(--mt5) 14%,var(--panel));border-top:1px solid var(--mt5);padding:6px 14px;font-size:13px}
+.mtwarn div+div{margin-top:3px}
+.mtwarn .down{font-weight:600}
+.mtfoot{margin-top:4px;font-size:11.5px;color:var(--muted)}
+.mtfoot b{color:var(--text);font-weight:600}
+.mtlim{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+.mtcomm td,.mtcomm th{padding:3px 8px;text-align:right} .mtcomm td:first-child,.mtcomm th:first-child{text-align:left}
+.sidemenu{position:fixed;z-index:200;display:flex;flex-direction:column;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px;box-shadow:0 6px 24px rgba(0,0,0,.35)}
+.sidemenu button{font-weight:700;letter-spacing:.05em;min-width:90px;padding:8px 12px}
+.sidemenu button.on.paper{background:var(--up);color:#fff} .sidemenu button.on.live{background:var(--down);color:#fff} .sidemenu button.on.mt5{background:var(--mt5);color:#fff}
 button.nsl{background:var(--down);border-color:var(--down);color:#fff;font-weight:700}
 .pbar button.nsl{padding:1px 6px;font-size:11px}
 .fyline .nsl{margin-left:6px;padding:1px 8px}
@@ -894,6 +914,7 @@ if(window.FTM_REPLAY) document.documentElement.classList.add("cell", "replay");<
 <script src="/static/live.js?v=__V__"></script>
 <script src="/static/tgalerts.js?v=__V__"></script>
 <script src="/static/mt5.js?v=__V__"></script>
+<script src="/static/mt5acct.js?v=__V__"></script>
 <script src="/static/settings.js?v=__V__"></script>
 <script>
 "use strict";

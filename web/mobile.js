@@ -543,6 +543,16 @@ function mOrdFill(force){
 /* ---------------------------------------------------------------- account switcher */
 function mAcctSheet(){
   const list = acctList(), rsx = n => n == null ? "" : "₹" + Math.round(n).toLocaleString("en-IN");
+  if(typeof sideMT5 === "function" && sideMT5()){            // the MT5 side: the MT5 accounts only (v0.36.0)
+    const ml = mt5List(), mx = (n, c) => n == null ? "–" : mtCash(n, c, 2);
+    const sh = mOpen("acct", `<div class="shead"><b>Your MT5 accounts</b><button data-x>✕</button></div>
+      <div class="mlist">${ml.length ? ml.map(a => `<button data-id="${a.id}" ${a.id === ACCT ? 'style="border-color:var(--mt5)"' : ""}><span><b class="${a.online ? "up" : "muted"}">●</b> ${esc(a.name)} · ${esc(a.server || "")}${a.demo ? " · DEMO" : ""}<br><small>balance ${mx(a.balance, a.currency)} · ${a.open || 0} open${a.online ? "" : " · not connected"}</small></span>${a.id === ACCT ? "✓" : ""}</button>`).join("")
+        : `<button disabled><span>No MT5 account yet<br><small>Start MT5 on your laptop with the FTM Bridge EA 1.10 (Settings › MT5 bridge)</small></span></button>`}
+        <button data-p="1"><span>Back to Paper (your paper accounts)</span>›</button></div>`);
+    sh.querySelectorAll("[data-id]").forEach(b => b.onclick = () => { mClose(); acctSwitch(b.dataset.id); setTimeout(mRefresh, 600); });
+    sh.querySelector("[data-p]").onclick = () => { mClose(); sideSet("paper"); setTimeout(mRefresh, 800); };
+    return;
+  }
   if(typeof sideLive === "function" && sideLive()){           // the Live side: the Fyers account only (v0.33.0)
     const a = acctById(ACCT) || {name: (S.live || {}).name};
     const sh = mOpen("acct", `<div class="shead"><b>Your Fyers account</b><button data-x>✕</button></div>
@@ -639,7 +649,7 @@ async function mHistory(reload){
     </div></div>
     ${rows.length ? rows.map((h, i) => `<div class="mhist" data-i="${i}">
       <div class="r1"><span class="side ${h.side > 0 ? "up" : "down"}">${h.side > 0 ? "L" : "S"}</span><span class="sym">${esc(short(h.s))}</span><b class="${cls(h.net)} mono">${rs(h.net)}</b></div>
-      <div class="r2">${istTime(h.closed)} · ${h.lots} lot · ${h.avg} → ${h.exit} · ${esc(h.reason)}${h.r != null ? ` · ${h.r > 0 ? "+" : ""}${h.r}R` : ""}${h.src === "fyers" ? " · placed in Fyers" : ""}</div>
+      <div class="r2">${istTime(h.closed)} · ${h.lots} lot · ${h.avg} → ${h.exit} · ${esc(h.reason)}${h.r != null ? ` · ${h.r > 0 ? "+" : ""}${h.r}R` : ""}${h.src === "fyers" ? " · placed in Fyers" : h.src === "mt5" ? " · placed in MT5" : ""}</div>
       <div class="bd ${M.histOpen[h.closed + h.s] ? "" : "hide"}"></div></div>`).join("") : `<div class="mempty">No closed trades in this period.</div>`}
     <p class="help" style="text-align:center"><a href="/api/paper/history.csv">Download CSV</a> · <a href="#" id="mhFull">Full history page (equity curve, filters)</a></p>`;
   box.querySelectorAll("#mhDays button").forEach(b => b.onclick = () => { M.histDays = +b.dataset.d; mHistory(true); });

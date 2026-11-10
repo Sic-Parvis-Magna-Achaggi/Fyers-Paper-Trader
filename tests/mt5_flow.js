@@ -26,10 +26,11 @@ const startEA = key => { ea = spawn("python3", [__dirname + "/fake_mt5.py", "htt
   await pg.waitForSelector("#mt5Box #mtSetup", { state: "attached", timeout: 10000 });
   await pg.evaluate(() => { document.querySelector("#mtSetup").open = true; document.querySelector("#mt5Sec").scrollIntoView(); });   // (closed once a terminal has connected)
   const s0 = await pg.textContent("#mt5Box");
-  ok(/places no orders/i.test(s0) && /No VPS, no VPN/.test(s0) && /Set it up \(5 steps\)/.test(s0), "Settings › MT5 bridge explains it (no orders, no VPS / VPN) with the 5 steps");
+  ok(/opens no new trades/i.test(s0) && /AllowTrading/.test(s0) && /No VPS, no VPN/.test(s0) && /Set it up \(5 steps\)/.test(s0), "Settings › MT5 bridge explains it (opens no new trades, AllowTrading, no VPS / VPN) with the 5 steps");
   ok((await pg.inputValue("#mtUrl")) === "http://localhost:8766", "step 4 shows this server's address to allow in MT5");
-  const dl = await pg.evaluate(async () => { const r = await fetch("/api/mt5/ea"); const t = await r.text(); return {code: r.status, mq5: /FTM_Bridge\.mq5/.test(t) && /WebRequest/.test(t) && /OrderSend|CTrade/.test(t) === false}; });
-  ok(dl.code === 200 && dl.mq5, "the EA's source downloads from the page (and has no order calls)");
+  const dl = await pg.evaluate(async () => { const r = await fetch("/api/mt5/ea"); const t = await r.text(); return {code: r.status, mq5: /FTM_Bridge\.mq5/.test(t) && /WebRequest/.test(t)
+    && /#property version\s+"1\.10"/.test(t) && !/OrderSend|\.Buy\(|\.Sell\(|PositionOpen|BuyLimit|SellLimit|BuyStop|SellStop|OrderOpen/.test(t)}; });
+  ok(dl.code === 200 && dl.mq5, "the EA's source (1.10) downloads from the page; it opens no new trades (no OrderSend / Buy / Sell / OrderOpen)");
   pg.once("dialog", d => d.accept());
   await pg.click("#mtKeyNew");
   await pg.waitForSelector("#codeAsk:not(.hide) #caCode", { timeout: 10000 });
@@ -132,10 +133,10 @@ const startEA = key => { ea = spawn("python3", [__dirname + "/fake_mt5.py", "htt
   await pg.click('#ptabs button[data-t="book"]'); await pg.waitForTimeout(500);
   ok(/No order book for MT5 symbols/.test(await pg.textContent("#bookBox")), "the Book tab: no order book for MT5 symbols");
   await pg.click('#ptabs button[data-t="pos"]');
-  ok(/charts only for now/.test(await pg.textContent("#tkHint")), "the ticket says MT5 symbols are charts only for now");
+  ok(/aren't traded on paper accounts/.test(await pg.textContent("#tkHint")), "the ticket says MT5 symbols aren't traded on paper accounts (the MT5 side)");
   const pv = await pg.evaluate(async () => api("/api/paper/preview", {body: {s: "MT5:XAUUSD", side: 1, type: "market", sl: 2600, tp_r: 2, mode: "lots", lots: 1, product: "INTRADAY"}}));
   const pl = await pg.evaluate(async () => api("/api/paper/place", {body: {s: "MT5:XAUUSD", side: 1, type: "market", sl: 2600, tp_r: 2, mode: "lots", lots: 1, product: "INTRADAY"}}));
-  ok(!pv.ok && !pl.ok && /charts only/.test(pl.error), `paper trading refuses MT5 symbols in this step ("${pl.error}")`);
+  ok(!pv.ok && !pl.ok && /MT5 accounts/.test(pl.error), `paper accounts refuse MT5 symbols ("${pl.error}")`);
   const ms = await pg.evaluate(async () => api("/api/measure", {body: {s: "MT5:XAUUSD", legs: [{side: 1, qty: 1, entry: 2600, exit: 2610}]}}));
   ok(!ms.ok && /points only/.test(ms.error), "the measure tool's net ₹ isn't worked out with Indian charges for MT5");
 

@@ -22,6 +22,7 @@ FYERS_TEST_CONTAINER=1 bash tests/server_flow.sh      # a new server's first ins
 python3 tests/trail_rr_test.py                        # LiveTrader 1.24: per-trade trailing (typed R switches on, the panel takes trades back) and the RR lock's stop (net of charges, rules, too-close target)
 python3 tests/replay_test.py                          # trade replay: the stop's path, entry / exit set-ups (order's chart, layouts), code + drawings as then, old trades from the log, net ₹
 python3 tests/mt5_test.py                             # v0.34.0: the MT5 bridge without a browser: key, the EA's sync (account, clock, ticks), candles through HIST, symbols, offline, the broker's clock, paper refusing MT5
+python3 tests/mt5acct_test.py                         # v0.36.0: MT5 accounts without a browser (fake_mt5's account in-process): the account per login, MT5's history, a trade from MT5 adopted ($ net, 1R, BE), the login once, MOD / CLOSE / CANCEL / OMOD, BE / trail moving MT5's stop (paced), refusals, lost results, offline, a part / a vanished position, commission learned, FundingPips' floors, a second terminal, restart
 
 python3 tests/make_old_data.py /tmp/fyers_test        # fresh v0.12-style data, admin password OldPass12345
 FYERS_HELPER_DATA=/tmp/fyers_test python3 tests/mock_server.py &   # the app on http://localhost:8766
@@ -45,6 +46,7 @@ FYERS_HELPER_DATA=/tmp/fyers_test node tests/jinsights_flow.js     # journal v0.
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/mobile_flow.js        # the phone layout on an emulated Pixel 7: order sheet and its bubble, positions, tabs, full screen (resets the admin's paper account)
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/replay_flow.js        # trade replay: ▶ On chart (recorded chart + Pine code, nothing saved), ▶ Play, every chart type, History, the phone; ~5 min (resets the admin's paper account)
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/settings_search_flow.js  # v0.35.0: the ƒx search (filter, marks, ↑ / ↓ / Enter / Esc, "/") and Settings as a page (sections list, jumps, #settings, Esc / ← Back), the phone
+FYERS_HELPER_DATA=/tmp/fyers_test node tests/mt5acct_flow.js       # v0.36.0: PAPER | LIVE | MT5 (2FA), the MT5 account from fake_mt5 (--ctl 8769 --history): switcher, $, floors, a trade from MT5 on the panel / chart, the login dialog, SL / BE / TRAIL / ✕ from the entry line's bar reaching MT5, a pending order moved / cancelled, 403 from Paper, History, Account page, rules, the phone
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/mt5_flow.js           # v0.34.0: Settings › MT5 bridge (key with 2FA), a fake MT5 terminal connecting (fake_mt5.py), Find, an MT5 chart with every chart type + Volume + Pine, the broker's day, trading refused, MT5 off, the phone
 ```
 
@@ -79,3 +81,6 @@ that uses it to `tests/pine_compat.js`; `pine_compat_flow.js` then checks it on 
 http://localhost:8766 <bridge key>` (a key from Settings › MT5 bridge). Its broker clock is GMT+2 / GMT+3 with US summer
 time, it has no weekend candles, and its prices are the same every run. `mt5_flow.js` starts it by itself.
 The mock's fake Fyers stream sends only what Fyers would (`feed.fy_wanted()`): never MT5 symbols.
+v0.36.0: `fake_mt5.py` plays EA 1.10 (an MT5 Hedge account: positions, pending orders, deals with commission and swap, SL / TP
+on bid / ask, the app's MOD / CLOSE / CANCEL / OMOD with retcodes); `--old` plays 1.00, `--history` adds two closed trades
+10 days back, `--ctl PORT` serves a control API (see its docstring). Its tickets are unique per run, as MT5's.

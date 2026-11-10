@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.35.0)
+# Paper and live trading: how it works (v0.36.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -118,11 +118,11 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
 ## MT5 charts (your FundingPips terminal, through your own bridge EA)
 
 - **What it is:** your MT5 terminal's prices and candles in this app, so P&F, Renko, your Pine scripts and every other
-  chart type and indicator work on your broker's own prices. **Charts only for now:** paper trading and real orders on MT5
-  symbols come in the next step (in $, net of FundingPips' commission and swap).
+  chart type and indicator work on your broker's own prices. Your MT5 trades are on the **MT5 side** (next section); paper
+  accounts don't trade MT5 symbols.
 - **How it connects:** the **FTM Bridge** EA (`mt5/FTM_Bridge.mq5`, your own code; how it works: `mt5/README.md`) runs in
   MT5 on your laptop and calls out to the server about 4 times a second. Nothing connects in to your laptop and the server
-  never logs in to your broker account. **It places no orders.** FundingPips: MT5 and the EA only on your own laptop at
+  never logs in to your broker account. **It opens no new trades** (1.10 manages existing ones when you ask: next section). FundingPips: MT5 and the EA only on your own laptop at
   home, no VPS, no VPN (their support, 6 and 10 Nov 2026).
 - **Set it up (Settings › MT5 bridge):** download the EA, put it in MT5's `MQL5\Experts` folder and compile it in MetaEditor
   (F7); make a **bridge key** (your 2FA code; it's shown once, so copy it into the EA's **BridgeKey** input then); in MT5,
@@ -144,6 +144,45 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
   **The broker's clock** (Settings): *moves with US summer time* (most brokers, FundingPips) or *never changes*; it only
   decides where candles from before a clock change go. 45-minute candles are built from MT5's 15-minute ones.
 - **Measure and position drawings** show points on MT5 symbols (net $ comes with trading them).
+
+## MT5 accounts (the MT5 side of the switch at the top left)
+
+- **What it is:** each MT5 login whose terminal runs **FTM Bridge 1.10** is an account of its own here, kept apart from Fyers:
+  **PAPER | LIVE | MT5** at the top left (MT5 in purple). Going to MT5 asks for a fresh 2FA code. On the MT5 side the account
+  switcher lists only your MT5 accounts ("● 21182752 · DEMO · $5,012.50"; the server in its tip; ● connected, ○ not), and
+  Fyers never appears there. The admin only. Back to PAPER is one click; each browser or phone switches for itself.
+- **From MT5 itself:** its positions, pending orders, balance, equity, margin and history, straight from MT5 (about 4 times a
+  second). Trades you place in MT5 show at once ("Placed in MT5"); ones already open when the app first saw the account say
+  "Already open in MT5". The History page holds MT5's own closed trades (the last 90 days, the first time; marked MT5, with no R
+  as their stop isn't known) and every trade closed since, booked from MT5's own closing deal.
+- **Managing (moves the real trade at the broker):** drag the SL / TP lines, **BE**, **BE-T**, **TRAIL** and **✕** on the
+  entry line's bar (or the panel, the Trades page, the phone's sheet). The app sends the change to the EA, which makes it in
+  MT5; each trade's line on the panel says what MT5 has: "MT5 SL 2650.10 · TP 2680.00 ✓", "→ moving to …", "MT5 refused: …"
+  (retried after a pause), "closing in MT5…". Trailing never moves a stop back or below BE + commission. Pending orders
+  placed in MT5 can be moved (their SL / TP move with them) or cancelled here. **The first change on each account asks you
+  to type its login** (once).
+- **Pacing (FundingPips: no server spamming):** at most one change per trade every 2 seconds and 30 requests a minute per
+  account; a newer stop replaces one still waiting.
+- **If the app's stop is passed before MT5 has taken it** (MT5 refused the change, or it was on its way), the app closes the
+  trade at market, as the Live design does. Otherwise MT5's own SL / TP close the trade, on the bid (long) / ask (short).
+- **MT5 not connected:** nothing can be changed (the app says so at once). A close that couldn't reach MT5 within 20 s is
+  dropped, never sent late. Open trades keep their real SL / TP at the broker.
+- **Money: the account's currency ($), net.** Every figure (SL, TP, risk, P&L, R, BE) is net of the broker's commission and
+  the trade's swap. The commission per lot is **learned from MT5's real deals** per symbol (opening and closing deals
+  separately); until a symbol has traded, your typed default is used; a later deal that charged differently is flagged in
+  the Log and used from then on. The spread is paid through the bid / ask, as in MT5. Closed trades are exactly MT5's: profit,
+  commission, swap.
+- **FundingPips' limits** (under the account figures, on the Account page): the **daily floor** = the balance at the
+  broker's midnight (worked out from MT5's deals since; FundingPips: 03:30 IST in winter, 02:30 in US summer) minus the daily
+  % (5% on the 2-Step) of that balance - or of the starting size, if you choose; the **max floor** = the starting size you
+  type minus the max % (10%, static; or trailing). An equity under a floor is shown in red. The phase (evaluation / Master) is
+  kept for the news guard (later). FundingPips' dashboard stays the official figure.
+- **The Account page** of an MT5 account: MT5's figures, the EA and whether the app can change trades, the limits and their
+  form, the commission learned per symbol, trailing defaults, and **Read MT5's history again**.
+- **Not yet (next steps):** placing orders from the app (ticket, chart tool, PLACE), the no-hedging check, the news guard,
+  the EA trailing on its own when the link drops, the MT5 kill switch, the journal for MT5 accounts.
+- **The EA's switch:** its input **AllowTrading** = false makes it refuse every change (the app then only shows the account).
+  MT5's **Algo Trading** button must be on too. An EA older than 1.10: the account shows, its trades don't.
 
 ## Pages
 
@@ -656,7 +695,7 @@ When BE-T has already moved the stop to break-even, a Trail SL of N R behind the
 
 ## Not yet
 
-- MT5 trading through the bridge (stage b: orders, stops at the broker, $ net of FundingPips' commission and swap) and MT5 accounts in the journal (stage c).
+- MT5: placing orders from the app with sizing, the guards and the no-hedging check (b2); the EA trailing on its own when the link drops, the news guard, the MT5 kill switch (b3); MT5 accounts in the journal (stage c).
 - Footprint / delta (order flow): waiting for the order-flow check (Monday 2 Nov).
 - Comparing the charges the app counts with what Fyers actually deducted (live).
 - Prop-firm journals in the same journal (waiting for the owner's yes).
