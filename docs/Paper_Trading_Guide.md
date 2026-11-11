@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.37.3)
+# Paper and live trading: how it works (v0.37.4)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -602,8 +602,9 @@ Turn it on or off in Chart settings (⚙).
 - **Tooltips:** point at a label that has a tooltip to read it.
 - Scripts with their own pane can still draw on the candles (`force_overlay = true`), as on TradingView.
 - `overlay=true` scripts draw on the candles; others get their own pane.
-- **Supported:** plots (lines, step, circles, histogram, columns, area), hline, fill, bgcolor, barcolor, plotshape / plotchar / plotarrow, plotcandle, labels, lines, boxes, linefills, polylines, tables, inputs and request.security() for other timeframes.
+- **Supported:** plots (lines, step, circles, histogram, columns, area; the *with breaks* styles `plot.style_linebr`, `style_steplinebr` and `style_areabr` leave a gap wherever the value is na, as on TradingView, while the plain line joins over it; a bar whose plot colour is na is left out), hline, fill, bgcolor, barcolor, plotshape / plotchar / plotarrow, plotcandle, labels, lines, boxes, linefills, polylines, tables, inputs and request.security() for other timeframes.
 - Times are Indian time.
+- A plot whose value on the latest bar is na shows no price label on the scale (as on TradingView); e.g. the Chandelier Exit shows only the stop of the current direction.
 - **Bars of history** (⚙ › Inputs, per indicator): **Auto** (the default) starts on the latest 1,500 bars; when you scroll back past where the script's line starts, it calculates again (once you stop scrolling) over everything the chart has loaded, the same way the chart loads older candles. Or pick a fixed number, 500 to 50,000, and it always uses that many of the latest bars. Each new bar re-runs the script in full in the background so its values and drawings stay exact; on a very long history (a run over 1.5 s) that happens at most every 5 x its run time.
 - **Libraries (`import`).** `import TradingView/ta/<version> as ta` works out of the box: the app has its own implementation of that library's functions (Chandelier Exit, Supertrend, Volatility Stop, DEMA / TEMA / T3 / KAMA / FRAMA, Aroon, Stoch RSI, Ichimoku, KVO, Vortex, TRIX, PPO, PMO, Ulcer Index, volume delta and more), written from the standard formulas, not TradingView's code (`ht()` and `wpo()` aren't included). For any other library, open it on TradingView, copy its source (it starts with `library("Name")`), paste it into a new script in the Pine Editor and **Save**: `import anyone/Name/<version>` then finds it. If you save a library under the import's full name (for example *TradingView/ta*), that copy is used first, before the app's own. A library isn't drawn on the chart (ƒx marks it *library*, with no + Add). A script that imports a library you don't have says so, and what to do.
 - **Live updates** work like TradingView's. The full history runs once, then each price re-runs only the live bar. A new candle triggers one full re-run in the background, so drawings stay exact.

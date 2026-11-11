@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 11 Nov 2026 (v0.37.0: item 8 b2 / b3, placing on MT5 accounts, the kill switch, the news guard, the EA's own trailing: stage b complete). This is the one task list for the project.
+Updated 11 Nov 2026 (v0.37.4: Pine lines with breaks drawn as on TradingView). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -528,6 +528,7 @@ marked before relying on it.
 
 ## Done
 
+- [x] **v0.37.4** (11 Nov): Pine `plot.style_linebr` / `steplinebr` / `areabr` and a colour of na break the line instead of joining it with a diagonal (owner: Chandelier Exit on XAUUSD differed from TradingView); no price label while a plot's latest value is na.
 - [x] **v0.37.3** (11 Nov): MT5 commission known before a symbol's first trade (EA 1.22 reads MT5's commission rules; else a traded symbol of the same group; else the typed default; else refused, never $0); profit in another currency converted with the broker's own FX price and checked against MT5's profit sum; a symbol with only MT5's tick value can't be placed.
 - [x] **v0.37.2** (11 Nov): MT5 money fixed (owner: −$3.78 shown at a stop that was −$217.94 in MT5, XAUUSD 0.33 lots): a 1.00 move's value is cross-checked (MT5's profit on your position, OrderCalcProfit in EA 1.21, contract size) instead of MT5's tick value alone; shown on the ticket and the Account page.
 - [x] **v0.37.1** (11 Nov): MT5 accounts: no login to type before the first change or order (owner: "We don't need so much security"); the 2FA code to switch to MT5 stays. Fixed: PLACE as an account's first change showed "type its login" as a red line instead of asking.

@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 11 Nov 2026, version **0.37.3**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 11 Nov 2026, version **0.37.4**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -104,7 +104,20 @@ random walk before the second move. `multichart_flow.js`'s crosshair check faile
 `replay_flow.js` turns the mock's round-the-clock candles on (`/_mock/allday`) and off at the end; it sets the journal's
 automatic pictures off itself (other suites turn them on).
 `indicator_settings_flow.js`'s "at the start of a contract's history it stops asking" failed once in 2 runs on 1 Nov
-(v0.22.0; passed on re-run, 37/37). Same advice.
+(v0.22.0; passed on re-run, 37/37). Same advice. 11 Nov (v0.37.4): 2 fails in 4 runs (200 daily candles loaded, the
+"No older candles" note not yet up in its 4.5 s window); passed on v0.37.3's code too. Worth widening that window.
+
+## Pine plots: breaks (v0.37.4)
+
+The chart library (Lightweight Charts 5.2.1) joins a line or area across whitespace points, so `plot.style_linebr` /
+`steplinebr` / `areabr` and a per-bar colour of na were drawn bridged (owner, 11 Nov: everget's Chandelier Exit on XAUUSD
+showed diagonals between its stops; PineTS's values were right). `pineApply` (web/pine.js) now makes the bridging segment
+transparent (`PCLEAR`): a segment takes the colour of the point it starts from, so on a line / area the last point before a
+break gets `PCLEAR`; on a step line, transparent points inside the break carry the step (the first holds the old value, the
+last the new one, so no riser shows). `plot.style_line` still bridges (TradingView does). A plot whose latest value is na
+gets no price label (`lastValueVisible` / `priceLineVisible` false). `pine_compat_flow.js` reads `api.data()` back and
+fails on any visible segment across an na bar, on every chart type. If the library is updated, re-check this: a version
+that breaks lines at whitespace by itself would make the trick unnecessary, not wrong.
 
 ## MT5 accounts (v0.36.0 b1; v0.37.0 b2 / b3: stage b complete)
 
@@ -345,6 +358,9 @@ owner, his call whether to set a default.
   FundingPips (10 Nov): no hedging even in Hedge mode; his 21182752 is Phase 1 of the 2-Step; news: ForexFactory (owner).
 
 ## Next job
+
+**v0.37.4 (11 Nov):** the owner checks his Chandelier Exit on XAUUSD against TradingView after the update: no diagonals
+between the stops, only the current direction's stop on the price scale.
 
 **Roadmap 8 stage b is complete in v0.37.0** (b1 v0.36.0: the owner compiled 1.10 and it connected, 10 Nov 23:34). Next,
 the owner:

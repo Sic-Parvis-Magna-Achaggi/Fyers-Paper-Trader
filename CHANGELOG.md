@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.37.4 — 11 Nov 2026 — Pine: lines with breaks drawn with breaks (Chandelier Exit)
+
+Fixed
+- **`plot.style_linebr`, `style_steplinebr` and `style_areabr` now break where the value is na, as on TradingView.** The
+  chart joined the last value before an na stretch to the first one after it with a straight line (owner, XAUUSD on MT5:
+  everget's Chandelier Exit drew red and green diagonals between its Sell and Buy points). The script's values were always
+  right; only the drawing joined them. Fixed for every Pine script and every chart type.
+- **A plot coloured `na` on a bar** (e.g. `color = up ? color.orange : na`) now leaves that stretch out instead of joining
+  across it.
+- **No price label for a plot whose latest value is na** (TradingView's way): the Chandelier's Short Stop no longer showed
+  its old level on the price scale while the trade direction is long.
+
+Unchanged
+- `plot.style_line` (the default) still joins over na bars, as TradingView does.
+
+Tests
+- `tests/pine_compat.js`: the owner's Chandelier Exit script, and a script with line / step / area breaks, a colour of na
+  and a plain line. `pine_compat_flow.js` puts both on the chart on every chart type and reads back the series the chart
+  was given: no visible segment may cross an na bar (v0.37.3 failed this: 47-48 bridged gaps per stop line), `style_line`
+  must still join, no price label while the latest value is na. 271 checks pass; `charttypes_flow.js` (92),
+  `legend_flow.js` (12), `mt5_flow.js` (44), `indicator_settings_flow.js` (37; its known "start of history" timing check
+  failed 2 of 4 runs, also seen before this change), `ctype_test.js`, `routes_check.py`: pass.
+
 ## v0.37.3 — 11 Nov 2026 — MT5: commission from MT5 before the first trade; profit in other currencies checked
 
 Added

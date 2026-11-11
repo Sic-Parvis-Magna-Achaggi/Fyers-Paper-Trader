@@ -313,7 +313,8 @@ async function pineTick(r){
   else if(P.tickDirty) setTimeout(() => pineTick(r), 0);
 }
 
-const PLOT_KIND = st => /histogram|columns/.test(st) ? "hist" : /area/.test(st) ? "area" : st === "candle" || st === "bar" ? "candle" : "line";
+const PCLEAR = "rgba(0,0,0,0)";              // a segment that mustn't show (a break in a plot)
+const PLOT_KIND = st =>/histogram|columns/.test(st) ? "hist" : /area/.test(st) ? "area" : st === "candle" || st === "bar" ? "candle" : "line";
 function pineApply(r, res, sc){
   const P = r.pine, ind = res.indicator || {};
   const ov = !!ind.overlay;
@@ -374,7 +375,9 @@ function pineApply(r, res, sc){
     const st2 = ps.type ? String(ps.type) : st;
     const kind = PLOT_KIND(st2), color = pcol(premap(ps, o.color), PINE_BLUE), lw = Math.max(1, Math.min(4, +ps.width || +o.linewidth || 1));
     const SG = r.cfg.style || {};
-    const base = {title: "", visible: true, lastValueVisible: SG.lbl !== false && ps.lv !== false, priceLineVisible: !!ps.pl, priceLineColor: color, priceFormat: pf,
+    // na on the latest bar: no price label (TradingView's way; the chart would show the last value before the na)
+    const vN = vals[P.n - 1], nowOk = kind === "candle" || (vN != null && typeof vN === "number" && isFinite(vN) && cols[P.n - 1] !== null);
+    const base = {title: "", visible: true, lastValueVisible: SG.lbl !== false && ps.lv !== false && nowOk, priceLineVisible: !!ps.pl && nowOk, priceLineColor: color, priceFormat: pf,
       autoscaleInfoProvider: r.overlay ? undefined : orig => pineMerge(orig(), [...(P.hlv || []), ...(P.dys || [])])};
     let opt;
     if(kind === "line"){
@@ -388,7 +391,13 @@ function pineApply(r, res, sc){
     if(fo){ delete opt.autoscaleInfoProvider; opt.priceFormat = {type: "price", precision: tickDp, minMove: Math.pow(10, -tickDp)}; }
     const api = pineSeries(r, name, kind, opt, fo ? 0 : r.pane);
     keep.add(name); P.order.push({name, color, kind, legend: !/^(pane|none|data_window)$/.test(String(o.display || "all"))});
-    const out = [], gaps = /br$/.test(st2) || kind !== "line";
+    /* Breaks. The chart library joins a line across bars with no value (whitespace), so plot.style_linebr /
+       steplinebr / areabr and a colour of na would be bridged by a straight line (v0.37.4: the owner's Chandelier
+       Exit showed diagonals between its long and short stops). A line segment takes the colour of the point it
+       starts from, so the segment that would cross a break is made transparent: on a line or area, the last point
+       before the break; on a step line, transparent points inside the break carry the step (no riser, no bridge). */
+    const out = [], br = /br$/.test(st2), gaps = br || kind !== "line", step = kind === "line" && /step/.test(st2);
+    let lastPt = null, gap0 = -1;               // the last drawn point; where the break after it starts in out
     for(let i = 0; i < P.n; i++){
       const t = P.times[i], v = vals[i], c = cols[i];
       if(kind === "candle"){
@@ -397,9 +406,20 @@ function pineApply(r, res, sc){
         continue;
       }
       const bad = v == null || typeof v !== "number" || !isFinite(v);
-      if(bad || c === null){ if(gaps || c === null) out.push({time: t}); continue; }
+      if(bad || c === null){
+        if(gaps || c === null){ if((br || c === null) && lastPt && gap0 < 0) gap0 = out.length; out.push({time: t}); }
+        continue;
+      }
       const pt = {time: t, value: v};
       if(c !== undefined){ const cc = pcol(c, color); if(kind === "area") pt.lineColor = cc; else pt.color = cc; }
+      if(gap0 >= 0 && kind !== "hist"){
+        if(step){ const g1 = out.length - 1;
+          out[g1] = {time: out[g1].time, value: v, color: PCLEAR};
+          if(g1 > gap0) out[gap0] = {time: out[gap0].time, value: lastPt.value, color: PCLEAR}; }
+        else if(kind === "area") Object.assign(lastPt, {lineColor: PCLEAR, topColor: PCLEAR, bottomColor: PCLEAR});
+        else lastPt.color = PCLEAR;
+      }
+      gap0 = -1; lastPt = pt;
       out.push(pt);
     }
     try{ api.setData(out); }catch(e){ console.warn("pine plot", name, e); }

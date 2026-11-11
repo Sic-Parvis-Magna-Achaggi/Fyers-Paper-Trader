@@ -51,6 +51,63 @@ let br;
          `${t}: "${sc.name}" works (${r.n} bars, ${r.plots.length} plots${r.draw.length ? ", " + r.draw.join(" ") : ""}${r.stray.length ? ", OFF-BAR: " + r.stray.join(" ") : ""}${samePlots ? "" : ", missing " + b.plots.filter(k => !r.plots.includes(k)).join(" ")}${sameDraw ? "" : ", missing drawings " + b.draw.filter(k => !r.draw.includes(k)).join(" ")})`);
     }
   }
+  // v0.37.4: breaks drawn as breaks (plot.style_linebr etc., colour na), on every chart type: the scripts with
+  // `breaks` / `bridged` in tests/pine_compat.js go on the chart and the series the chart was given are read back
+  const BRK = SCRIPTS.filter(s => s.breaks);
+  await pg.evaluate(async list => {
+    await pineLoad(true); const cfg = [];
+    for(const [i, sc] of list.entries()){
+      const old = PINE.scripts.find(s => s.name === "C brk " + i);
+      const j = await api("/api/scripts/save", {body: {id: old ? old.id : null, name: "C brk " + i, source: sc.code}});
+      PINE.scripts = j.scripts; PINE.loaded = true; cfg.push({type: "pine", id: "brk" + i, scriptId: j.script.id, inputs: {}, overlay: true});
+    }
+    indSave(cfg); indBuild();
+  }, BRK);
+  for(const t of TYPES){
+    await pg.evaluate(t => { if(t === "pf") ctSave({pfMode: "fixed", pfBox: {CRUDEOIL: 2}, pfInd: "mid"}, false); ctSave({type: t}); }, t);
+    await pg.waitForFunction(n => DISP.length > 5 && INDS.length === n && INDS.every(r => r.pine && r.pine.res && !r.pine.err && !r.pine.running && r.pine.n), BRK.length, { timeout: 40000 }).catch(() => {});
+    await pg.waitForTimeout(600);
+    const res = await pg.evaluate(list => list.map((sc, k) => {
+      const r = INDS[k], P = r && r.pine; if(!P || !P.res) return {name: sc.name, err: (P && P.err) || "not run"};
+      const one = name => {
+        const s = P.series[name]; if(!s) return {name, missing: true};
+        const vals = P.vals[name], cols = P.cols[name], off = i => { const v = vals[i]; return v == null || typeof v !== "number" || !isFinite(v) || cols[i] === null; };
+        const area = s.kind === "area", d = s.api.data().filter(x => x.value != null), o = s.api.options();
+        const segCol = x => area ? (x.lineColor !== undefined ? x.lineColor : o.lineColor) : (x.color !== undefined ? x.color : o.color);
+        let shown = 0, crossing = 0, breaks = 0, bad = [];
+        for(let i = 1; i < P.n; i++) if(off(i) && !off(i - 1)) breaks++;
+        for(let j = 0; j + 1 < d.length; j++){
+          const a = d[j], b = d[j + 1], ia = P.idx.get(a.time), ib = P.idx.get(b.time);
+          const CLR = "rgba(0,0,0,0)", far = ib - ia > 1 || off(ia);
+          let across = false;
+          if(o.lineType === 1){         // a step: a's colour holds a's value to b, b's colour draws the riser at b
+            if(segCol(a) !== CLR){ shown++; if(far) across = true; }
+            if(segCol(b) !== CLR && b.value !== a.value && far) across = true;
+          } else {
+            if(segCol(a) === CLR) continue;
+            shown++; across = far || off(ib);
+          }
+          if(across){ crossing++; if(bad.length < 3) bad.push(ia + "->" + ib); }
+        }
+        const nowNa = off(P.n - 1);
+        return {name, shown, crossing, breaks, bad, nowNa, label: o.lastValueVisible};
+      };
+      return {name: sc.name, breaks: (sc.breaks || []).map(one), bridged: (sc.bridged || []).map(one)};
+    }), BRK);
+    for(const x of res){
+      if(x.err){ ok(false, `${t}: "${x.name}" on the chart: ${x.err}`); continue; }
+      for(const b of x.breaks){
+        if(b.missing){ ok(false, `${t}: "${x.name}": plot ${b.name} not drawn`); continue; }
+        ok(b.crossing === 0 && b.shown > 0 && (b.breaks > 0 || ["renko", "range", "lb", "pf"].includes(t)),
+           `${t}: ${b.name} breaks at na (${b.breaks} breaks, ${b.shown} segments shown, ${b.crossing} across a break${b.bad.length ? ": bars " + b.bad.join(" ") : ""})`);
+        ok(!b.nowNa || b.label === false, `${t}: ${b.name}: no price label while its latest value is na (${b.nowNa ? "na now" : "has a value now"})`);
+      }
+      for(const b of x.bridged) ok(!b.missing && (b.crossing > 0 || b.breaks === 0), `${t}: ${b.name} (plot.style_line) still joins over na, as on TradingView (${b.crossing} joins)`);
+    }
+    if(t === "candles"){ await pg.evaluate(() => chart.timeScale().setVisibleLogicalRange({from: DISP.length - 160, to: DISP.length + 5})); await pg.waitForTimeout(500); await pg.screenshot({ path: SHOT + "pine_breaks.png" }); }
+  }
+  await pg.evaluate(() => { indSave([]); indBuild(); ctSave({type: "candles"}); });
+  await pg.waitForTimeout(800);
   // P&F: indicators read the column middle by default, the last box when chosen
   const mid = await pg.evaluate(async () => {
     ctSave({type: "pf"}); await new Promise(r => setTimeout(r, 1500));   // (still the 2-point box)
