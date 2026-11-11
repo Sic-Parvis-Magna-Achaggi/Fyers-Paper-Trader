@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.41.0 — 12 Nov 2026 — MT5 day-end close by each symbol's own trading hours (EA 1.23)
+
+Changed
+- **The day-end close times each trade by its own symbol's trading hours** (owner: "Can't you get it from the MT5 symbols?"
+  — "ok"). FTM Bridge **1.23** sends each symbol's trading sessions with the symbol list (MT5's SymbolInfoSessionTrade: the
+  "Sessions" in its Specification window). The close is then X minutes before that symbol stops trading that day: gold
+  that stops at 23:57 broker time closes at 23:52 (5 min), an index with a break that stops at 23:55 at 23:50, Friday's
+  early closes from the Friday sessions, and a symbol that trades to the broker's midnight at the broker's midnight. A day a
+  symbol doesn't trade: nothing to close. New orders on it are refused from its close until the broker's new day.
+- Until EA 1.23 is installed (or for a symbol MT5 lists no sessions for), the broker's midnight, as in v0.40.0.
+- When a 1.23 terminal connects, the app asks for the symbol list again at once (not after 12 hours), so the sessions arrive.
+- Each trade's ⏱ shows its own close time ("⏱ closes at 03:22 IST"), also with "all trades" (then just shown, nothing to
+  choose); the panel's footer says "5 min before each symbol's trading ends (its sessions in MT5; 03:25 IST at the latest)".
+- The Log says which end it used: "… 5 min before its trading ends at 03:27 IST".
+
+**EA 1.23 must be compiled:** Settings › MT5 bridge › download FTM_Bridge.mq5, open it in MetaEditor, Compile (F7), and
+restart it on the chart (the corner says 1.23). It only adds the sessions to the symbol list; nothing else changes.
+
+Limit: holidays and one-off early closes count only if FundingPips changes the symbol's sessions in MT5 for them (brokers
+often don't); on such a day the usual schedule is used.
+
+Tests
+- `tests/mt5acct_test.py` (204): EA 1.23's list carries the sessions; on a Wednesday gold (to 23:57) closes at 23:52, the
+  index (last session to 23:55) at 23:50, forex (to midnight) at 23:55; at 23:53 gold's close has run and forex's not; Friday's
+  early close (23:45 -> 23:40); a day the symbol doesn't trade (nothing); no sessions (an older EA): the broker's midnight.
+- `tests/fake_mt5.py` plays EA 1.23 by default (sessions: gold Mon-Fri 01:01-23:57 / Fri 23:45, the index 01:05-23:15 and
+  23:30-23:55, forex to midnight / Fri 23:50).
+- `tests/mt5dayend_flow.js` (19): the footer with sessions known; a gold trade's ⏱ at gold's own close (23:57 − 7 min);
+  "all trades" showing each trade's time. `mt5_flow` (44, twice), `mt5acct_flow` (52), `mt5_test` (52), `routes_check.py`.
+- **Not tested on a real MT5:** EA 1.23 compiling, and what FundingPips' sessions really are (compare a trade's ⏱ with the
+  symbol's Specification window).
+
 ## v0.40.0 — 12 Nov 2026 — MT5: the day-end close
 
 Added

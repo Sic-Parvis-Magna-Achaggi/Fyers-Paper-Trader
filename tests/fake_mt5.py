@@ -106,18 +106,26 @@ def conv(n):
     return price("GBPUSD", time.time()) if CPROFIT.get(n) == "GBP" else 1.0
 
 
-def spec(n):
+# EA 1.23's trading sessions (seconds from the server's midnight, Sunday..Saturday): gold stops at 23:57 (Friday 23:45),
+# forex runs to midnight (Friday 23:50), the index has a break and stops at 23:55
+SESS = {"XAUUSD": [[]] + [[[3660, 86220]]] * 4 + [[[3660, 85500]]] + [[]],
+        "US30.cash": [[]] + [[[3900, 83700], [84600, 86100]]] * 5 + [[]]}
+FX_SESS = [[], [[300, 86400]], [[0, 86400]], [[0, 86400]], [[0, 86400]], [[0, 85800]], []]
+
+
+def spec(n, ver="1.23"):
     d, p, dg, _, _, sp, c = SYMS[n]
+    extra = {"ts": SESS.get(n, FX_SESS)} if ver >= "1.23" else {}
     return {"name": n, "desc": d, "path": p, "digits": dg, "point": 10 ** -dg, "tick_size": 10 ** -dg,
             "tick_value": round(10 ** -dg * c * conv(n), 10), "contract": c, "vmin": 0.01, "vstep": 0.01, "vmax": 100,
             "cprofit": CPROFIT.get(n, "USD"),
             "cmargin": "USD", "cbase": n[:3], "trade_mode": 4, "calc_mode": 0, "swap_mode": 1, "swap_long": -5.1,
-            "swap_short": 1.2, "stops_level": 0, "freeze_level": 0, "spread": sp, "visible": n != "US30.cash"}
+            "swap_short": 1.2, "stops_level": 0, "freeze_level": 0, "spread": sp, "visible": n != "US30.cash", **extra}
 
 
 class FakeEA:
     def __init__(self, url, key, login=21182752, server="FundingPips-SIM1", poll=0.25, fixed_offset=None, log=print,
-                 old=False, balance=5000.0, history=False, ver="1.22"):
+                 old=False, balance=5000.0, history=False, ver="1.23"):
         self.url, self.key, self.login, self.server = url.rstrip("/"), key, login, server
         self.poll, self.fixed, self.log, self.old = poll, fixed_offset, log, old
         self.subs, self.last = [], {}
@@ -510,7 +518,7 @@ class FakeEA:
                     part = rows[i:i + 20000]
                     self.post("/api/mt5/bars", {"id": hid, "sym": sym, "bars": part, "done": i + 20000 >= len(rows)})
             elif ln == "LIST":
-                self.post("/api/mt5/symbols", {"part": 0, "parts": 1, "symbols": [spec(n) for n in SYMS]})
+                self.post("/api/mt5/symbols", {"part": 0, "parts": 1, "symbols": [spec(n, self.ver) for n in SYMS]})
         return code
 
     def run(self):
@@ -618,7 +626,7 @@ if __name__ == "__main__":
     ap.add_argument("--ctl", type=int, default=0, help="a control API on this port (tests)")
     ap.add_argument("--history", action="store_true", help="two closed trades 10 days ago in MT5's history")
     ap.add_argument("--old", action="store_true", help="play EA 1.00 (prices only)")
-    ap.add_argument("--ver", default="1.22", help="the EA version it reports (1.10: manages, doesn't place)")
+    ap.add_argument("--ver", default="1.23", help="the EA version it reports (1.10: manages, doesn't place)")
     ap.add_argument("--balance", type=float, default=5000.0)
     a = ap.parse_args()
     ea = FakeEA(a.url, a.key, a.login, a.server, fixed_offset=None if a.offset == "auto" else int(a.offset), old=a.old,

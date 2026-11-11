@@ -81,7 +81,11 @@ function mtLimitsText(){
   const d = a.daily_floor != null ? `Daily floor <b>${rs(a.daily_floor)}</b> (${pct(r.daily_pct)} of ${r.daily_of === "size" ? "the starting size" : "the day's start"}; the ${base} at the broker's midnight, ${esc(M.midnight_ist || "")} IST: ${rs(M.day_base)})` : "Daily limit off";
   const x = a.max_floor != null ? `Max floor <b>${rs(a.max_floor)}</b> (${pct(r.max_pct)} of ${rs(r.size)}${r.max_mode === "trailing" ? ", trailing" : ""}${M.size_set ? "" : " - type your starting size on the Account page"})` : "Max limit off";
   const de = M.dayend;
-  const e = de ? ` · Day-end close <b>${esc(de.at_ist)} IST</b> (${(+de.min).toLocaleString("en-US")} min before the broker's day ends${de.when === "weekend" ? ", Fridays only" : ""}; ${de.scope === "all" ? "all trades" : "trades marked to close"})${de.when === "weekend" && !de.today ? " · not today" : de.active ? " · <b>done for today</b>: new orders wait for the broker's new day" : ""}` : "";
+  const mins = de ? (+de.min).toLocaleString("en-US") : "";
+  const e = !de ? "" : (de.sessions
+    ? ` · Day-end close <b>${mins} min before each symbol's trading ends</b> (its sessions in MT5; ${esc(de.at_ist)} IST at the latest${de.when === "weekend" ? ", Fridays only" : ""}; ${de.scope === "all" ? "all trades" : "trades marked to close"})`
+    : ` · Day-end close <b>${esc(de.at_ist)} IST</b> (${mins} min before the broker's day ends${de.when === "weekend" ? ", Fridays only" : ""}; ${de.scope === "all" ? "all trades" : "trades marked to close"}; EA 1.23 times it by each symbol's own trading hours)`)
+    + (de.when === "weekend" && !de.today ? " · not today" : "");
   return `${d} · ${x}${e}`;
 }
 function mtFoot(){
@@ -393,14 +397,23 @@ function mtDeChip(){
 function mtDeBtn(host, x){
   const d = mtM().dayend;
   let b = host.querySelector(":scope > .mtde");
-  if(!d || d.scope === "all"){ if(b) b.remove(); return; }
+  if(!d){ if(b) b.remove(); return; }
+  if(d.scope === "all"){                                  // every trade closes: its time, nothing to choose
+    if(b && b.tagName !== "SPAN"){ b.remove(); b = null; }
+    if(!b){ b = document.createElement("span"); b.className = "mtde on fixed"; host.append(b); }
+    const t = x.dayend_at === "not today" ? "⏱ no day-end close today" : `⏱ closes at ${x.dayend_at || d.at_ist} IST`;
+    if(b.textContent !== t) b.textContent = t;
+    b.title = "Every MT5 trade is closed at the day end (Account › rules)";
+    return;
+  }
+  if(b && b.tagName === "SPAN"){ b.remove(); b = null; }
   if(!b){ b = document.createElement("button"); b.type = "button"; b.className = "mtde"; host.append(b);
     b.onclick = async ev => { ev.stopPropagation(); ev.preventDefault();
       const j = await api("/api/mt5acct/dayend", {body: {id: b.dataset.id, on: b.dataset.on !== "1"}});
       if(j.paper) paperUpdate(j.paper); else if(!j.ok) toast(j.error || "Refused"); }; }
   const on = !!x.dayend;
   b.dataset.id = x.id; b.dataset.on = on ? "1" : "0"; b.classList.toggle("on", on);
-  const txt = on ? `⏱ closes at ${d.at_ist} IST` : "⏱ held over the day end";
+  const txt = on ? (x.dayend_at === "not today" ? "⏱ close at day end (not today)" : `⏱ closes at ${x.dayend_at || d.at_ist} IST`) : "⏱ held over the day end";
   if(b.textContent !== txt) b.textContent = txt;
   b.title = on ? "Closed at the day end. Click to hold it" : `Click to close it at the day end (${mtDeTip(d)})`;
 }

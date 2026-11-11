@@ -852,8 +852,37 @@ async def main():
         days[x["weekday"]] = x["today"]
     ok("only before the weekend: on the broker's Friday only", days.get("Fri") is True and not any(v for d, v in days.items() if d != "Fri"), days)
     e.set_rules({"dayend_when": "day"})
+    print("v0.40.1: each symbol's own end of trading (MT5's sessions, EA 1.23)")
+    sp = mt5.user("adm").specs
+    ok("EA 1.23's symbol list carries each symbol's sessions", (sp.get("XAUUSD") or {}).get("ts") and len(sp["XAUUSD"]["ts"]) == 7,
+       (sp.get("XAUUSD") or {}).get("ts"))
+    wed = None
+    for k in range(7):                                    # a Wednesday (broker's date) 10 minutes before its midnight
+        tt = clk.to_utc(mid + k * 86400 - 600)
+        if dt.datetime.fromtimestamp(clk.to_srv(tt), dt.timezone.utc).weekday() == 2:
+            wed = tt
+    d0 = int(clk.to_srv(wed)) // 86400 * 86400
+    gx, ix, fx = e.dayend_for("MT5:XAUUSD", wed), e.dayend_for("MT5:US30.cash", wed), e.dayend_for("MT5:EURUSD", wed)
+    ok("gold (trades to 23:57): closed 5 min before, 23:52 broker time", gx["src"] == "session" and abs(gx["at"] - clk.to_utc(d0 + 86220 - 300)) < 1, gx)
+    ok("the index (a break, last session to 23:55): 23:50", abs(ix["at"] - clk.to_utc(d0 + 86100 - 300)) < 1, ix)
+    ok("forex (to midnight): the broker's midnight − 5 min", abs(fx["at"] - clk.to_utc(d0 + 86400 - 300)) < 1, fx)
+    t2353 = clk.to_utc(d0 + 86000)
+    ok("at 23:53 broker time: gold's close has run (active), forex's not yet", e.dayend_for("MT5:XAUUSD", t2353)["active"]
+       and not e.dayend_for("MT5:EURUSD", t2353)["active"] and not gx["active"])
+    fri, sat = wed + 2 * 86400, wed + 3 * 86400
+    gf = e.dayend_for("MT5:XAUUSD", fri)
+    ok("Friday: gold's early close (23:45) -> 23:40", abs(gf["at"] - clk.to_utc(d0 + 2 * 86400 + 85500 - 300)) < 1, gf)
+    gs = e.dayend_for("MT5:XAUUSD", sat)
+    ok("a day the symbol doesn't trade: nothing to close", gs["today"] is False and not gs["active"], gs)
+    sp_x = sp["XAUUSD"].pop("ts")
+    ok("no sessions from MT5 (an older EA): the broker's midnight", e.dayend_for("MT5:XAUUSD", wed)["src"] == "midnight"
+       and abs(e.dayend_for("MT5:XAUUSD", wed)["at"] - clk.to_utc(d0 + 86400 - 300)) < 1)
+    sp["XAUUSD"]["ts"] = sp_x
+    ok("the snapshot says sessions are known", e.snapshot()["mt5"]["dayend"]["sessions"] is True)
     real_de = e.dayend
     active = lambda t=None: {**real_de(clk.to_utc(mid - 120)), "active": True, "today": True}
+    real_def = e.dayend_for
+    active_for = lambda sym, t=None: {**active(), "src": "test"}
     bid, ask = ea.quote("XAUUSD")
     tkA = ea.open("XAUUSD", 1, 0.01, sl=round(bid - 6, 2))
     otA = ea.pending("XAUUSD", "limit", 1, round(bid - 30, 2), 0.01, sl=round(bid - 35, 2))
@@ -862,6 +891,7 @@ async def main():
     ok("a new trade from MT5 takes the ticket's mark (Hold by default)", pA and pA.get("dayend") is False and e.pos_view(pA)["dayend"] is True,
        pA and (pA.get("dayend"), e.pos_view(pA)["dayend"]))
     e.dayend = active
+    e.dayend_for = active_for
     try:
         e.housekeeping()
         await calls(ea, 3)
@@ -907,6 +937,7 @@ async def main():
         ok("MT5 back before the broker's midnight: closed then", tkC not in ea.positions)
     finally:
         e.dayend = real_de
+        e.dayend_for = real_def
         e.set_rules({"dayend_on": False, "dayend_scope": "all"})
         e.set_ticket({"dayend": False})
     ok("switched off again: nothing", e.dayend() is None and e.snapshot()["mt5"]["dayend"] is None)

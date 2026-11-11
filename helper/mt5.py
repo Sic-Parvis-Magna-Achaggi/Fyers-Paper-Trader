@@ -45,7 +45,14 @@ MAX_BARS = 200_000        # per request
 RES_MIN = {"1": 1, "2": 2, "3": 3, "5": 5, "10": 10, "15": 15, "20": 20, "30": 30, "60": 60, "120": 120, "180": 180,
            "240": 240, "D": "D"}          # MT5's own timeframes; "45" is built here from M15
 NAME_RE = re.compile(r"^[A-Za-z0-9._#&+\-!$%@^~]{1,40}$")
-EA_LATEST = "1.22"
+EA_LATEST = "1.23"
+
+
+def _vt(v) -> tuple:
+    try:
+        return tuple(int(x) for x in str(v or "0").split(".")[:2])
+    except ValueError:
+        return (0,)
 STORE_V = "1"             # how MT5 candles are stored (times, daily stamps): a change drops them once, they load again
 _checked: set = set()     # candle folders whose MT5 candles have been checked against STORE_V
 
@@ -267,6 +274,18 @@ def _clean_spec(s: dict) -> dict | None:
     for k in ("cprofit", "cmargin", "cbase"):
         out[k] = str(s.get(k) or "")[:8]
     out["visible"] = bool(s.get("visible"))
+    ts = s.get("ts")                                  # EA 1.23: trading sessions, Sunday..Saturday, [[from, to] s from midnight]
+    if isinstance(ts, list) and len(ts) == 7:
+        clean = []
+        for day in ts:
+            d = []
+            for x in (day if isinstance(day, list) else [])[:10]:
+                if isinstance(x, list) and len(x) == 2:
+                    a, b = int(_f(x[0])), int(_f(x[1]))
+                    if 0 <= a < b <= 86400:
+                        d.append([a, b])
+            clean.append(d)
+        out["ts"] = clean
     return out
 
 
@@ -280,7 +299,7 @@ def row_from(spec: dict, clock: Clock | None = None) -> dict:
             "mult": spec.get("contract") or 1, "tick": tick, "exp": 0, "k": None, "o": "", "f": "CFD", "frz": "",
             "on": spec.get("trade_mode", 4) != 0, "sess": f"{hhmm}-{hhmm}", "x": "MT5", "g": "MT5", "it": None,
             "mt5": {k: spec.get(k) for k in ("digits", "point", "tick_value", "contract", "vmin", "vstep", "vmax", "cprofit",
-                                             "cmargin", "cbase", "calc_mode", "swap_long", "swap_short", "path", "spread")}}
+                                             "cmargin", "cbase", "calc_mode", "swap_long", "swap_short", "path", "spread", "ts")}}
 
 
 def row(uid: str | None, ticker: str) -> dict | None:
@@ -420,7 +439,9 @@ def sync(uid: str, body: dict, ip: str, feed) -> str:
     if pb is b:
         names = {s[len(PREFIX):] for s in (feed.wanted() if feed else []) if s.startswith(PREFIX)} | set(own)
         lines.append("SUB " + ",".join(sorted(n for n in names if NAME_RE.match(n))))
-        if (not u.specs or time.time() - u.list_at > LIST_EVERY) and time.time() - b.list_asked > 120:
+        stale = not u.specs or time.time() - u.list_at > LIST_EVERY or (
+            _vt(b.ea) >= (1, 23) and not any("ts" in x for x in u.specs.values()))   # (a new 1.23: its sessions now)
+        if stale and time.time() - b.list_asked > 120:
             b.list_asked = time.time()
             lines.append("LIST")
         while b.q:

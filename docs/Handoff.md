@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 12 Nov 2026, version **0.40.0** (the MT5 day-end close, 8 b4; 0.39.1: each MT5 trade's candles kept for its replay, 8 c1b; 0.39.0: MT5 trades in the journal, 8 c1). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 12 Nov 2026, version **0.41.0** (the MT5 day-end close by each symbol's sessions, EA 1.23; 0.40.0: the MT5 day-end close, 8 b4; 0.39.1: each MT5 trade's candles kept for its replay, 8 c1b; 0.39.0: MT5 trades in the journal, 8 c1). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -380,6 +380,13 @@ line of "FundingPips' day's starting balance".
   ticket's Entry/Product row), `mtDeChip` (`#tDayEnd` before `#tPlace`, via the toolOverlay wrap), `mtDeBtn` (`.mtde` on
   `#posList` / `#ordList` / `#pgPos`), `ticketBody` wrap (sends `dayend`), the phone: `mTicketBuild` / `mPosSheet` /
   `mOrdSheet` wraps (`.mtde-row`). journal.js: the not-blocking pill is short ("2% · off").
+- **v0.41.0, sessions (EA 1.23):** `Sessions(s)` in the EA -> each symbol's `ts` in the LIST body (7 lists, Sunday first,
+  [from, to] s from the server's midnight; `to` may be 86400). `mt5._clean_spec` keeps `ts`; `row_from` puts it in `row.mt5`;
+  `sync` asks LIST again when a >= 1.23 bridge's specs have no `ts` (`_vt`). `Mt5Engine._sessions(sym)` (the user's specs),
+  `dayend_for(sym, t)`: the day's last session end − min (src "session"), to-midnight -> the broker's midnight, no session
+  that weekday -> today False, no `ts` -> "midnight"; `_dayend_run` / `plan` use it per symbol; views carry `dayend_at`
+  (IST or "not today"); snapshot `dayend.sessions`. Page: footer per-symbol wording; `mtDeBtn` shows `dayend_at`, a
+  non-clickable `span.mtde.fixed` with scope "all". Fake: `SESS` / `FX_SESS`, default `--ver 1.23`.
 - **Known, not from this release:** on the Live side with an MT5 bridge connected, the feed pill ("Live MT5") plus the data
   budget pill can push the clock onto a second line at 1500 px; `live_flow.js`'s header check then fails when the journal's
   lockout pill isn't showing (it passes when it is). Seen in v0.39.0's runs on data shared with the MT5 tests.
@@ -484,6 +491,9 @@ line of "FundingPips' day's starting balance".
   FundingPips (10 Nov): no hedging even in Hedge mode; his 21182752 is Phase 1 of the 2-Step; news: ForexFactory (owner).
 
 ## Next job
+
+**v0.41.0 (12 Nov):** the owner compiles FTM Bridge 1.23 and restarts it; within ~2 minutes each MT5 trade's ⏱ shows its
+symbol's own close time; check one against the symbol's Specification › Sessions in MT5.
 
 **v0.40.0 (12 Nov):** the owner sets the day-end close on his MT5 account (Account › rules) and watches the first one at
 03:25 IST (or 02:25 in US summer time): the trades it covers close with reason "day end"; the Log says so.

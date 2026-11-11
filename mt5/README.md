@@ -113,6 +113,9 @@ downloaded EA.
 - **1.21** (11 Nov 2026): also sends each symbol's profit for 1 lot over a 1.00 price move, worked out by MT5 itself
   (OrderCalcProfit), so the app's dollar figures use MT5's own sum. Nothing else changes; optional (the app checks the
   figure other ways too).
+- **1.23** (12 Nov 2026): the symbol list also carries each symbol's trading sessions (MT5's SymbolInfoSessionTrade: the
+  "Sessions" in its Specification window), so the app's day-end close (set in the app, off unless I turn it on) closes
+  each trade a few minutes before its own symbol stops trading for the day. Read-only, nothing else changes.
 - **1.22** (11 Nov 2026): also sends each symbol's commission rules, the ones in its Specification window ("Commissions"),
   read with MT5's SymbolInfoCommissions (added to MT5 in July 2026), once a minute, so the app knows the commission before
   my first trade on a symbol. If MetaEditor doesn't know SymbolInfoCommissions, update MT5, or delete the line

@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 12 Nov 2026 (v0.40.0: the MT5 day-end close, item 8 b4). This is the one task list for the project.
+Updated 12 Nov 2026 (v0.41.0: the MT5 day-end close by each symbol's trading hours, EA 1.23, item 8 b4). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -317,6 +317,10 @@ fallback"):** item 8 is built now, stage by stage. Stage a shipped in **v0.34.0*
        ⏱ on each trade (panel, Trades page, the phone's sheets) changes its own. MT5 off at that time: a warning, it closes
        when MT5 is back before the broker's midnight. Not blocked by the news guard (like the kill switch; a warning if inside
        the window).
+       - [x] **By each symbol's own trading hours** *(v0.41.0, EA 1.23)* (owner, 12 Nov 01:04: "Can't you get it from the MT5
+         symbols?" - "ok"): the EA sends each symbol's sessions (SymbolInfoSessionTrade); the close is X min before that
+         symbol stops trading that day (Friday's early closes included); the broker's midnight when MT5 lists none or the EA
+         is older. Holidays only if the broker updates the sessions.
      - [ ] (d) **Copy trades between MT5 accounts, later** (owner, 10 Nov: "in the roadmap, we can also have copy trades for
        a later stage"). FundingPips allows copying between your own FundingPips accounts (and out to an external
        account), not into one from outside; and no hedging across accounts, so copies only ever go the same way. Design
@@ -612,6 +616,8 @@ marked before relying on it.
 
 ## Done
 
+- [x] **v0.41.0** (12 Nov): the MT5 day-end close by each symbol's own trading hours (EA 1.23 sends MT5's sessions; item 8 b4);
+  each trade's ⏱ shows its own time.
 - [x] **v0.40.0** (12 Nov): the MT5 day-end close (item 8 b4): X minutes before the broker's day ends (default 5), every day or
   only before the weekend, all trades or only marked ones (the ticket's At the day end / the tool's DAY END / HOLD, ⏱ per trade);
   off at first.

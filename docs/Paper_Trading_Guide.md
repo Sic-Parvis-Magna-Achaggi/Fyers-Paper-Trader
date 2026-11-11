@@ -202,16 +202,18 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
   can't reach MT5 within 10 s is dropped (never placed late); one is never sent twice.
 - **No hedging (FundingPips):** an order opposite an open trade or pending order on the same symbol is refused, in this
   account and in your other MT5 accounts. The same side, or another symbol, is fine.
-- **The day-end close** (v0.40.0; Account › rules, off at first): **X minutes before the broker's day ends** (its midnight:
-  FundingPips 03:30 IST in winter, 02:30 in US summer time; 5 minutes = 03:25 / 02:25 IST), **every day** or **only before
+- **The day-end close** (v0.40.0; Account › rules, off at first): **X minutes before the symbol stops trading for the day**
+  (v0.41.0, EA 1.23: from each symbol's trading sessions in MT5, its Specification window: gold that stops at 23:57 broker
+  time closes at 23:52; Friday's early closes too; a symbol trading to the broker's midnight, or with an older EA, at the
+  broker's midnight: FundingPips 03:30 IST in winter, 02:30 in US summer time, so 5 minutes = 03:25 / 02:25 IST; holidays
+  only if the broker changes the sessions for them), **every day** or **only before
   the weekend** (the broker's Friday), for **all trades** or **only trades marked to close**. At that time those trades are
   closed at market in MT5 (reason "day end"), their pending orders cancelled, and new orders refused until the broker's new
   day. **Marking:** the ticket's **At the day end: Close it / Hold**, the chart tool's **DAY END / HOLD** next to PLACE (the
   choice stays the default; trades placed in MT5 itself take it too), and **⏱** on each trade or pending order (the panel,
   the Trades page; on the phone, its sheet) to change one. The panel's footer says when it runs. MT5 off at that time: a
   warning, and the trades are closed when it's back before the broker's midnight. It isn't stopped by the news guard
-  (like KILL; a warning if inside the window). A symbol whose own session ends earlier than the broker's midnight (some
-  indices, Friday's early closes) needs more minutes.
+  (like KILL; a warning if inside the window). Each trade's **⏱** shows its own close time.
 - **KILL (MT5 side, top bar; the Account page; the phone):** closes every position and cancels every order of that MT5 account
   at the broker and pauses new orders until **Resume** (a 2FA code).
 - **The news guard (ForexFactory):** the server reads ForexFactory's calendar every hour. High-impact events on the symbol's

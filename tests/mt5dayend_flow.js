@@ -58,7 +58,8 @@ const toMt5 = async pg => {
   ok(/^0[23]:2[23]$/.test(de.at_ist), `the time: 7 min before the broker's midnight = ${de.at_ist} IST`);
   await pg.evaluate(() => pgShow("chart")); await pg.waitForTimeout(500);
   const foot = await pg.textContent("#mtFoot");
-  ok(new RegExp(`Day-end close ${de.at_ist} IST \\(7 min before the broker's day ends; trades marked to close\\)`).test(foot), `the panel's footer: ${(/Day-end close[^·]*/.exec(foot) || [""])[0]}`);
+  ok(new RegExp(`Day-end close 7 min before each symbol's trading ends \\(its sessions in MT5; ${de.at_ist} IST at the latest; trades marked to close\\)`).test(foot) && de.sessions,
+     `the panel's footer (EA 1.23's sessions known): ${(/Day-end close[^·]*/.exec(foot) || [""])[0]}`);
 
   // ---- the ticket and the chart tool (marked trades)
   await pg.evaluate(async () => { await openBySymbol("MT5:XAUUSD"); });
@@ -88,7 +89,10 @@ const toMt5 = async pg => {
   await pg.waitForFunction(t => P.snap.positions.some(p => p.ticket === t), tk, { timeout: 15000 });
   const pid = "P" + tk;
   await pg.waitForSelector(`#posList .pos[data-id="${pid}"] .mtde`);
-  ok(/closes at/.test(await pg.textContent(`#posList .pos[data-id="${pid}"] .mtde`)), "a trade placed in MT5 takes the default: ⏱ closes at the day end");
+  const gt = await pg.textContent(`#posList .pos[data-id="${pid}"] .mtde`), gp = await pg.evaluate(id => P.snap.positions.find(p => p.id === id).dayend_at, pid);
+  const [mh, mm] = de.at_ist.split(":").map(Number), exp = new Date(Date.UTC(2000, 0, 1, mh, mm - 3)).toISOString().slice(11, 16);   // gold stops at 23:57: 3 min before the midnight
+  ok(/closes at/.test(gt) && (gp === exp || gp === "not today") && (gp === "not today" || gt.includes(exp)),
+     `a trade placed in MT5 takes the default: ${gt} (gold's own end, 23:57 broker time, − 7 min = ${exp})`);
   await pg.click(`#posList .pos[data-id="${pid}"] .mtde`);
   await pg.waitForFunction(id => P.snap.positions.find(p => p.id === id).dayend === false, pid, { timeout: 8000 });
   ok(/held over/.test(await pg.textContent(`#posList .pos[data-id="${pid}"] .mtde`)), "⏱ clicked: held over the day end (at the server)");
@@ -102,7 +106,8 @@ const toMt5 = async pg => {
   await pg.waitForTimeout(800);
   await pg.click("#bBuy"); await pg.waitForSelector("#tDayEnd");
   ok(await pg.evaluate(() => $("#mtDeSel").disabled && $("#mtDeSel").value === "1" && /DAY END/.test($("#tDayEnd").textContent)
-     && !document.querySelector("#posList .mtde")), "all trades: the switch fixed on Close, DAY END on the tool, no ⏱ per trade");
+     && !document.querySelector("#posList button.mtde") && document.querySelector("#posList span.mtde.fixed")),
+     "all trades: the switch fixed on Close, DAY END on the tool, each trade shows its time (nothing to click)");
   await pg.evaluate(() => disarm());
   await pg.evaluate(() => api("/api/paper/rules", {body: {dayend_scope: "marked"}}).then(j => j.paper && paperUpdate(j.paper)));
 

@@ -50,7 +50,7 @@ FYERS_HELPER_DATA=/tmp/fyers_test node tests/settings_search_flow.js  # v0.35.0:
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/mt5acct_flow.js       # v0.36.0 / v0.37.0 (~2 min): placing from the chart tool (MT5 PLACE), hedging refused, the news guard (a ForexFactory file), KILL / Resume; PAPER | LIVE | MT5 (2FA), the MT5 account from fake_mt5 (--ctl 8769 --history): switcher, $, floors, a trade from MT5 on the panel / chart, the login dialog, SL / BE / TRAIL / ✕ from the entry line's bar reaching MT5, a pending order moved / cancelled, 403 from Paper, History, Account page, rules, the phone
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/chartalerts_flow.js    # v0.38.0 (~3 min): the alert dialog (Alt+A, 🔔, right-click, drawings, ƒx), a price alert firing (pop-up, line, triggered), dragging its line, Pine / multi-condition / webhook alerts, the Alerts page, a watchlist alert, the service worker, the phone
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/mt5journal_flow.js    # v0.39.0 / v0.39.1 (~4 min): MT5 trades in the Journal (fake_mt5 --history --ctl 8769): a trade from MT5 arriving, $ only with the MT5 badge, ₹ Fyers | $ MT5, Today, Insights / Review / Gemini, Settings › MT5 accounts (session day, the lockouts' switch with 2FA: refused only when on), CSV, the replay's data, v0.39.1: the trade's candles kept and its replay with MT5 off (also Fyers logged out), ▶ Play, the phone
-FYERS_HELPER_DATA=/tmp/fyers_test node tests/mt5dayend_flow.js     # v0.40.0 (~1 min): the MT5 day-end close's rules, the footer, the ticket's At the day end and the tool's DAY END / HOLD, a trade from MT5 taking the default, ⏱ per trade, "all trades", the phone (the close itself: mt5acct_test.py)
+FYERS_HELPER_DATA=/tmp/fyers_test node tests/mt5dayend_flow.js     # v0.40.0 / v0.41.0 (~1 min): the MT5 day-end close's rules (and each symbol's own close time from EA 1.23's sessions), the footer, the ticket's At the day end and the tool's DAY END / HOLD, a trade from MT5 taking the default, ⏱ per trade, "all trades", the phone (the close itself: mt5acct_test.py)
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/mt5_flow.js           # v0.34.0: Settings › MT5 bridge (key with 2FA), a fake MT5 terminal connecting (fake_mt5.py), Find, an MT5 chart with every chart type + Volume + Pine, the broker's day, trading refused, MT5 off, the phone
 ```
 
@@ -88,7 +88,7 @@ The mock's fake Fyers stream sends only what Fyers would (`feed.fy_wanted()`): n
 v0.36.0: `fake_mt5.py` plays EA 1.10 (an MT5 Hedge account: positions, pending orders, deals with commission and swap, SL / TP
 on bid / ask, the app's MOD / CLOSE / CANCEL / OMOD with retcodes); `--old` plays 1.00, `--history` adds two closed trades
 10 days back, `--ctl PORT` serves a control API (see its docstring). Its tickets are unique per run, as MT5's.
-v0.37.0: it plays EA 1.20 (OPEN, margin per symbol, TRAIL and the offline trailing; `--ver 1.10` plays the older one; control
+v0.41.0: it plays EA 1.23 by default (each symbol's trading sessions in the symbol list). v0.37.0: it plays EA 1.20 (OPEN, margin per symbol, TRAIL and the offline trailing; `--ver 1.10` plays the older one; control
 `/offline` cuts the link). `mock_server.py` sets `FTM_NEWS_URL` to `file://<data folder>/ff_test.json`, so the news guard
 reads a file the test writes, never the real ForexFactory.
 

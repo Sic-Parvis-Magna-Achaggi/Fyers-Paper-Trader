@@ -35,6 +35,10 @@
 //| Each request has a tag; it is carried out once, and its result is |
 //| sent back with the next call (a tag seen again is not repeated).  |
 //|                                                                   |
+//| Version 1.23: the symbol list also carries each symbol's trading  |
+//| sessions (SymbolInfoSessionTrade, as in its Specification window) |
+//| so the app's day-end close can close each trade a few minutes     |
+//| before its own symbol stops trading. Nothing else changes.        |
 //| Version 1.22: also sends each symbol's commission rules, as in    |
 //| its Specification window (SymbolInfoCommissions, MT5 July 2026),  |
 //| once a minute, so the app knows the commission before the first   |
@@ -55,8 +59,8 @@
 //| Version 1.00 (stage a): prices and candles only.                  |
 //+------------------------------------------------------------------+
 #property copyright   "Ashwin Kumar"
-#property version     "1.22"
-#property description "FTM Bridge 1.22: sends this terminal's prices, candles, symbol list and account to your Fyers Trade Manager,"
+#property version     "1.23"
+#property description "FTM Bridge 1.23: sends this terminal's prices, candles, symbol list and account to your Fyers Trade Manager,"
 #property description "places the orders you place in the app, manages your trades when you ask (SL / TP, close, cancel), and"
 #property description "trails their stops by itself if it can't reach the app. It opens nothing on its own."
 #property description "Calls out only (WebRequest)."
@@ -71,7 +75,7 @@ input bool   AllowTrading   = true;                          // Let the app mana
 input int    SlippagePoints = 30;                            // Market orders: most slippage accepted (points)
 input int    OfflineTrailSec = 20;                           // Can't reach the app this long: trail stops here (0 = never)
 
-#define EA_VER        "1.22"
+#define EA_VER        "1.23"
 #define FTM_COMMISSIONS          // 1.22: send each symbol's commission rules (needs MT5 from July 2026; delete this line if it won't compile)
 #define MAGIC         20261110  // the magic number on the app's closing deals
 #define DEALS_PER_CALL 200      // deals per call (the app is told when there are more)
@@ -647,6 +651,29 @@ void RemovePending(const int j)
 //+------------------------------------------------------------------+
 //| LIST: every symbol this broker offers, with its settings          |
 //+------------------------------------------------------------------+
+//--- 1.23: a symbol's trading sessions, Sunday (0) to Saturday (6): [[from, to], ...] in seconds from the server's midnight
+string Sessions(const string s)
+  {
+   string out = "[";
+   for(int d = 0; d < 7; d++)
+     {
+      if(d > 0)
+         out += ",";
+      out += "[";
+      datetime f = 0, t = 0;
+      for(uint k = 0; k < 10; k++)
+        {
+         if(!SymbolInfoSessionTrade(s, (ENUM_DAY_OF_WEEK)d, k, f, t))
+            break;
+         if(k > 0)
+            out += ",";
+         out += "[" + IntegerToString((long)f % 86400) + "," + IntegerToString((long)t == 86400 ? 86400 : (long)t % 86400) + "]";
+        }
+      out += "]";
+     }
+   return out + "]";
+  }
+
 void SendList()
   {
    int total = SymbolsTotal(false);
@@ -688,6 +715,7 @@ void SendList()
          b += ",\"freeze_level\":" + IntegerToString(SymbolInfoInteger(s, SYMBOL_TRADE_FREEZE_LEVEL));
          b += ",\"spread\":" + IntegerToString(SymbolInfoInteger(s, SYMBOL_SPREAD));
          b += ",\"visible\":" + Jb(SymbolInfoInteger(s, SYMBOL_VISIBLE) != 0);
+         b += ",\"ts\":" + Sessions(s);                                      // 1.23: its trading sessions
          b += "}";
         }
       string body = "{\"part\":" + IntegerToString(part) + ",\"parts\":" + IntegerToString(parts) + ",\"symbols\":[" + b + "]}";
