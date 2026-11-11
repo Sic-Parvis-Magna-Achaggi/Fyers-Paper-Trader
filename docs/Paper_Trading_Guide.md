@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.37.2)
+# Paper and live trading: how it works (v0.37.3)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -168,15 +168,20 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
 - **MT5 not connected:** nothing can be changed (the app says so at once). A close that couldn't reach MT5 within 20 s is
   dropped, never sent late. Open trades keep their real SL / TP at the broker.
 - **Money: the account's currency ($), net.** Every figure (SL, TP, risk, P&L, R, BE) is net of the broker's commission and
-  the trade's swap. The commission per lot is **learned from MT5's real deals** per symbol (opening and closing deals
-  separately); until a symbol has traded, your typed default is used; a later deal that charged differently is flagged in
-  the Log and used from then on. The spread is paid through the bid / ask, as in MT5. Closed trades are exactly MT5's: profit,
+  the trade's swap. **The commission per lot** (opening and closing deals separately), in order: learned from MT5's real
+  deals on that symbol; before its first trade, the symbol's commission rules from MT5 (EA 1.22 reads its Specification
+  window: FundingPips' XAUUSD "5 USD per lot" on opening deals); else as a symbol of the same group that has traded (Metals,
+  Forex…); else your typed default (Account page; empty = not typed, 0 = none). **A symbol with none of these can't be
+  placed** (v0.37.3: before, $0 was counted). A later deal that charged differently is flagged in the Log and used from then on. The spread is paid through the bid / ask, as in MT5. Closed trades are exactly MT5's: profit,
   commission, swap.
 - **What a price move is worth** (v0.37.2): the ticket's preview says it, e.g. "1 lot: $100 per 1.00 move" on XAUUSD
-  (100 oz), and where it comes from. In order: MT5's own profit on an open position of that symbol; MT5's own profit sum
-  (EA 1.21); tick size × contract size, when the symbol's profit currency is the account's; MT5's tick value last (on
-  11 Nov it was 100× too small on the owner's XAUUSD, so the app showed −$3.78 at a stop that was −$217.94 in MT5). The
-  Account page lists the figure per symbol next to what MT5's tick value says; a mismatch is flagged in the Log.
+  (100 oz), with the commission, and where they come from. In order: MT5's own profit on an open position of that symbol;
+  MT5's own profit sum (EA 1.21), checked against contract size × the profit currency in $ (v0.37.3: for a symbol whose
+  profit is in another currency, e.g. EURGBP in pounds, the broker's own GBPUSD price, as LiveTrader does; if the two
+  disagree, the bigger one is used: smaller sizes); contract size × that rate alone. MT5's tick value alone isn't trusted
+  (FundingPips' XAUUSD lists 0.01 for a 100 oz lot, so on 11 Nov the app showed −$3.78 at a stop that was −$217.94 in MT5):
+  **a symbol with nothing else can't be placed**. The Account page lists the figure per symbol next to what MT5's tick
+  value says; a mismatch is flagged in the Log.
 - **FundingPips' limits** (under the account figures, on the Account page): the **daily floor** = the balance at the
   broker's midnight (worked out from MT5's deals since; FundingPips: 03:30 IST in winter, 02:30 in US summer) minus the daily
   % (5% on the 2-Step) of that balance - or of the starting size, if you choose; the **max floor** = the starting size you

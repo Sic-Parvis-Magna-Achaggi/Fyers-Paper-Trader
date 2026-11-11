@@ -176,11 +176,18 @@ def mt5_vol(row: dict, qty: float) -> float:
     return qty * float(row.get("vstep") or (row.get("mt5") or {}).get("vstep") or 0.01)
 
 
+def mt5_comm_amt(row: dict, volume: float, leg: str = "in") -> float:
+    """The commission in money for `volume` lots on one deal: per lot x volume, plus a per-deal amount (MT5's rules)."""
+    cm = row.get("comm") or {}
+    if volume <= 0:
+        return 0.0
+    return float(cm.get(leg) or 0.0) * volume + float(cm.get(leg + "_fix") or 0.0)
+
+
 def mt5_comm(row: dict, qty: float, leg: str = "in") -> dict:
     """The broker's commission for `qty` volume steps on an opening ("in") or closing ("out") deal, as a charges dict."""
-    rate = float((row.get("comm") or {}).get(leg) or 0.0)
     c = {k: 0.0 for k in FIELDS}
-    c["commission"] = round(rate * mt5_vol(row, qty), 4)
+    c["commission"] = round(mt5_comm_amt(row, mt5_vol(row, qty), leg), 4)
     c["swap"] = 0.0
     c["total"] = round(c["commission"], 2)
     c["value"] = 0.0

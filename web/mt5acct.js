@@ -173,7 +173,7 @@ const MT5_RULES = [
   ["news_on", "News guard (ForexFactory)", "High-impact events on the symbol's currencies", [[true, "on"], [false, "off"]]],
   ["news_min", "Master: minutes either side", "FundingPips: 5"],
   ["news_warn_min", "Warn this many minutes before", ""],
-  ["comm_default", "Commission until MT5 shows it", "Per lot, on each deal (opening and closing). MT5's own deals replace it per symbol"],
+  ["comm_default", "Commission if MT5 doesn't say", "Per lot, on each deal. Used only for a symbol that hasn't traded here and whose commission MT5 doesn't list (EA 1.22 reads it from the symbol's specification). Empty = not typed: such a symbol can't be placed. 0 = no commission"],
   ["be_buffer_ticks", "BE buffer (ticks)", "Extra ticks beyond break-even + costs when a stop moves to BE"],
   ["risk_cap_pct", "Risk cap per trade %", "Net risk at the stop, % of balance: lots are cut to fit; 0 = off"],
   ["max_open_risk_pct", "Max open risk %", "Everything open at its stop, % of balance; 0 = off"],
@@ -184,7 +184,7 @@ const MT5_RULES = [
 function mtRulesHTML(r){
   return MT5_RULES.map(([k, label, help, opts]) => `<div class="rf"><label>${label}${k === "size" || k === "comm_default" ? ` (${CUR().trim()})` : ""}</label>` +
     (opts ? `<select data-k="${k}" ${typeof opts[0][0] === "string" ? 'data-t="s"' : typeof opts[0][0] === "boolean" ? 'data-t="b"' : ""}>${opts.map(([v, n]) => `<option value="${v}" ${String(r[k]) === String(v) ? "selected" : ""}>${n}</option>`).join("")}</select>`
-          : `<input data-k="${k}" value="${esc(r[k])}" inputmode="decimal">`) + (help ? `<div class="help">${help}</div>` : "") + `</div>`).join("");
+          : `<input data-k="${k}" value="${r[k] == null ? "" : esc(r[k])}" inputmode="decimal"${k === "comm_default" ? ' placeholder="not typed"' : ""}>`) + (help ? `<div class="help">${help}</div>` : "") + `</div>`).join("");
 }
 function mtAccountPage(){
   const box = pgq("#pg_account"); if(!box || !P.snap) return;
@@ -229,10 +229,13 @@ function mtAccountPage(){
         ${M.first_deposit && !M.size_set ? `<p class="help">Starting size: ${pc(M.first_deposit)}, the first deposit in MT5's history - type yours if it's different.</p>` : ""}</div>
       <div>
         <div class="pg-card"><h3 class="pg-h3" style="margin-top:0">Commission, learned from MT5's deals</h3>
-          <p class="help">Per lot. Every ${CUR().trim()} figure (SL, TP, risk, P&L, R, BE) is net of it and of the trade's swap. Until a symbol has traded, your
-            default (${pc(M.comm_default)} a lot on each deal) is used; a later deal that differs is flagged in the Log and used from then on.</p>
-          ${comm.length ? `<table class="mtcomm"><tr><th>Symbol</th><th>Opening deal</th><th>Closing deal</th><th>Round turn</th><th>Last change</th></tr>${comm.map(([s, c]) =>
-            `<tr><td class="mono">${esc(s)}</td><td>${pc(c.in)} <span class="muted">(${c.in_n || 0})</span></td><td>${pc(c.out)} <span class="muted">(${c.out_n || 0})</span></td><td>${pc((c.in || 0) + (c.out || 0))}</td>
+          <p class="help">Per lot. Every ${CUR().trim()} figure (SL, TP, risk, P&L, R, BE) is net of it and of the trade's swap. Taken from MT5's own deals on the
+            symbol; before its first trade, from the symbol's commission rules in MT5 (EA 1.22: its Specification window), else as a symbol of the same group
+            that has traded, else your default${M.comm_default == null ? " (not typed)" : ` (${pc(M.comm_default)} a lot on each deal)`}. A symbol with none of these
+            can't be placed. A deal that charges differently is flagged in the Log and used from then on.</p>
+          ${comm.length ? `<table class="mtcomm"><tr><th>Symbol</th><th>Opening deal</th><th>Closing deal</th><th>Round turn</th><th>From</th><th>Last change</th></tr>${comm.map(([s, c]) =>
+            `<tr><td class="mono">${esc(s)}</td><td>${mtCommCell(c, "in")}</td><td>${mtCommCell(c, "out")}</td><td>${c.in == null || c.out == null ? "–" : pc((c.in || 0) + (c.out || 0))}</td>
+              <td style="text-align:left">${esc(mtCommSrc(c))}</td>
               <td>${c.diff ? `<span class="warnc">${pc(c.diff.was)} → ${pc(c.diff.now)} (${c.diff.leg === "in" ? "opening" : "closing"})</span>` : "–"}</td></tr>`).join("")}</table>`
           : '<p class="muted">No deal seen yet.</p>'}</div>
         <div class="pg-card"><h3 class="pg-h3" style="margin-top:0">What a 1.00 move is worth on 1 lot</h3>
@@ -319,12 +322,24 @@ setInterval(async () => {
   }catch(e){}
 }, 15000);
 
+function mtCommCell(c, leg){
+  if(c[leg] == null) return '<span class="warnc">not known</span>';
+  const m = n => CUR() + (+n).toFixed(2);
+  const fix = c[leg + "_fix"] ? ` + ${m(c[leg + "_fix"])} a deal` : "";
+  return `${m(c[leg])}${fix}` + (c[leg + "_n"] ? ` <span class="muted">(${c[leg + "_n"]})</span>` : "");
+}
+function mtCommSrc(c){
+  const a = (c.src || {}).in || "", b = (c.src || {}).out || "";
+  return a === b ? a : [a && "opening: " + a, b && "closing: " + b].filter(Boolean).join("; ");
+}
 /* v0.37.2: the ticket's preview says what a 1.00 move is worth on 1 lot and where that comes from, so a wrong figure shows */
 function mtPerMove(){
   const el = $("#tkPv"), p = P.plan;
   if(!el || !mtOn() || !p || !p.per_move) return;
   let d = el.querySelector(".mtper");
-  const h = `1 lot: ${CUR()}${(+p.per_move).toLocaleString("en-US", {maximumFractionDigits: 2})} per 1.00 move · ${p.tv_src || ""}`;   // (textContent: no escaping)
+  const c = p.comm || {}, cs = (c.src || {});
+  const h = `1 lot: ${CUR()}${(+p.per_move).toLocaleString("en-US", {maximumFractionDigits: 2})} per 1.00 move · ${p.tv_src || ""}`   // (textContent: no escaping)
+    + (c.in != null ? ` · commission ${CUR()}${(+c.in).toFixed(2)} / ${CUR()}${(+(c.out || 0)).toFixed(2)} a lot (opening / closing), ${cs.in === cs.out ? cs.in : cs.in + " / " + cs.out}` : "");
   if(!d){ d = document.createElement("div"); d.className = "mtper muted"; d.style.cssText = "font-size:11px;margin-top:4px"; el.appendChild(d); }
   if(d.textContent !== h) d.textContent = h;
 }

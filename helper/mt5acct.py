@@ -73,12 +73,12 @@ MT5_RULES = {
     "squareoff_on": False, "stale_sec": 120, "be_buffer_ticks": 0,
     "daily_of": "day",         # the daily % is of: "day" the day's starting balance (FundingPips) or "size" the starting size
     "phase": "evaluation",     # evaluation | master (the news guard, slice b3, depends on it)
-    "comm_default": 0.0,       # $ per lot on each deal (opening and closing) until MT5's own deals teach the real figure
+    "comm_default": None,      # $ per lot on each deal, typed (None = not typed); used only when MT5 hasn't said (v0.37.3)
     "news_on": True,           # the news guard (ForexFactory's high-impact events on the symbol's currencies)
     "news_min": 5,             # Master: no opening / closing this many minutes either side of the event (FundingPips: 5)
     "news_warn_min": 15,       # a warning this many minutes before one (evaluation: a warning only)
 }
-MT5_ONLY = ("daily_of", "phase", "comm_default", "news_on", "news_min", "news_warn_min")
+MT5_ONLY = ("daily_of", "phase", "comm_default", "comm_typed", "news_on", "news_min", "news_warn_min")
 MT5_KEYS = ("size", "daily_pct", "max_pct", "max_mode", "day_from", "buffer_pct", "risk_cap_pct", "max_margin_pct",
             "max_open_risk_pct", "max_trades", "sl_required", "be_buffer_ticks") + MT5_ONLY      # what an MT5 account can set
 FIXED = {"squareoff_on": False, "stale_sec": 120}      # (Fyers' square-off and expiry rules never apply to MT5)
@@ -134,6 +134,8 @@ class Mt5Engine(Paper):
         saved = store.load(self.dir + "paper_rules.json") if not self.none else {}
         self.rules = {**DEFAULT_RULES, **MT5_RULES,
                       **{k: v for k, v in saved.items() if k in MT5_KEYS}, **FIXED}
+        if not saved.get("comm_typed") and not self.rules.get("comm_default"):
+            self.rules["comm_default"] = None      # (v0.37.3: a 0 saved from the form's default isn't a typed figure)
         s = store.load(self.dir + "paper.json") if not self.none else {}
         if not s.get("acct"):
             size = float(self.rules["size"])
@@ -276,10 +278,13 @@ class Mt5Engine(Paper):
 
     def tick_value(self, name: str, tick: float, m: dict | None = None) -> tuple:
         """What one tick is worth on 1 lot, in the account's currency: (value, where from, what MT5 reported).
-        v0.37.2 (owner, 11 Nov: the app showed -$3.78 at the stop, MT5 -$217.94): MT5's SYMBOL_TRADE_TICK_VALUE isn't
-        trusted alone. In order: (1) learned from MT5's own profit on an open position of the symbol (what MT5 really
-        pays); (1b) EA 1.21's OrderCalcProfit for 1 lot over a 1.00 move; (2) tick size x contract size, when the symbol's profit currency is the account's (XAUUSD on a $ account:
-        0.01 x 100 = $1); (3) MT5's reported tick value. A reported figure off by more than 2% is flagged."""
+        v0.37.2 (owner, 11 Nov: the app showed -$3.78 at the stop, MT5 -$217.94; FundingPips' XAUUSD lists a tick value of
+        0.01 for a 100 oz contract): MT5's SYMBOL_TRADE_TICK_VALUE isn't trusted alone. In order: (1) learned from MT5's own
+        profit on an open position of the symbol (what MT5 really pays); (2) EA 1.21's OrderCalcProfit for 1 lot over a
+        1.00 move, checked against (3); (3) contract size x the profit currency in the account's currency (1 when they're
+        the same; otherwise MT5's own price of e.g. GBPUSD / USDJPY, v0.37.3, as LiveTrader does); (4) MT5's tick value
+        alone is "unchecked" and the app won't place on it. A tick value off by more than 2% is flagged; (2) and (3)
+        disagreeing by more than 2%: flagged, the bigger one used (the smaller size: the safe side)."""
         si = self.M["sym"].get(name) or {}
         m = m if m is not None else ((mt5.row(self.uid, mt5.PREFIX + name) or {}).get("mt5") or {})
         rep = float(si.get("tv") or m.get("tick_value") or 0.0)
@@ -287,20 +292,55 @@ class Mt5Engine(Paper):
         cp = str(m.get("cprofit") or "").upper()
         learned = float((self.M.get("ppl") or {}).get(name) or 0.0)
         pp = float(si.get("pp") or 0.0)
+        conv, conv_src = self._conv(name, cp)
+        cc = cs * conv if cs > 0 and conv > 0 else 0.0           # a 1.00 move on 1 lot, from the contract
+        cc_src = f"contract size {cs:g}" + (f" x {conv_src}" if conv_src else "")
         if learned > 0:
-            tv, src = learned * tick, "learned from MT5's profit on your position"
+            per, src = learned, "learned from MT5's profit on your position"
+        elif pp > 0 and cc > 0:
+            if abs(pp - cc) / cc > 0.02:
+                self._warn_once(f"pp:{name}", f"{name}: MT5's profit sum says {pp:g} {self.ccy()} per 1.00 move per lot, the "
+                                              f"{cc_src} gives {cc:g} - the app uses the bigger one (smaller sizes)")
+            per, src = max(pp, cc), "MT5's own profit sum (OrderCalcProfit), checked against the " + cc_src
         elif pp > 0:
-            tv, src = pp * tick, "MT5's own profit sum (OrderCalcProfit)"
-        elif cs > 0 and cp and cp == self.ccy():
-            tv, src = tick * cs, f"tick size x contract size ({cs:g})"
-        elif rep > 0:
-            tv, src = rep, "MT5's tick value"
+            per, src = pp, "MT5's own profit sum (OrderCalcProfit)"
+        elif cc > 0:
+            per, src = cc, cc_src
+        elif rep > 0 and tick > 0:
+            per, src = rep / tick, "MT5's tick value (unchecked)"
         else:
-            tv, src = 0.0, ""
-        if rep > 0 and tv > 0 and src != "MT5's tick value" and abs(rep - tv) / tv > 0.02:
+            per, src = 0.0, ""
+        tv = per * tick
+        if rep > 0 and tv > 0 and "tick value" not in src and abs(rep - tv) / tv > 0.02:
             self._warn_once(f"tv:{name}", f"{name}: MT5 reported a tick value of {rep:g} {self.ccy()} per lot, but {src} gives "
                                           f"{tv:g} - the app uses {tv:g}")
         return round(tv, 10), src, rep
+
+    def _conv(self, name: str, cp: str) -> tuple:
+        """1 unit of the symbol's profit currency in the account's currency, from MT5's own prices (LiveTrader's ConvRate):
+        (rate, "the GBPUSD price"); (1.0, "") when they're the same; (0, "") when no symbol converts it (or no price yet)."""
+        acc = self.ccy()
+        if not cp or cp == acc:
+            return (1.0, "") if cp else (0.0, "")
+        specs = mt5.user(self.uid).specs or {}
+        core = name.upper()
+        base = str(((specs.get(name) or {}).get("cbase")) or "").upper()
+        pre = suf = ""
+        k = core.find(base + cp) if base else -1
+        if k >= 0:
+            pre, suf = name[:k], name[k + len(base + cp):]
+        for direct, cand in ((True, pre + cp + acc + suf), (True, cp + acc), (False, pre + acc + cp + suf), (False, acc + cp)):
+            if cand in specs:
+                s = mt5.PREFIX + cand
+                new = s not in self.temp_watch
+                self.temp_watch[s] = time.time() + 300   # (this terminal streams it from now)
+                if new:
+                    self._symbols_changed()
+                b = self.px(s).get("bid") or 0
+                if b > 0:
+                    return (b, f"the {cand} price") if direct else (1.0 / b, f"1 / the {cand} price")
+                return 0.0, ""
+        return 0.0, ""
 
     def _learn_value(self, name: str, side: int, vol: float, open_px: float, cur: float, profit: float) -> None:
         """$ per 1.00 of price per lot from MT5's own figure for an open position (profit before commission and swap)."""
@@ -320,9 +360,111 @@ class Mt5Engine(Paper):
         L[name] = round(ppl, 6)
 
     def comm_for(self, name: str) -> dict:
+        """The commission per lot on an opening ("in") and a closing ("out") deal, and where each comes from (v0.37.3):
+        (1) learned from MT5's own deals on this symbol; (2) the symbol's commission rules from MT5 (EA 1.22,
+        SymbolInfoCommissions: its Specification window); (3) learned on a symbol of the same group (Metals, Forex...);
+        (4) your typed default; (5) MT5 listing no rules at all: 0. Otherwise None: the app refuses to place."""
         L = self.M["comm"].get(name) or {}
-        d = float(self.rules.get("comm_default") or 0)
-        return {"in": L["in"] if L.get("in") is not None else d, "out": L["out"] if L.get("out") is not None else d}
+        rc = self._rules_comm(name)
+        sim = self._similar_comm(name)
+        d = self.rules.get("comm_default")
+        out = {"src": {}}
+        for leg in ("in", "out"):
+            if L.get(leg) is not None:
+                v, src = L[leg], "learned from MT5's deals"
+            elif isinstance(rc, dict):
+                v, src = rc[leg], "MT5's commission rules"
+                if rc.get(leg + "_fix"):
+                    out[leg + "_fix"] = rc[leg + "_fix"]
+            elif sim and sim[1].get(leg) is not None:
+                v, src = sim[1][leg], f"as {sim[0]} (learned)"
+            elif d is not None:
+                v, src = float(d), "your default"
+            elif rc == "none":
+                v, src = 0.0, "MT5 lists no commission"
+            else:
+                v, src = None, ""
+            out[leg] = v
+            out["src"][leg] = src
+        return out
+
+    def _group(self, name: str) -> str:
+        path = str(((mt5.row(self.uid, mt5.PREFIX + name) or {}).get("mt5") or {}).get("path") or "")
+        return path.replace("/", "\\").split("\\")[0].lower() if "\\" in path.replace("/", "\\") else ""
+
+    def _similar_comm(self, name: str):
+        g = self._group(name)
+        if not g:
+            return None
+        for other, L in sorted(self.M["comm"].items(), key=lambda kv: -float(kv[1].get("at") or 0)):
+            if other != name and (L.get("in") is not None or L.get("out") is not None) and self._group(other) == g:
+                return other, L
+        return None
+
+    def _rules_comm(self, name: str):
+        """MT5's commission rules for this symbol (EA 1.22) as {"in": per lot, "out": per lot, "in_fix", "out_fix": per deal},
+        "none" when MT5 lists no rule, None when unknown or not understood (then the other sources are used).
+        Instant charges only (daily / monthly ones aren't per trade); a rule for one direction counts for both (the
+        bigger figure: the safe side); the tier for 1 lot when tiers go by volume; money in the account's currency, per
+        lot or per deal, or a percent of the trade's value."""
+        cr = (self.M["sym"].get(name) or {}).get("cr")
+        if cr is None:
+            return None
+        if not cr:
+            return "none"
+        res = {"in": 0.0, "out": 0.0, "in_fix": 0.0, "out_fix": 0.0}
+        acc = self.ccy()
+        for rule in cr:
+            try:
+                charge, entry, direction, rng, _pm, rccy, tiers = rule[:7]
+            except (TypeError, ValueError):
+                return None
+            if "INSTANT" not in str(charge):
+                continue
+            legs = ("in", "out") if "INOUT" in str(entry) else ("in",) if str(entry).endswith("_IN") else ("out",)
+            tier = None
+            for t in tiers or []:
+                lo, hi = _f(t[5]), _f(t[6])
+                if "RANGE_VOLUME" not in str(rng) or (lo <= 1.0 and (hi <= 0 or 1.0 < hi or hi >= 1e9)):
+                    tier = t
+                    break
+            if tier is None:
+                tier = (tiers or [None])[0]
+            if not tier:
+                continue
+            mode, vtype, val = str(tier[0]), str(tier[1]), abs(_f(tier[2]))
+            tccy = str(tier[7] or rccy or "").upper()
+            rate = fix = 0.0
+            if "PERCENT_PROFIT" in mode or "PIPS" in mode or "DISABLED" in mode:
+                if "DISABLED" in mode:
+                    continue
+                return None                        # (not modelled: the other sources are used)
+            if "PERCENT" in mode:
+                px = self.px(mt5.PREFIX + name).get("bid") or 0
+                si = self.M["sym"].get(name) or {}
+                per_move = (float(si.get("pp") or 0) or (float(si.get("cs") or 0) if tccy in ("", acc) else 0))
+                if not px or not per_move:
+                    return None
+                rate = val / 100.0 * px * per_move     # % of one lot's value
+            elif "MONEY" in mode:
+                if "MONEY_DEPOSIT" not in mode and tccy and tccy != acc:
+                    return None                    # (another currency: not converted here)
+                if "VOLUME_TYPE_TRADE" in vtype:
+                    fix = val
+                elif "VOLUME_TYPE_VOLUME" in vtype:
+                    rate = val
+                else:
+                    return None
+            else:
+                return None
+            for leg in legs:                       # (BUY-only and SELL-only rules both counted: the safe side)
+                res[leg] = max(res[leg], rate) if "BOTH" not in str(direction) else res[leg] + rate
+                res[leg + "_fix"] = max(res[leg + "_fix"], fix) if "BOTH" not in str(direction) else res[leg + "_fix"] + fix
+        return {k: round(v, 6) for k, v in res.items()}
+
+    def _rules_changed(self, name: str, old, new):
+        if old is not None:
+            self.event(f"{name}: MT5's commission rules changed - the app uses the new ones for symbols not traded yet", "warn")
 
     def vol(self, pos_or_row, qty) -> float:
         row = pos_or_row if "vstep" in pos_or_row else self.row(pos_or_row["s"])
@@ -367,6 +509,14 @@ class Mt5Engine(Paper):
                     si.update(mb=_f(v[5]), ms=_f(v[6]), vmin=_f(v[7]), vmax=_f(v[8]), sl=_i(v[9]))
                 if len(v) >= 11 and _f(v[10]) > 0:  # EA 1.21: MT5's OrderCalcProfit for 1 lot over a 1.00 rise
                     si["pp"] = _f(v[10])
+                old = self.M["sym"].get(name) or {}
+                if len(v) >= 12:                   # EA 1.22: the commission rules (once a minute; null = MT5 can't say)
+                    if isinstance(v[11], list):
+                        if v[11] != old.get("cr"):
+                            self._rules_changed(name, old.get("cr"), v[11])
+                        si["cr"] = v[11]
+                elif "cr" in old:
+                    si["cr"] = old["cr"]
                 self.M["sym"][name] = si
         for r in body.get("res") or []:
             changed |= self._result(r)
@@ -692,7 +842,7 @@ class Mt5Engine(Paper):
         if ins:
             comm_in, est = round(-sum(x["c"] + x["fee"] for x in ins), 2), False
         else:
-            comm_in, est = round(float(row["comm"]["in"]) * vol, 2), True
+            comm_in, est = round(charges.mt5_comm_amt(row, vol, "in"), 2), True
         opened = self.to_utc(tmsc / 1000.0) if tmsc else time.time()
         outside = not cm.startswith("FTM")
         meta = self._placed_meta(cm)
@@ -783,7 +933,7 @@ class Mt5Engine(Paper):
         px = self.exit_mark(pos)
         fake = {"t": 0, "v": self.vol(row, pos["qty"]), "p": px, "pr": float(mt.get("profit") or 0), "c": 0.0, "fee": 0.0,
                 "sw": float(pos.get("swap") or 0), "tu": time.time(), "rs": None, "cm": ""}
-        fake["c"] = -float(row["comm"]["out"]) * fake["v"]
+        fake["c"] = -charges.mt5_comm_amt(row, fake["v"], "out")
         rec = self._record(pos, [fake], pos["qty"])
         rec.update(est=True, deals=[], reason="closed in MT5 (no deal seen yet)")
         self.history.append(rec)
@@ -1087,6 +1237,15 @@ class Mt5Engine(Paper):
             raise Refused(f"waiting for {row['u']}'s price from MT5 {self.login} (its terminal streams it from now)")
         if not row.get("tv"):
             raise Refused(f"{row['u']}: the value of a price move isn't known yet (MT5 hasn't sent the symbol's details)")
+        if "unchecked" in str(row.get("tv_src")):
+            raise Refused(f"{row['u']}: what a price move is worth can't be checked yet - only MT5's tick value is known (the one "
+                          "that was 100x off on XAUUSD). EA 1.21+ sends MT5's own profit sum; or a symbol converting its profit "
+                          "currency into yours is needed in MT5")
+        cm = row.get("comm") or {}
+        if cm.get("in") is None or cm.get("out") is None:
+            raise Refused(f"{row['u']}: its commission isn't known yet - MT5 hasn't listed it (EA 1.22 sends it from the symbol's "
+                          "specification) and it hasn't traded here. Type your broker's commission per lot on the Account page "
+                          "(0 if there's none)")
         out = super().plan(req, place)
         si = self.M["sym"].get(row["u"]) or {}
         steps = int(out.get("lots") or 0)
@@ -1099,7 +1258,8 @@ class Mt5Engine(Paper):
             steps = vmax
         out.update(steps=steps, lots=round(steps * float(row["vstep"]), 8), vol=round(steps * float(row["vstep"]), 8),
                    ccy=self.ccy(), product="MT5",
-                   per_move=round(float(row["tv"]) / float(row["tick"]), 6), tv_src=row.get("tv_src"))   # (v0.37.2: shown on the ticket)
+                   per_move=round(float(row["tv"]) / float(row["tick"]), 6), tv_src=row.get("tv_src"),   # (v0.37.2: shown on the ticket)
+                   comm=row.get("comm"))                                                        # (v0.37.3: and the commission)
         if out.get("risk_1lot") is not None:
             out["risk_1step"] = out["risk_1lot"]
         w = self._news_note(row)
@@ -1374,13 +1534,18 @@ class Mt5Engine(Paper):
             raise Refused("daily % of: day (the day's starting balance) or size (the starting size)")
         if "phase" in extra and extra["phase"] not in ("evaluation", "master"):
             raise Refused("phase: evaluation or master")
+        extra.pop("comm_typed", None)
         if "comm_default" in extra:
-            try:
-                extra["comm_default"] = float(extra["comm_default"])
-            except (TypeError, ValueError):
-                raise Refused("commission: a number (per lot, each deal)")
-            if extra["comm_default"] < 0:
-                raise Refused("commission can't be negative")
+            if extra["comm_default"] in (None, ""):
+                extra["comm_default"], extra["comm_typed"] = None, False
+            else:
+                try:
+                    extra["comm_default"] = float(extra["comm_default"])
+                except (TypeError, ValueError):
+                    raise Refused("commission: a number (per lot, each deal), or empty")
+                if extra["comm_default"] < 0:
+                    raise Refused("commission can't be negative")
+                extra["comm_typed"] = True
         if "size" in new and float(new["size"] or 0) != float(self.rules["size"]):
             self.M["size_set"] = True
         self.rules.update(extra)
@@ -1489,9 +1654,9 @@ class Mt5Engine(Paper):
                  swap=pos.get("swap"), comm_in=pos.get("comm_in"), comm_est=bool(pos.get("comm_est")),
                  exiting=pos.get("exiting"), mt_err=pos.get("mt_err"), b_sl=pos.get("b_sl"), b_tp=pos.get("b_tp"),
                  pend=("sent" if c["sent"] else "queued") if c else None, gone=bool(pos.get("gone")),
-                 comm_out=round(float(row["comm"]["out"]) * vol, 2), found=bool(pos.get("found")))
+                 comm_out=round(charges.mt5_comm_amt(row, vol, "out"), 2), found=bool(pos.get("found")))
         if v.get("at_be"):
-            v["be_covers"] = round(float(pos["paid"]) + float(row["comm"]["out"]) * vol, 2)
+            v["be_covers"] = round(float(pos["paid"]) + charges.mt5_comm_amt(row, vol, "out"), 2)
         return v
 
     def order_view(self, o) -> dict:
@@ -1507,8 +1672,8 @@ class Mt5Engine(Paper):
         R = self.rules
         info = {k: self.info.get(k) for k in ("login", "server", "company", "name", "currency", "balance", "equity", "margin",
                                                "free", "leverage", "mode", "demo", "trade_allowed", "ea_allowed")}
-        comm = {n: {**self.comm_for(n), **{k: v for k, v in L.items() if k in ("in_n", "out_n", "at", "diff")}}
-                for n, L in self.M["comm"].items()}
+        comm = {n: {**self.comm_for(n), **{k: v for k, v in (self.M["comm"].get(n) or {}).items() if k in ("in_n", "out_n", "at", "diff")}}
+                for n in sorted(set(self.M["comm"]) | set(self.M["sym"]))}     # (v0.37.3: also symbols not traded yet)
         breach = []
         if f["daily"] is not None and eq < f["daily"]:
             breach.append(f"equity {eq:,.2f} is under the daily floor {f['daily']:,.2f}")

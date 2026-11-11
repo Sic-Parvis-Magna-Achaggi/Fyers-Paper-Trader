@@ -38,8 +38,17 @@ SYMS = {   # name: (desc, path, digits, base, amplitude, spread in points, contr
     "XAUUSD": ("Gold vs US Dollar", "Metals\\XAUUSD", 2, 2650.0, 40.0, 25, 100),
     "EURUSD": ("Euro vs US Dollar", "Forex\\EURUSD", 5, 1.0800, 0.015, 8, 100000),
     "US30.cash": ("Dow Jones Industrial Average", "Indices\\US30.cash", 2, 43000.0, 600.0, 200, 1),
+    "GBPUSD": ("Pound vs US Dollar", "Forex\\GBPUSD", 5, 1.2700, 0.015, 9, 100000),          # (v0.37.3: converts EURGBP's
+    "EURGBP": ("Euro vs Pound", "Forex\\EURGBP", 5, 0.8500, 0.008, 10, 100000),             #  profit, in pounds, to $)
 }
-COMM = {"XAUUSD": (3.0, 3.0), "EURUSD": (3.5, 3.5), "US30.cash": (0.0, 0.0)}    # $ per lot: opening deal, closing deal
+CPROFIT = {"EURGBP": "GBP"}         # every other symbol's profit is in USD
+# EA 1.22: commission rules as MT5's SymbolInfoCommissions gives them (US30.cash: none listed)
+RULE = lambda entry, val: ["SYMBOL_COMMISSION_CHARGE_INSTANT", "SYMBOL_COMMISSION_ENTRY_" + entry, "SYMBOL_COMMISSION_DIRECTION_BOTH",
+                           "SYMBOL_COMMISSION_RANGE_VOLUME", "SYMBOL_COMMISSION_PROFIT_ALL", "USD",
+                           [["SYMBOL_COMMISSION_MONEY_DEPOSIT", "SYMBOL_COMMISSION_VOLUME_TYPE_VOLUME", val, 0.0, 0.0, 0.0, 1000.0, "USD"]]]
+CRULES = {"XAUUSD": [RULE("INOUT", 3.0)], "EURUSD": [RULE("INOUT", 3.5)], "US30.cash": [], "GBPUSD": [RULE("INOUT", 3.5)],
+          "EURGBP": [RULE("IN", 7.0)]}
+COMM = {"XAUUSD": (3.0, 3.0), "EURUSD": (3.5, 3.5), "US30.cash": (0.0, 0.0), "GBPUSD": (3.5, 3.5), "EURGBP": (7.0, 0.0)}    # $ per lot: opening deal, closing deal
 OK_DONE, OK_PLACED, NO_CHANGES, INVALID_STOPS, NO_POS, AUTO_OFF = 10009, 10008, 10025, 10016, 10036, 10027
 
 
@@ -92,17 +101,23 @@ def bars(name, tf, frm, to):
     return out
 
 
+def conv(n):
+    """1 unit of the symbol's profit currency in $ (EURGBP: the GBPUSD bid now)."""
+    return price("GBPUSD", time.time()) if CPROFIT.get(n) == "GBP" else 1.0
+
+
 def spec(n):
     d, p, dg, _, _, sp, c = SYMS[n]
     return {"name": n, "desc": d, "path": p, "digits": dg, "point": 10 ** -dg, "tick_size": 10 ** -dg,
-            "tick_value": round(10 ** -dg * c, 10), "contract": c, "vmin": 0.01, "vstep": 0.01, "vmax": 100, "cprofit": "USD",
+            "tick_value": round(10 ** -dg * c * conv(n), 10), "contract": c, "vmin": 0.01, "vstep": 0.01, "vmax": 100,
+            "cprofit": CPROFIT.get(n, "USD"),
             "cmargin": "USD", "cbase": n[:3], "trade_mode": 4, "calc_mode": 0, "swap_mode": 1, "swap_long": -5.1,
             "swap_short": 1.2, "stops_level": 0, "freeze_level": 0, "spread": sp, "visible": n != "US30.cash"}
 
 
 class FakeEA:
     def __init__(self, url, key, login=21182752, server="FundingPips-SIM1", poll=0.25, fixed_offset=None, log=print,
-                 old=False, balance=5000.0, history=False, ver="1.21"):
+                 old=False, balance=5000.0, history=False, ver="1.22"):
         self.url, self.key, self.login, self.server = url.rstrip("/"), key, login, server
         self.poll, self.fixed, self.log, self.old = poll, fixed_offset, log, old
         self.subs, self.last = [], {}
@@ -385,7 +400,8 @@ class FakeEA:
             syms |= set(self.subs)
             b["sym"] = {s: [spec(s)["tick_value"], spec(s)["tick_size"], 0.01, SYMS[s][6], SYMS[s][2],
                             round(SYMS[s][6] * self.quote(s)[1] / 100.0, 2), round(SYMS[s][6] * self.quote(s)[0] / 100.0, 2),
-                            0.01, 100, 0] + ([float(SYMS[s][6])] if self.ver >= "1.21" else []) for s in syms}
+                            0.01, 100, 0] + ([round(float(SYMS[s][6]) * conv(s), 4)] if self.ver >= "1.21" else [])
+                        + ([CRULES.get(s, [])] if self.ver >= "1.22" else []) for s in syms}
             self.trailed_sent = len(self.trailed)
             b["trailed"] = list(self.trailed)
             if self.dcur == (0, 0):
@@ -602,7 +618,7 @@ if __name__ == "__main__":
     ap.add_argument("--ctl", type=int, default=0, help="a control API on this port (tests)")
     ap.add_argument("--history", action="store_true", help="two closed trades 10 days ago in MT5's history")
     ap.add_argument("--old", action="store_true", help="play EA 1.00 (prices only)")
-    ap.add_argument("--ver", default="1.21", help="the EA version it reports (1.10: manages, doesn't place)")
+    ap.add_argument("--ver", default="1.22", help="the EA version it reports (1.10: manages, doesn't place)")
     ap.add_argument("--balance", type=float, default=5000.0)
     a = ap.parse_args()
     ea = FakeEA(a.url, a.key, a.login, a.server, fixed_offset=None if a.offset == "auto" else int(a.offset), old=a.old,

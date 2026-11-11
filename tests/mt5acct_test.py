@@ -383,6 +383,59 @@ async def main():
     e.M["sym"]["XAUUSD"]["tv"] = good_tv
     e.M["sym"]["XAUUSD"]["pp"] = good_pp
     e.M["ppl"] = learned
+
+    print("v0.37.3: a symbol never traded here (EURGBP: profit in pounds; commission from MT5's rules, EA 1.22)")
+    gq = {"s": "MT5:EURGBP", "side": 1, "type": "market", "mode": "lots", "lots": 0.10}
+    for _ in range(3):
+        try:
+            e.plan({**gq, "sl": round(ea.quote("EURGBP")[0] - 0.002, 5)})
+        except Refused:
+            pass
+        await calls(ea, 3)
+    eg = e.plan({**gq, "sl": round(ea.quote("EURGBP")[0] - 0.002, 5)})
+    gbp = ea.quote("GBPUSD")[0]
+    ok("the commission before its first trade: MT5's rules ($7 a lot opening, $0 closing)",
+       eg["comm"]["in"] == 7.0 and eg["comm"]["out"] == 0.0 and eg["comm"]["src"]["in"] == "MT5's commission rules", eg.get("comm"))
+    ok("a 1.00 move on 1 lot = 100,000 x the GBPUSD price, MT5's profit sum checked against it",
+       abs(eg["per_move"] - 100000 * gbp) / (100000 * gbp) < 0.005 and "checked against the contract size 100000 x the GBPUSD price"
+       in str(eg.get("tv_src")), (eg["per_move"], 100000 * gbp, eg.get("tv_src")))
+    ok("the loss at the stop: move x 100,000 x GBPUSD x 0.10 lot + $0.70 commission",
+       abs(eg["risk"] - ((eg["entry"] - eg["sl"]) * eg["per_move"] * 0.10 + 0.70)) < 0.05, (eg["risk"], eg["entry"], eg["sl"]))
+    gs = e.M["sym"]["EURGBP"]
+    keep = {k: gs.get(k) for k in ("pp", "cr")}
+    gs.pop("pp", None)
+    eg2 = e.plan({**gq, "sl": eg["sl"]})
+    ok("an EA without MT5's profit sum: contract size x the GBPUSD price", str(eg2.get("tv_src")).startswith("contract size 100000 x the GBPUSD")
+       and abs(eg2["per_move"] - eg["per_move"]) / eg["per_move"] < 0.005, eg2.get("tv_src"))
+    gbp_spec = mt5.user(e.uid).specs.pop("GBPUSD")
+    try:
+        e.plan({**gq, "sl": eg["sl"]})
+        ok("only MT5's tick value left: refused (it can't be checked)", False)
+    except Refused as x:
+        ok("only MT5's tick value left: refused (it can't be checked)", "can't be checked" in str(x), x)
+    mt5.user(e.uid).specs["GBPUSD"] = gbp_spec
+    gs.pop("cr", None)
+    dflt0 = e.rules.get("comm_default")
+    e.set_rules({"comm_default": ""})
+    try:
+        e.plan({**gq, "sl": eg["sl"]})
+        ok("commission unknown (no rules, never traded, nothing similar, no default): refused", False, e.comm_for("EURGBP"))
+    except Refused as x:
+        ok("commission unknown (no rules, never traded, nothing similar, no default): refused", "commission isn't known" in str(x), x)
+    e.set_rules({"comm_default": 0})
+    ok("typed 0 (no commission): allowed, from your default", e.plan({**gq, "sl": eg["sl"]})["comm"]["src"]["in"] == "your default")
+    e.set_rules({"comm_default": ""})
+    ok("cleared: not typed again", e.rules.get("comm_default") is None and not e.rules.get("comm_typed"))
+    e.M["comm"]["GBPUSD"] = {"in": 3.5, "out": 3.5, "in_n": 1, "out_n": 1, "at": time.time()}
+    es = e.plan({**gq, "sl": eg["sl"]})
+    ok("... or as a symbol of the same group that has traded (Forex: GBPUSD)", es["comm"]["in"] == 3.5 and
+       es["comm"]["src"]["in"] == "as GBPUSD (learned)", es.get("comm"))
+    e.M["comm"].pop("GBPUSD")
+    gs.update(keep)
+    e.set_rules({"comm_default": "" if dflt0 is None else dflt0})
+    sn = e.snapshot()["mt5"]["comm"]
+    ok("the Account page lists symbols not traded yet, with where each figure comes from",
+       sn.get("EURGBP", {}).get("src", {}).get("in") == "MT5's commission rules" and "US30.cash" in sn or "EURGBP" in sn, list(sn)[:6])
     p2 = e.plan({**req, "mode": "lots", "lots": 0.05})
     ok("fixed lots: 0.05 lot = 5 steps", p2["steps"] == 5 and p2["lots"] == 0.05, (p2["steps"], p2["lots"]))
     p3 = e.plan({**req, "mode": "lots", "lots": 0.004})

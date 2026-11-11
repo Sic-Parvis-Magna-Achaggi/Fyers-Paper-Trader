@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.37.3 — 11 Nov 2026 — MT5: commission from MT5 before the first trade; profit in other currencies checked
+
+Added
+- **EA 1.22:** sends each symbol's commission rules from MT5 (SymbolInfoCommissions, new in MT5's July 2026 update: the
+  symbol's Specification window, e.g. FundingPips' XAUUSD "5 USD per lot", opening deals), once a minute. Delete the line
+  `#define FTM_COMMISSIONS` if MetaEditor doesn't know the function (an older MT5).
+- **Commission, in order:** learned from MT5's deals on the symbol; MT5's rules (instant charges; per lot, per deal or a
+  percent of the value; the 1-lot tier; a rule for one direction counted for both); as a symbol of the same group that has
+  traded (Metals, Forex…); your typed default (empty = not typed, 0 = none). Shown on the ticket and the Account page with
+  where it comes from (symbols not traded yet listed too).
+- **Profit in another currency:** contract size × the broker's own price of e.g. GBPUSD / USDJPY (as LiveTrader's
+  ConvRate), streamed by the account's terminal: checked against MT5's profit sum (the bigger one used if they disagree by
+  more than 2%), or used without it.
+
+Changed
+- **No more $0 commission or unchecked tick values:** a symbol whose commission isn't known, or whose only figure for a
+  price move is MT5's tick value, can't be placed (the ticket says why and what to do). The typed default commission is now
+  empty until typed (a 0 saved by the form before isn't taken as typed).
+
+Tests
+- `tests/mt5acct_test.py` (133), `mt5acct_flow.js` (52), `mt5_flow.js` (44), `mobile_flow.js` (61), `mt5_test.py` (52), `routes_check.py`: pass. EURGBP never traded: commission from MT5's rules ($7 in, $0 out), a 1.00 move = 100,000 ×
+  GBPUSD, checked against MT5's sum; the loss at the stop by hand; without the sum: contract × GBPUSD; only the tick value:
+  refused; commission unknown: refused, typed 0 allowed, as GBPUSD when it has traded.
+- `tests/fake_mt5.py`: EA 1.22 (commission rules), GBPUSD and EURGBP (profit in pounds). `mt5_test.py` / `mt5_flow.js`: 5
+  symbols, EA source 1.22.
+
 ## v0.37.2 — 11 Nov 2026 — MT5: dollar figures 100× too small on XAUUSD (fixed)
 
 Fixed

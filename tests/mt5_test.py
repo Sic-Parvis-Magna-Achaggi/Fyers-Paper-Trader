@@ -93,7 +93,7 @@ async def main():
     ok("answers OK with the poll interval", first[0] == "OK 250", first)
     ok("asks for the symbol list (none known yet)", "LIST" in first, first)
     ok("streams nothing yet (no page wants MT5)", "SUB " in first or "SUB" in first)
-    ok("the symbol list arrived", len(mt5.user(uid).specs) == 3, list(mt5.user(uid).specs))
+    ok("the symbol list arrived", len(mt5.user(uid).specs) == 5, list(mt5.user(uid).specs))
     st = mt5.status(uid, "example.test")
     b = st["bridges"][0] if st["bridges"] else {}
     ok("status: the terminal, connected, its server and account", b.get("login") == 21182752 and b.get("online") and
@@ -114,7 +114,8 @@ async def main():
     ok("search 'gold' finds XAUUSD by its description", hits == ["MT5:XAUUSD"], hits)
     hits = [x["s"] for x in mt5.search(uid, "us")]
     ok("search 'us': exact / Market Watch first", hits[:1] == ["MT5:EURUSD"] or "MT5:XAUUSD" in hits, hits)
-    ok("search 'mt5 eur' (the prefix typed)", [x["s"] for x in mt5.search(uid, "mt5 eur")] == ["MT5:EURUSD"])
+    he = [x["s"] for x in mt5.search(uid, "mt5 eur")]
+    ok("search 'mt5 eur' (the prefix typed)", sorted(he) == ["MT5:EURGBP", "MT5:EURUSD"], he)
 
     print("ticks")
     feed.want(client, ["MT5:XAUUSD", "MCX:CRUDEOIL26NOVFUT"])

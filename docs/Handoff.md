@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 11 Nov 2026, version **0.37.2**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 11 Nov 2026, version **0.37.3**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -108,6 +108,22 @@ automatic pictures off itself (other suites turn them on).
 
 ## MT5 accounts (v0.36.0 b1; v0.37.0 b2 / b3: stage b complete)
 
+**v0.37.3 (11 Nov, owner: "yes" to both):** EA **1.22** (`#define FTM_COMMISSIONS`; `CommRules()` =
+SymbolInfoCommissions as JSON with enum names, `CommDue()` once a minute per symbol) -> `sym` arrays' 12th element `cr`
+(kept between minutes in `M.sym`). `Mt5Engine.comm_for(name)` -> {in, out, in_fix, out_fix, src}: learned (`M.comm`) >
+`_rules_comm()` (instant rules; INOUT / IN / OUT; the 1-lot tier by volume; MONEY_DEPOSIT or the account's currency per lot
+/ per deal; PERCENT of value; others -> None) > `_similar_comm()` (same first path segment) > `comm_default` (None = not
+typed; `comm_typed`; a saved 0 without it is read as None) > "none" (MT5 lists no rule) > None -> `plan()` refuses.
+`charges.mt5_comm_amt(row, volume, leg)` = rate × volume + per-deal fix (used everywhere a commission is worked out).
+`tick_value()`: learned > OrderCalcProfit checked against `_conv()` (contract × the profit currency's rate from the broker's
+FX symbol, prefix / suffix kept, streamed via `temp_watch`; the bigger one if > 2% apart) > contract × rate > the tick value
+"(unchecked)" -> `plan()` refuses. `plan()` returns `comm`. Page: `mtCommCell` / `mtCommSrc` (Account page's commission
+table, a From column, untraded symbols too), `mtPerMove` adds the commission; the rules form's default is empty = not
+typed. Fake: GBPUSD, EURGBP (profit GBP), `CRULES`, `--ver 1.22`. **Not seen on a real MT5:** 1.22 compiling (the owner's
+MT5 build must be July 2026 or later) and what FundingPips' rules really return (MQL5's forum has a report of the function
+returning no rules on MetaQuotes-Demo, so "no rules" comes last: 0 only when nothing else is known, labelled "MT5 lists no
+commission" on the ticket; the first deal corrects it).
+
 **v0.37.2 (serious bug, 11 Nov):** the owner's first real order from the app: SELL 0.33 XAUUSD at 4,057.76, SL 4,064.22,
 0.25% risk; the app showed −$3.78 at the stop, MT5 −$217.94 (= 6.41 × 100 oz × 0.33 + commission). The app's gross was
 move × 0.33, i.e. tick value / tick size = 1 instead of 100: his terminal's SYMBOL_TRADE_TICK_VALUE (or what reached the app)
@@ -116,8 +132,11 @@ was 100× too small (the fake sent the right 1.0, so no test caught it). Fix: `M
 20+ ticks, saved), (1b) `si.pp` = EA 1.21's OrderCalcProfit(BUY, 1 lot, bid -> bid + 1.00), (2) tick size × contract when
 `cprofit` (the symbol list) = the account's currency, (3) MT5's tick value; a reported one off by > 2% -> `_warn_once`.
 `row()` carries `tv`, `tv_src`, `tv_mt5`; `plan()` refuses with no value and returns `per_move` / `tv_src`; snapshot
-`mt5.values` (the Account page's table). Page: `mtPerMove()` (a line in `#tkPv`). **Ask the owner** for the Account page's
-"What a 1.00 move is worth" table: its "MT5's tick value says" column shows what his terminal really reported.
+`mt5.values` (the Account page's table). Page: `mtPerMove()` (a line in `#tkPv`). **Confirmed by the owner (11 Nov, 11:19,
+the Account page's table):** FundingPips-SIM1's XAUUSD reports a tick value worth $1.00 per 1.00 move per lot (0.01 per
+0.01 tick: 100x too small for its 100 oz contract); the app uses $100.00, learned from MT5's profit on his position. SPX500:
+$50.00 from OrderCalcProfit, its tick value agrees (so EA 1.21 is installed). The owner set Max margin use % to 100 on his
+MT5 account (11 Nov).
 Noticed in testing (not changed): the chart tool's SL / TP come from the chart's prices (the price terminal), the entry from
 the account's own terminal; two terminals at the same broker agree, but an account at another broker whose price differs by
 more than the stop distance gets "the stop loss is on the wrong side". Worth a look if the owner adds a second broker.

@@ -936,6 +936,7 @@ async function saveRules(sel = "#rulesForm", msgSel = "#rulesMsg"){
     const k = el.dataset.k; let v = el.value;
     if(k === "sl_required" || k === "squareoff_on" || el.dataset.t === "b") v = v === "true";
     else if(el.dataset.t === "s"){}                                  // (a word: MT5's daily % of, phase)
+    else if(k === "comm_default" && !String(v).trim()) v = "";       // (MT5: empty = not typed, v0.37.3)
     else if(!["max_mode", "day_from"].includes(k) && !/^(expiry_exit|squareoff_cd|fy_sq)/.test(k)) v = num(v);
     body[k] = v;
   });

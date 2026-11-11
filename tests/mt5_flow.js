@@ -29,9 +29,9 @@ const startEA = key => { ea = spawn("python3", [__dirname + "/fake_mt5.py", "htt
   ok(/opens nothing on its own/i.test(s0) && /AllowTrading/.test(s0) && /No VPS, no VPN/.test(s0) && /Set it up \(5 steps\)/.test(s0), "Settings › MT5 bridge explains it (opens nothing on its own, AllowTrading, no VPS / VPN) with the 5 steps");
   ok((await pg.inputValue("#mtUrl")) === "http://localhost:8766", "step 4 shows this server's address to allow in MT5");
   const dl = await pg.evaluate(async () => { const r = await fetch("/api/mt5/ea"); const t = await r.text(); return {code: r.status, mq5: /FTM_Bridge\.mq5/.test(t) && /WebRequest/.test(t)
-    && /#property version\s+"1\.21"/.test(t) && !/OrderSend|PositionOpen|OrderOpen/.test(t)
+    && /#property version\s+"1\.22"/.test(t) && !/OrderSend|PositionOpen|OrderOpen/.test(t)
     && [...t.matchAll(/g_trade\.(Buy|Sell|BuyLimit|SellLimit|BuyStop|SellStop)\(/g)].every(m => m.index > t.indexOf("string DoOpen("))}; });
-  ok(dl.code === 200 && dl.mq5, "the EA's source (1.21) downloads from the page; it opens trades only in DoOpen (the app's OPEN), never by itself");
+  ok(dl.code === 200 && dl.mq5, "the EA's source (1.22) downloads from the page; it opens trades only in DoOpen (the app's OPEN), never by itself");
   pg.once("dialog", d => d.accept());
   await pg.click("#mtKeyNew");
   await pg.waitForSelector("#codeAsk:not(.hide) #caCode", { timeout: 10000 });
@@ -50,7 +50,7 @@ const startEA = key => { ea = spawn("python3", [__dirname + "/fake_mt5.py", "htt
   await pg.waitForFunction(() => /21182752/.test(document.querySelector("#mt5Box").textContent) && /connected/.test(document.querySelector("#mt5Box").textContent), null, { timeout: 15000 });
   const s1 = await pg.textContent("#mt5Box");
   ok(/FundingPips-SIM1/.test(s1) && /DEMO/.test(s1) && /Hedge/.test(s1) && /prices from here/.test(s1) && /5,000\.00 USD/.test(s1), "the terminal shows up: login, server, DEMO, Hedge, balance, prices from here");
-  ok(/day starts at\s+0[23]:30 IST/.test(s1) && /3 symbols known/.test(s1), "the broker's clock (its day in IST) and the symbol list");
+  ok(/day starts at\s+0[23]:30 IST/.test(s1) && /5 symbols known/.test(s1), "the broker's clock (its day in IST) and the symbol list");
   await pg.screenshot({ path: SHOT + "mt5_settings_connected.png" });
   await pg.click("#bClose");
   await pg.evaluate(async () => { watch = watch.filter(w => !isMT5(w.s)); await openBySymbol("MCX:CRUDEOIL26NOVFUT"); const j = await api("/api/state"); feedPill(j.feed); });
@@ -63,7 +63,7 @@ const startEA = key => { ea = spawn("python3", [__dirname + "/fake_mt5.py", "htt
   ok(f1.length >= 1 && /XAUUSD/.test(f1[0]) && /MT5 · Gold vs US Dollar/.test(f1[0]), `Find "gold": XAUUSD from MT5 first (${f1[0]})`);
   await pg.click('#exf button[data-x="MT5"]'); await pg.fill("#q", "us"); await pg.waitForTimeout(800);
   const f2 = await pg.evaluate(() => [...document.querySelectorAll("#results .row .name div:first-child")].map(r => r.textContent));
-  ok(f2.length === 3 && f2.every(x => /USD|US30/.test(x)), `the MT5 filter: only the broker's symbols (${f2.join(", ")})`);
+  ok(f2.length === 4 && f2.every(x => /USD|US30/.test(x)), `the MT5 filter: only the broker's symbols (${f2.join(", ")})`);
   await pg.click('#exf button[data-x=""]');
 
   // ---- an MT5 chart: candles from the bridge, live ticks

@@ -35,6 +35,11 @@
 //| Each request has a tag; it is carried out once, and its result is |
 //| sent back with the next call (a tag seen again is not repeated).  |
 //|                                                                   |
+//| Version 1.22: also sends each symbol's commission rules, as in    |
+//| its Specification window (SymbolInfoCommissions, MT5 July 2026),  |
+//| once a minute, so the app knows the commission before the first   |
+//| trade. If MetaEditor says SymbolInfoCommissions is unknown, update |
+//| MT5, or delete the line "#define FTM_COMMISSIONS" below.          |
 //| Version 1.21: also sends each symbol's profit for 1 lot over a    |
 //| 1.00 price move (OrderCalcProfit), so the app's $ figures use     |
 //| MT5's own sum (1.20's tick value alone was 100x off on XAUUSD).   |
@@ -50,8 +55,8 @@
 //| Version 1.00 (stage a): prices and candles only.                  |
 //+------------------------------------------------------------------+
 #property copyright   "Ashwin Kumar"
-#property version     "1.21"
-#property description "FTM Bridge 1.21: sends this terminal's prices, candles, symbol list and account to your Fyers Trade Manager,"
+#property version     "1.22"
+#property description "FTM Bridge 1.22: sends this terminal's prices, candles, symbol list and account to your Fyers Trade Manager,"
 #property description "places the orders you place in the app, manages your trades when you ask (SL / TP, close, cancel), and"
 #property description "trails their stops by itself if it can't reach the app. It opens nothing on its own."
 #property description "Calls out only (WebRequest)."
@@ -66,7 +71,8 @@ input bool   AllowTrading   = true;                          // Let the app mana
 input int    SlippagePoints = 30;                            // Market orders: most slippage accepted (points)
 input int    OfflineTrailSec = 20;                           // Can't reach the app this long: trail stops here (0 = never)
 
-#define EA_VER        "1.21"
+#define EA_VER        "1.22"
+#define FTM_COMMISSIONS          // 1.22: send each symbol's commission rules (needs MT5 from July 2026; delete this line if it won't compile)
 #define MAGIC         20261110  // the magic number on the app's closing deals
 #define DEALS_PER_CALL 200      // deals per call (the app is told when there are more)
 #define TAGS_KEPT     200       // requests remembered, so a tag is never carried out twice
@@ -780,6 +786,68 @@ string Orders(string &syms[])
 //| For the app's money figures: "SYM":[tick value, tick size,        |
 //| volume step, contract size, digits] of the symbols traded         |
 //+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| 1.22: a symbol's commission rules (its Specification window's     |
+//| "Commissions"), as JSON: [[charge, entry, direction, range,       |
+//| profit, currency, [[mode, volume type, value, min, max, from, to, |
+//| currency], ...]], ...]; null if MT5 can't say. Enums as names.    |
+//+------------------------------------------------------------------+
+string g_crSym[];
+ulong  g_crAt[];
+
+bool CommDue(string s)
+  {
+   ulong now = GetTickCount64();
+   for(int i = 0; i < ArraySize(g_crSym); i++)
+      if(g_crSym[i] == s)
+        {
+         if(now - g_crAt[i] < 60000)
+            return(false);
+         g_crAt[i] = now;
+         return(true);
+        }
+   int n = ArraySize(g_crSym);
+   ArrayResize(g_crSym, n + 1);
+   ArrayResize(g_crAt, n + 1);
+   g_crSym[n] = s;
+   g_crAt[n] = now;
+   return(true);
+  }
+
+#ifdef FTM_COMMISSIONS
+string CommRules(string s)
+  {
+   MqlCommission c[];
+   int n = SymbolInfoCommissions(s, c);
+   if(n < 0)
+      return("null");
+   string out = "[";
+   for(int i = 0; i < n; i++)
+     {
+      if(i > 0)
+         out += ",";
+      out += "[" + Js(EnumToString(c[i].mode_charge)) + "," + Js(EnumToString(c[i].mode_entry)) + ","
+             + Js(EnumToString(c[i].mode_direction)) + "," + Js(EnumToString(c[i].mode_range)) + ","
+             + Js(EnumToString(c[i].mode_profit)) + "," + Js(c[i].currency) + ",[";
+      for(int j = 0; j < ArraySize(c[i].tiers); j++)
+        {
+         if(j > 0)
+            out += ",";
+         out += "[" + Js(EnumToString(c[i].tiers[j].mode)) + "," + Js(EnumToString(c[i].tiers[j].volume_type)) + ","
+                + Jd(c[i].tiers[j].value, 6) + "," + Jd(c[i].tiers[j].min_value, 6) + "," + Jd(c[i].tiers[j].max_value, 6) + ","
+                + Jd(c[i].tiers[j].range_from, 4) + "," + Jd(c[i].tiers[j].range_to, 4) + "," + Js(c[i].tiers[j].currency) + "]";
+        }
+      out += "]]";
+     }
+   return(out + "]");
+  }
+#else
+string CommRules(string s)
+  {
+   return("null");
+  }
+#endif
+
 string SymInfo(string &syms[])
   {
    for(int j = 0; j < ArraySize(g_subs); j++)  // (1.20: the symbols the app streams too: the ones it may place orders on)
@@ -802,7 +870,8 @@ string SymInfo(string &syms[])
              + "," + Jd(SymbolInfoDouble(s, SYMBOL_VOLUME_STEP), 4) + "," + Jd(SymbolInfoDouble(s, SYMBOL_TRADE_CONTRACT_SIZE), 4)
              + "," + IntegerToString(SymbolInfoInteger(s, SYMBOL_DIGITS)) + "," + Jd(mb, 2) + "," + Jd(ms, 2)
              + "," + Jd(SymbolInfoDouble(s, SYMBOL_VOLUME_MIN), 4) + "," + Jd(SymbolInfoDouble(s, SYMBOL_VOLUME_MAX), 4)
-             + "," + IntegerToString(SymbolInfoInteger(s, SYMBOL_TRADE_STOPS_LEVEL)) + "," + Jd(pp, 6) + "]";
+             + "," + IntegerToString(SymbolInfoInteger(s, SYMBOL_TRADE_STOPS_LEVEL)) + "," + Jd(pp, 6)
+             + (CommDue(s) ? "," + CommRules(s) : "") + "]";      // (1.22: the commission rules, once a minute)
      }
    return(out);
   }
