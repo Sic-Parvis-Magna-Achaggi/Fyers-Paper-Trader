@@ -829,6 +829,88 @@ async def main():
     got = j.restore(zp)
     ok("restore puts a missing trade's candles back", got.get("candles") == 1 and jcandles.load("adm", k9).get("1"), got)
 
+    print("v0.40.0: the day-end close")
+    ok("off unless switched on", e.dayend() is None)
+    for bad in ({"dayend_min": 0}, {"dayend_min": 300}, {"dayend_when": "night"}, {"dayend_scope": "some"}):
+        try:
+            e.set_rules(bad)
+            ok(f"refused: {bad}", False)
+        except Refused:
+            ok(f"refused: {bad}", True)
+    e.set_rules({"dayend_on": True, "dayend_min": 5, "dayend_when": "day", "dayend_scope": "all"})
+    clk = e._clock()
+    mid = (int(clk.to_srv(time.time())) // 86400 + 1) * 86400
+    d1 = e.dayend(clk.to_utc(mid - 600))
+    d2 = e.dayend(clk.to_utc(mid - 180))
+    ok("5 min before the broker's midnight: not yet at -10 min, active at -3 min", d1 and not d1["active"] and d2["active"]
+       and abs(d1["at"] - clk.to_utc(mid - 300)) < 1 and abs(d1["until"] - clk.to_utc(mid)) < 1, (d1, d2))
+    ok("the time in IST for the page (FundingPips' midnight is 02:30 / 03:30 IST: 02:25 / 03:25)", d1["at_ist"] in ("02:25", "03:25"), d1["at_ist"])
+    e.set_rules({"dayend_when": "weekend"})
+    days = {}
+    for k in range(7):
+        x = e.dayend(clk.to_utc(mid + k * 86400 - 600))
+        days[x["weekday"]] = x["today"]
+    ok("only before the weekend: on the broker's Friday only", days.get("Fri") is True and not any(v for d, v in days.items() if d != "Fri"), days)
+    e.set_rules({"dayend_when": "day"})
+    real_de = e.dayend
+    active = lambda t=None: {**real_de(clk.to_utc(mid - 120)), "active": True, "today": True}
+    bid, ask = ea.quote("XAUUSD")
+    tkA = ea.open("XAUUSD", 1, 0.01, sl=round(bid - 6, 2))
+    otA = ea.pending("XAUUSD", "limit", 1, round(bid - 30, 2), 0.01, sl=round(bid - 35, 2))
+    await calls(ea, 2)
+    pA = next((p for p in e.positions if p.get("ticket") == tkA), None)
+    ok("a new trade from MT5 takes the ticket's mark (Hold by default)", pA and pA.get("dayend") is False and e.pos_view(pA)["dayend"] is True,
+       pA and (pA.get("dayend"), e.pos_view(pA)["dayend"]))
+    e.dayend = active
+    try:
+        e.housekeeping()
+        await calls(ea, 3)
+        h = next((x for x in e.history if x.get("ticket") == tkA), None)
+        ok("all trades: at the day-end time the trade is closed in MT5, reason 'day end'", tkA not in ea.positions and h and h["reason"] == "day end",
+           h and h["reason"])
+        ok("... and the pending order is cancelled in MT5", otA not in ea.orders and not any(o.get("ticket") == otA for o in e.orders))
+        ok("... in the log", any("Day-end close" in ev["msg"] for ev in e.events))
+        bid, ask = ea.quote("XAUUSD")
+        pl = e.plan({"s": "MT5:XAUUSD", "side": 1, "type": "market", "mode": "lots", "lots": 0.01, "sl": round(bid - 3, 2)})
+        ok("after it: a new order is refused until the broker's new day", "day-end close" in str(pl.get("blocked")), pl.get("blocked"))
+        e.set_rules({"dayend_scope": "marked"})
+        e.set_ticket({"dayend": False})
+        pl = e.plan({"s": "MT5:XAUUSD", "side": 1, "type": "market", "mode": "lots", "lots": 0.01, "sl": round(bid - 3, 2), "dayend": False})
+        ok("marked trades only: a Hold order can still be placed", "day-end" not in str(pl.get("blocked")), pl.get("blocked"))
+        pl = e.plan({"s": "MT5:XAUUSD", "side": 1, "type": "market", "mode": "lots", "lots": 0.01, "sl": round(bid - 3, 2), "dayend": True})
+        ok("... a day-end one can't", "day-end close" in str(pl.get("blocked")), pl.get("blocked"))
+        tkB = ea.open("XAUUSD", 1, 0.01, sl=round(bid - 6, 2))
+        await calls(ea, 2)
+        e.housekeeping()
+        await calls(ea, 2)
+        ok("marked trades only: a trade set to Hold stays open", tkB in ea.positions)
+        pB = next(p for p in e.positions if p.get("ticket") == tkB)
+        e.set_dayend(pB["id"], True)
+        ok("... marking it 'close at day end' shows on it", e.pos_view(pB)["dayend"] is True)
+        e.housekeeping()
+        await calls(ea, 3)
+        ok("... and the next check closes it", tkB not in ea.positions)
+        e.set_ticket({"dayend": True})
+        tkC = ea.open("XAUUSD", -1, 0.01, sl=round(ask + 6, 2))
+        await calls(ea, 2)
+        pC = next((p for p in e.positions if p.get("ticket") == tkC), None)
+        ok("the ticket set to 'close at day end': a trade placed in MT5 takes it", pC and pC.get("dayend") is True)
+        ea.offline = True
+        await calls(ea, 1)
+        e.seen = 0
+        e.housekeeping()
+        ok("MT5 not connected at the day-end time: a warning, nothing sent", tkC in ea.positions and any("Day-end close due" in ev["msg"] for ev in e.events))
+        ea.offline = False
+        await calls(ea, 2)
+        e.housekeeping()
+        await calls(ea, 3)
+        ok("MT5 back before the broker's midnight: closed then", tkC not in ea.positions)
+    finally:
+        e.dayend = real_de
+        e.set_rules({"dayend_on": False, "dayend_scope": "all"})
+        e.set_ticket({"dayend": False})
+    ok("switched off again: nothing", e.dayend() is None and e.snapshot()["mt5"]["dayend"] is None)
+
     print("restart")
     n_hist = len(e.history)
     e.save()

@@ -1,5 +1,55 @@
 # Changelog
 
+## v0.40.0 — 12 Nov 2026 — MT5: the day-end close
+
+Added
+- **The day-end close for MT5 accounts** (roadmap 8 b4; owner: "X minutes before the broker's day ends", "Everyday / Only
+  before the weekend", "choose trades or set everything to close as intraday"). Account › rules of each MT5 account:
+  - **Day-end close** on / off (off at first);
+  - **Minutes before the broker's day ends** (1-240, default 5): the broker's midnight, FundingPips 03:30 IST in winter and
+    02:30 in US summer time, so 5 minutes = 03:25 / 02:25 IST;
+  - **When:** every day, or only before the weekend (the broker's Friday);
+  - **Which trades:** all of them, or only the trades marked to close.
+  At that time the trades it covers are closed at market in MT5 (reason "day end" in History and the journal), their
+  pending orders cancelled, and new orders it would cover are refused until the broker's new day.
+- **Marking trades** (with "only trades marked to close"): the ticket's **At the day end: Close it / Hold** and the chart
+  tool's **DAY END / HOLD** next to PLACE mark the order; the choice stays the default for later orders, and trades placed in
+  MT5 itself take it too. **⏱** on each trade and pending order (the panel, the Trades page) changes its own: "closes at
+  03:25 IST" / "held over the day end". On the phone: the order sheet's and each trade's / order's sheet's **At the day end**.
+- The panel's footer says when it runs ("Day-end close 03:25 IST (5 min before the broker's day ends; all trades)"), and
+  "done for today" after it ran. The ticket's preview notes "closed at the day end, 03:25 IST".
+- MT5 not connected at that time: a warning in the Log; the trades keep their SL / TP at MT5 and are closed when MT5 is back
+  before the broker's midnight. A close MT5 refuses is asked again (20 s apart, 3 times).
+- Route `POST /api/mt5acct/dayend` ({id, on}).
+
+Changed
+- The header's journal lockout pill, when it isn't blocking, is shorter ("2% · off"; the reason in its tip): with an MT5
+  account's lockout showing, the MT5 top bar went onto two lines at 1500 px.
+
+Judgement calls (the owner can change them)
+- Off at first; trades are **Hold** by default (the ticket's switch), so nothing closes until you set it.
+- The day-end close is **not stopped by the news guard** (like the kill switch): on a Master account inside a news window it
+  still closes, with a warning in the Log (FundingPips deducts profits of trades closed inside the window).
+- It runs at the broker's midnight minus the minutes, for every symbol: a symbol whose own session ends earlier (some
+  indices, Friday's early closes) needs more minutes.
+
+The Fyers side is unchanged: its intraday square-off (5 minutes, settable, before Fyers' own times) was already there.
+
+Tests
+- `tests/mt5acct_test.py` (195): refusals of bad settings; the time (5 min before the broker's midnight, in IST); only on the
+  broker's Friday with "only before the weekend"; at the time: the trade closed in MT5 (reason day end), the pending order
+  cancelled, new orders refused; marked trades only: a Hold order allowed, a day-end one refused, a Hold trade kept, then
+  marked and closed; the ticket's mark taken by a trade placed in MT5; MT5 off at the time (a warning, nothing sent) and
+  back (closed then); off again.
+- New `tests/mt5dayend_flow.js` (19, browser, fake MT5): the four rules on the Account page; the footer; the ticket's switch
+  and the tool's DAY END / HOLD (saved, in the preview); a trade from MT5 taking the default; ⏱ on its line and the Trades
+  page; "all trades" (fixed on Close, no ⏱); the phone's trade sheet; off again.
+- On fresh test data: `security_flow` (29), `live_flow` (60), `mt5acct_flow` (52), `mt5journal_flow` (39), `mt5dayend_flow`
+  (19); also `journal_flow` (43), `mobile_flow` (61), `mt5_test` (52), `journal_test` (58), `squareoff_test`,
+  `routes_check.py`.
+- **Not tested on a real MT5 / FundingPips:** the close at the real broker midnight (the timing is checked with a controlled
+  clock against the fake terminal's GMT+2 / GMT+3 broker clock).
+
 ## v0.39.1 — 12 Nov 2026 — Each MT5 trade's candles kept for its replay
 
 Added

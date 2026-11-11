@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 12 Nov 2026 (v0.39.1: each MT5 trade's candles kept for its replay, item 8 c1b). This is the one task list for the project.
+Updated 12 Nov 2026 (v0.40.0: the MT5 day-end close, item 8 b4). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -306,6 +306,17 @@ fallback"):** item 8 is built now, stage by stage. Stage a shipped in **v0.34.0*
          chart candles stay as they are (kept, never deleted).
        - [ ] c2. The prop-firm parts of 4b (phases, payouts, account chains, the Octagon backup import): still waiting for
          the owner's yes.
+     - [x] (b4) **Day-end close for MT5 accounts** *(v0.40.0)* (owner, 12 Nov 2026, 00:26: "I wanted to know if the fyers version already
+       has an automatic close 5 minutes before the end of the day ... can I set for MT5". The Fyers side already has it:
+       intraday square-off 5 min (settable) before Fyers' times. Owner's answers, 00:28): **X minutes before the broker's
+       day ends** (its midnight); **every day or only before the weekend**, an option; **all trades, or only the trades I
+       choose**, an option. Design: Account › rules of each MT5 account (off at first; minutes 1-240, default 5); at that
+       time the trades it covers are closed at market in MT5 and their pending orders cancelled, and new orders it would
+       cover are refused until the broker's new day; "only marked trades": the ticket's **At the day end: Close it / Hold**
+       (the chart tool's DAY END / HOLD) marks new orders and stays the default (trades placed in MT5 itself take it too);
+       ⏱ on each trade (panel, Trades page, the phone's sheets) changes its own. MT5 off at that time: a warning, it closes
+       when MT5 is back before the broker's midnight. Not blocked by the news guard (like the kill switch; a warning if inside
+       the window).
      - [ ] (d) **Copy trades between MT5 accounts, later** (owner, 10 Nov: "in the roadmap, we can also have copy trades for
        a later stage"). FundingPips allows copying between your own FundingPips accounts (and out to an external
        account), not into one from outside; and no hedging across accounts, so copies only ever go the same way. Design
@@ -601,6 +612,9 @@ marked before relying on it.
 
 ## Done
 
+- [x] **v0.40.0** (12 Nov): the MT5 day-end close (item 8 b4): X minutes before the broker's day ends (default 5), every day or
+  only before the weekend, all trades or only marked ones (the ticket's At the day end / the tool's DAY END / HOLD, ⏱ per trade);
+  off at first.
 - [x] **v0.39.1** (12 Nov): each MT5 trade's candles kept on the server for its replay (item 8 c1b): 1m / 5m / 15m around
   the trade and the chart's timeframe with its warm-up, fetched from MT5 at the close (MT5's history in the background); charts
   and the replay use them when MT5 is off or its history has moved on; in the journal's backup. Fixed: an MT5 trade's replay

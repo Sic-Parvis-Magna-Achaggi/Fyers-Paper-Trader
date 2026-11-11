@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 12 Nov 2026, version **0.39.1** (each MT5 trade's candles kept for its replay, 8 c1b; 0.39.0: MT5 trades in the journal, 8 c1; 0.38.x: alerts, roadmap 21). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 12 Nov 2026, version **0.40.0** (the MT5 day-end close, 8 b4; 0.39.1: each MT5 trade's candles kept for its replay, 8 c1b; 0.39.0: MT5 trades in the journal, 8 c1). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -368,6 +368,18 @@ line of "FundingPips' day's starting balance".
   `jKept(t)` ("Replay candles"). Backup: `candles/` in the zip; restore adds missing ones. replay.js: the Fyers-login
   check skips MT5 symbols. `Mt5Engine.balance_at` uses deals' `tu` (UTC); `_mt5_redate` recomputes `balance_after` only
   once `M.caught`. Fake terminal: its balance is a few cents off its deals (tests allow 5 cents).
+- **v0.40.0, the MT5 day-end close (8 b4):** rules `dayend_on` / `dayend_min` / `dayend_when` (day | weekend) / `dayend_scope`
+  (all | marked) in `MT5_RULES` / `MT5_ONLY` (validated in `set_rules`). `Mt5Engine.dayend(t)` -> {at, until, at_ist, today,
+  active, min, when, scope, weekday} from the broker clock (next srv midnight − min; weekend = srv Friday); snapshot
+  `mt5.dayend`. `dayend_marked(obj)`: scope all, else obj["dayend"] (else the ticket's). Marks: `ticket.dayend` (set_ticket),
+  `M.placed[tag].dayend` from `place(req.dayend)`, `pos.dayend` in `_adopt`, `o.dayend` in `_take_orders`; `set_dayend(id, on)`
+  (route `/api/mt5acct/dayend`); `pos_view` / `order_view` carry `dayend`. `_dayend_run()` from `housekeeping`: closes
+  (`_close(p, "day end")`, retry 20 s x3 via `dayend_try`), CANCELs orders once a day, warns once if `_writable` fails; not
+  blocked by `_news_block` (warning). `plan()`: refused in the window when the request is marked; a note before it. Page
+  (mt5acct.js): `MT5_RULES` rows, `mtLimitsText` line, `mtDeNow` / `mtDeSet` (ticket save), `mtDeTicket` (`#mtDeBox` in the
+  ticket's Entry/Product row), `mtDeChip` (`#tDayEnd` before `#tPlace`, via the toolOverlay wrap), `mtDeBtn` (`.mtde` on
+  `#posList` / `#ordList` / `#pgPos`), `ticketBody` wrap (sends `dayend`), the phone: `mTicketBuild` / `mPosSheet` /
+  `mOrdSheet` wraps (`.mtde-row`). journal.js: the not-blocking pill is short ("2% · off").
 - **Known, not from this release:** on the Live side with an MT5 bridge connected, the feed pill ("Live MT5") plus the data
   budget pill can push the clock onto a second line at 1500 px; `live_flow.js`'s header check then fails when the journal's
   lockout pill isn't showing (it passes when it is). Seen in v0.39.0's runs on data shared with the MT5 tests.
@@ -472,6 +484,9 @@ line of "FundingPips' day's starting balance".
   FundingPips (10 Nov): no hedging even in Hedge mode; his 21182752 is Phase 1 of the 2-Step; news: ForexFactory (owner).
 
 ## Next job
+
+**v0.40.0 (12 Nov):** the owner sets the day-end close on his MT5 account (Account › rules) and watches the first one at
+03:25 IST (or 02:25 in US summer time): the trades it covers close with reason "day end"; the Log says so.
 
 **v0.39.1 (12 Nov):** after the update, an MT5 trade's card should say "Replay candles: kept on the server" within a minute
 or two of the server seeing MT5 (older ones fill in the background); ▶ On chart works with MT5 closed. Tell me what the

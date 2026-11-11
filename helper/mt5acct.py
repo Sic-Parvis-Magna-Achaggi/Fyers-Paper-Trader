@@ -39,6 +39,7 @@ from . import charges, mt5, news, store
 from .paper import DEFAULT_RULES, Paper, Refused
 
 log = logging.getLogger("mt5acct")
+IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 
 PREFIX = "mt5-"              # account ids: mt5-<login>
 NONE_ID = "mt5-none"         # what the MT5 side shows before any MT5 terminal has called
@@ -75,10 +76,15 @@ MT5_RULES = {
     "phase": "evaluation",     # evaluation | master (the news guard, slice b3, depends on it)
     "comm_default": None,      # $ per lot on each deal, typed (None = not typed); used only when MT5 hasn't said (v0.37.3)
     "news_on": True,           # the news guard (ForexFactory's high-impact events on the symbol's currencies)
+    # the day-end close (v0.40.0, owner 12 Nov 2026): X minutes before the broker's day ends, every day or only before
+    # the weekend, every trade or only the trades marked "close at day end" (the ticket's switch, each trade's own)
+    "dayend_on": False, "dayend_min": 5.0, "dayend_when": "day", "dayend_scope": "all",
     "news_min": 5,             # Master: no opening / closing this many minutes either side of the event (FundingPips: 5)
     "news_warn_min": 15,       # a warning this many minutes before one (evaluation: a warning only)
 }
-MT5_ONLY = ("daily_of", "phase", "comm_default", "comm_typed", "news_on", "news_min", "news_warn_min")
+MT5_ONLY = ("daily_of", "phase", "comm_default", "comm_typed", "news_on", "news_min", "news_warn_min",
+            "dayend_on", "dayend_min", "dayend_when", "dayend_scope")
+DAYEND_TRIES = 3            # a day-end close MT5 refused is asked again (20 s apart) at most this often
 MT5_KEYS = ("size", "daily_pct", "max_pct", "max_mode", "day_from", "buffer_pct", "risk_cap_pct", "max_margin_pct",
             "max_open_risk_pct", "max_trades", "sl_required", "be_buffer_ticks") + MT5_ONLY      # what an MT5 account can set
 FIXED = {"squareoff_on": False, "stale_sec": 120}      # (Fyers' square-off and expiry rules never apply to MT5)
@@ -142,6 +148,7 @@ class Mt5Engine(Paper):
             self.acct = {"start": size, "realized": 0.0, "peak": size, "created": time.time(), "cycle": 1}
         if not s.get("ticket"):
             self.ticket.update(mode="pct", risk_pct=0.5, lots=0.01, product="MT5")   # (lots: MT5's volume, 0.01 steps)
+        self.ticket.setdefault("dayend", False)    # (v0.40.0: new trades marked "close at day end", or held)
         self.ticket["product"] = "MT5"
         d = store.load(self.dir + "mt5_deals.json", {}) if not self.none else {}
         self.deals = {int(k): v for k, v in (d.get("deals") or {}).items()}
@@ -228,6 +235,85 @@ class Mt5Engine(Paper):
         moved = sum(_f(d.get("pr")) + _f(d.get("c")) + _f(d.get("sw")) + _f(d.get("fee"))
                     for d in self.deals.values() if _f(d.get("ts")) >= m)
         return round(self.balance() - moved, 2)
+
+    # ------------------------------------------------------------ the day-end close (v0.40.0)
+    def dayend(self, t: float | None = None) -> dict | None:
+        """When the day-end close is today: {at, until (UTC), at_ist, today, active, min, when, scope}; None when it's off.
+        The broker's day ends at its midnight (FundingPips: 03:30 IST in winter, 02:30 in US summer time); "weekend" =
+        only on the broker's Friday."""
+        R = self.rules
+        if not R.get("dayend_on"):
+            return None
+        t = time.time() if t is None else t
+        c = self._clock()
+        srv = c.to_srv(t)
+        mid = (int(srv) // 86400 + 1) * 86400
+        at_srv = mid - float(R.get("dayend_min") or 5) * 60
+        wd = dt.datetime.fromtimestamp(srv, dt.timezone.utc).weekday()
+        today = R.get("dayend_when", "day") == "day" or wd == 4
+        at, until = float(c.to_utc(at_srv)), float(c.to_utc(mid))
+        return {"at": at, "until": until, "at_ist": dt.datetime.fromtimestamp(at, IST).strftime("%H:%M"),
+                "today": today, "active": bool(today and srv >= at_srv), "min": R.get("dayend_min"),
+                "when": R.get("dayend_when", "day"), "scope": R.get("dayend_scope", "all"),
+                "weekday": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][wd]}
+
+    def dayend_marked(self, obj: dict | None) -> bool:
+        """Whether the day-end close takes this trade / order (or a new order: obj = the request)."""
+        if self.rules.get("dayend_scope", "all") == "all":
+            return True
+        if obj is None:
+            return bool(self.ticket.get("dayend"))
+        return bool(obj.get("dayend")) if obj.get("dayend") is not None else bool(self.ticket.get("dayend"))
+
+    def set_dayend(self, pid: str, on: bool):
+        """Mark a trade or a pending order "close at day end" (or hold it)."""
+        x = next((p for p in self.positions if p["id"] == pid), None) or next((o for o in self.orders if o["id"] == pid), None)
+        if not x:
+            raise Refused("that trade is already gone")
+        x["dayend"] = bool(on)
+        self.changed(f"{self.short(x['s'])} #{x.get('ticket')}: {'closed at the day end' if on else 'held over the day end'}")
+
+    def set_ticket(self, new: dict):
+        if "dayend" in new:
+            self.ticket["dayend"] = bool(new.pop("dayend"))
+        super().set_ticket(new)
+
+    def _dayend_run(self):
+        de = self.dayend()
+        if not de or not de["active"]:
+            return
+        day = self.trading_day()
+        t = time.time()
+        due = [p for p in self.positions if self.dayend_marked(p) and not p.get("exiting") and not p.get("gone")]
+        due_o = [o for o in self.orders if self.dayend_marked(o) and not o.get("cancel_req")]
+        if not due and not due_o:
+            return
+        try:
+            self._writable(confirm=False)
+        except Refused as e:
+            self._warn_once(f"dayend:{day}", f"Day-end close due at {de['at_ist']} IST but it can't reach MT5 ({e}): "
+                                             "your trades keep their SL / TP at MT5")
+            return
+        for p in due:
+            tr = p.get("dayend_try") or [None, 0, 0]
+            if tr[0] != day:
+                tr = [day, 0, 0]
+            if tr[1] >= DAYEND_TRIES or t - tr[2] < 20:
+                continue
+            p["dayend_try"] = [day, tr[1] + 1, t]
+            nb = self._news_block(p["s"], "closing")
+            self._close(p, "day end")
+            self.event(f"Day-end close: {self.short(p['s'])} #{p['ticket']} sent to MT5 ({de['at_ist']} IST, "
+                       f"{de['min']:g} min before the broker's day ends)" + (f" - inside the news window: {nb}" if nb else ""),
+                       "warn" if nb else "info")
+        for o in due_o:
+            if o.get("dayend_try") == day:
+                continue
+            o["dayend_try"] = day
+            self._cmd("CANCEL", o["ticket"], str(o["ticket"]), "day end")
+            o["cancel_req"] = time.time()
+            self.event(f"Day-end close: pending {self.short(o['s'])} order #{o['ticket']} cancelled in MT5")
+        self.changed()
 
     def day_start_balance(self, day: str):
         """FundingPips' starting balance of a broker day (the journal's 2% line, v0.39.0): the balance at that day's
@@ -895,6 +981,7 @@ class Mt5Engine(Paper):
                "be_done": False, "trail": False, "own_stop": False, "margin": 0, "tr": dict(self.trail),
                "outside": outside, "magic": magic, "comment": cm, "b_sl": sl, "b_tp": tp, "seen_srv": srv_now,
                "found": bool(first)}
+        pos["dayend"] = bool(meta["dayend"]) if meta and meta.get("dayend") is not None else bool(self.ticket.get("dayend"))
         if meta:                                   # placed from the app: its planned stops and trailing
             pos["sl"] = pos["first_sl"] = meta.get("sl") if meta.get("sl") is not None else sl
             pos["tp"] = meta.get("tp") if meta.get("tp") is not None else tp
@@ -1008,13 +1095,14 @@ class Mt5Engine(Paper):
             price = self._rnd(row, price)
             o = next((x for x in self.orders if x.get("ticket") == tk), None)
             if o is None:
-                self._placed_meta(str(r[10]))         # (an order from the app: no longer "on its way")
+                meta = self._placed_meta(str(r[10]))  # (an order from the app: no longer "on its way")
                 n = self.steps(row, vcur)
                 o = {"id": f"O{tk}", "ticket": tk, "s": s, "side": side, "type": kind, "product": "MT5", "basis": "self",
                      "qty": n, "lots": round(vcur, 8), "price": price, "sl": sl, "tp": tp, "ref": None, "ref_price": None,
                      "delta": None, "margin": 0, "created": self.to_utc(_f(r[8]) / 1000.0) if _f(r[8]) else time.time(),
                      "outside": not str(r[10]).startswith("FTM"), "b_price": price, "b_sl": sl, "b_tp": tp,
-                     "stoplimit": _f(r[11]) or None, "mt_type": typ, "comment": str(r[10])[:40]}
+                     "stoplimit": _f(r[11]) or None, "mt_type": typ, "comment": str(r[10])[:40],
+                     "dayend": bool(meta["dayend"]) if meta and meta.get("dayend") is not None else bool(self.ticket.get("dayend"))}
                 o["risk"] = round(self.order_risk(o), 2)
                 self.orders.append(o)
                 self._symbols_changed()
@@ -1305,6 +1393,14 @@ class Mt5Engine(Paper):
                    comm=row.get("comm"))                                                        # (v0.37.3: and the commission)
         if out.get("risk_1lot") is not None:
             out["risk_1step"] = out["risk_1lot"]
+        de = self.dayend()
+        if de and de["active"] and not out.get("blocked") and self.dayend_marked({"dayend": req.get("dayend")}):
+            out["blocked"] = (f"Blocked: the day-end close ran at {de['at_ist']} IST - no new "
+                              + ("" if de["scope"] == "all" else "day-end ") + "orders until the broker's new day "
+                              f"({dt.datetime.fromtimestamp(de['until'], IST).strftime('%H:%M')} IST)"
+                              + ("" if de["scope"] == "all" else ". A trade set to Hold can still be placed"))
+        if de and de["today"] and not de["active"] and self.dayend_marked({"dayend": req.get("dayend")}):
+            out.setdefault("notes", []).append(f"closed at the day end, {de['at_ist']} IST")
         w = self._news_note(row)
         if w:
             out["notes"].append(w)
@@ -1361,7 +1457,8 @@ class Mt5Engine(Paper):
               "price": price, "sl": p.get("sl"), "tp": p.get("tp"), "risk": p.get("risk"), "made": time.time(), "ticket": None}
         self.M["opening"][c["tag"]] = op
         self.M["placed"][c["tag"]] = {"s": p["s"], "side": p["side"], "sl": p.get("sl"), "tp": p.get("tp"),
-                                      "tr": dict(self.trail), "at": time.time()}
+                                      "tr": dict(self.trail), "at": time.time(),
+                                      "dayend": bool(req["dayend"]) if req.get("dayend") is not None else bool(self.ticket.get("dayend"))}
         self.changed(f"{self._op_text(op)} sent to MT5" + (f", SL {p['sl']:g}" if p.get("sl") is not None else "")
                      + (f", TP {p['tp']:g}" if p.get("tp") is not None else "") + (f", risk {p['risk']:,.2f} {self.ccy()} net"
                                                                                   if p.get("risk") is not None else ""))
@@ -1577,6 +1674,19 @@ class Mt5Engine(Paper):
             raise Refused("daily % of: day (the day's starting balance) or size (the starting size)")
         if "phase" in extra and extra["phase"] not in ("evaluation", "master"):
             raise Refused("phase: evaluation or master")
+        if "dayend_when" in extra and extra["dayend_when"] not in ("day", "weekend"):
+            raise Refused("day-end close: every day (day) or only before the weekend (weekend)")
+        if "dayend_scope" in extra and extra["dayend_scope"] not in ("all", "marked"):
+            raise Refused("day-end close: all trades (all) or only the trades marked for it (marked)")
+        if "dayend_on" in extra:
+            extra["dayend_on"] = extra["dayend_on"] in (True, "true", "1", 1)
+        if "dayend_min" in extra:
+            try:
+                extra["dayend_min"] = float(extra["dayend_min"])
+            except (TypeError, ValueError):
+                raise Refused("day-end close: minutes before the broker's day ends, a number")
+            if not 1 <= extra["dayend_min"] <= 240:
+                raise Refused("day-end close: 1 to 240 minutes before the broker's day ends")
         extra.pop("comm_typed", None)
         if "comm_default" in extra:
             if extra["comm_default"] in (None, ""):
@@ -1652,6 +1762,7 @@ class Mt5Engine(Paper):
         if self.none:
             return
         self.roll_day()
+        self._dayend_run()
         n = len(self.M["cmd"])
         self._lost()
         t = time.time()
@@ -1697,7 +1808,8 @@ class Mt5Engine(Paper):
                  swap=pos.get("swap"), comm_in=pos.get("comm_in"), comm_est=bool(pos.get("comm_est")),
                  exiting=pos.get("exiting"), mt_err=pos.get("mt_err"), b_sl=pos.get("b_sl"), b_tp=pos.get("b_tp"),
                  pend=("sent" if c["sent"] else "queued") if c else None, gone=bool(pos.get("gone")),
-                 comm_out=round(charges.mt5_comm_amt(row, vol, "out"), 2), found=bool(pos.get("found")))
+                 comm_out=round(charges.mt5_comm_amt(row, vol, "out"), 2), found=bool(pos.get("found")),
+                 dayend=self.dayend_marked(pos), dayend_own=bool(pos.get("dayend")))
         if v.get("at_be"):
             v["be_covers"] = round(float(pos["paid"]) + charges.mt5_comm_amt(row, vol, "out"), 2)
         return v
@@ -1705,7 +1817,8 @@ class Mt5Engine(Paper):
     def order_view(self, o) -> dict:
         v = super().order_view(o)
         c = self._cmd_for(o.get("ticket"))
-        v.update(pend=(c["k"], "sent" if c["sent"] else "queued") if c else None, vol=o.get("lots"))
+        v.update(pend=(c["k"], "sent" if c["sent"] else "queued") if c else None, vol=o.get("lots"),
+                 dayend=self.dayend_marked(o), dayend_own=bool(o.get("dayend")))
         return v
 
     def snapshot(self) -> dict:
@@ -1772,6 +1885,7 @@ class Mt5Engine(Paper):
             "day_start": self.day.get("start_bal"), "day_start_eq": self.day.get("start_eq"), "day_base": f.get("day_base"),
             "breach": breach, "warnings": warnings, "caught": self.M["caught"], "deals": len(self.deals),
             "cmds": len(self.M["cmd"]), "midnight_ist": self._midnight_ist(), "halted": self.M["halted"],
+            "dayend": None if self.none else self.dayend(),
             "ea_trade": ver_ok(self.ea, EA_TRADE), "ea_trade_min": EA_TRADE, "news": self._news_list(),
             "news_src": news.status(),
             "opening": [{"tag": k, "text": self._op_text(v), "s": v["s"], "side": v["side"], "sent": bool(

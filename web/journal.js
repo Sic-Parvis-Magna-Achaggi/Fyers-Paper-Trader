@@ -847,7 +847,8 @@ function jnLockPill(){
   const what = lk.kind === "afk" ? `99 Club break until ${jHM(lk.until)}` : lk.kind === "dd" ? "2% lockout" : "Session over";
   el.title = `Your journal: ${what}` + (lk.on ? " - new orders refused (Journal › Settings)" : lk.mt5_off
     ? " - not blocking: lockouts are off for this MT5 account (Journal › Settings)" : " - not blocking: its switch is off (Journal › Settings)");
-  el.innerHTML = `<span class="dot ${lk.on ? "bad" : "warn"}"></span><span>${what}${lk.on ? "" : '<small class="jn-nb"> · off</small>'}</span>`;   // (short: the top bar stays on one line)
+  const brief = lk.kind === "afk" ? "99 Club" : lk.kind === "dd" ? "2%" : "Ended";       // (not blocking: shortest, the tip says it all)
+  el.innerHTML = `<span class="dot ${lk.on ? "bad" : "warn"}"></span><span>${lk.on ? what : brief + '<small class="jn-nb"> · off</small>'}</span>`;   // (the top bar stays on one line)
 }
 
 /* ------------------------------------------------------------------ hooks into the page */

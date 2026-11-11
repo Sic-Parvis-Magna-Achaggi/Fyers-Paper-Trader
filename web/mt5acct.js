@@ -44,12 +44,14 @@ function mtPositions(){
     const st = mtState(p);
     const el = document.querySelector(`#posList .pos[data-id="${p.id}"]`); if(el) mtLine(el, st);
     const td = document.querySelector(`#pgPos tr[data-id="${p.id}"] td[data-e="sl"]`); if(td) mtLine(td, st, "sm ");
+    if(el) mtDeBtn(el, p);
+    if(td) mtDeBtn(td, p);
   }
   for(const o of P.snap.orders){
     const pend = o.pend ? (o.pend[0] === "CANCEL" ? "cancelling in MT5…" : "moving in MT5…") : "";
     const t = {t: `${o.outside ? "Placed in MT5 · " : ""}#${o.ticket}${o.type === "stoplimit" ? " · stop-limit " + fmt(o.stoplimit, o.tick) : ""}`
       + (o.cancel_req ? " · cancelling in MT5…" : pend ? " · " + pend : "") + (o.mt_err ? ` · MT5 refused: ${o.mt_err}` : ""), c: o.mt_err ? "warnc" : "muted"};
-    const el = document.querySelector(`#ordList .pos[data-id="${o.id}"]`); if(el) mtLine(el, t);
+    const el = document.querySelector(`#ordList .pos[data-id="${o.id}"]`); if(el){ mtLine(el, t); mtDeBtn(el, o); }
   }
 }
 
@@ -78,7 +80,9 @@ function mtLimitsText(){
   const base = r.day_from === "higher" ? "the higher of balance and equity" : r.day_from === "equity" ? "equity" : "balance";
   const d = a.daily_floor != null ? `Daily floor <b>${rs(a.daily_floor)}</b> (${pct(r.daily_pct)} of ${r.daily_of === "size" ? "the starting size" : "the day's start"}; the ${base} at the broker's midnight, ${esc(M.midnight_ist || "")} IST: ${rs(M.day_base)})` : "Daily limit off";
   const x = a.max_floor != null ? `Max floor <b>${rs(a.max_floor)}</b> (${pct(r.max_pct)} of ${rs(r.size)}${r.max_mode === "trailing" ? ", trailing" : ""}${M.size_set ? "" : " - type your starting size on the Account page"})` : "Max limit off";
-  return `${d} · ${x}`;
+  const de = M.dayend;
+  const e = de ? ` · Day-end close <b>${esc(de.at_ist)} IST</b> (${(+de.min).toLocaleString("en-US")} min before the broker's day ends${de.when === "weekend" ? ", Fridays only" : ""}; ${de.scope === "all" ? "all trades" : "trades marked to close"})${de.when === "weekend" && !de.today ? " · not today" : de.active ? " · <b>done for today</b>: new orders wait for the broker's new day" : ""}` : "";
+  return `${d} · ${x}${e}`;
 }
 function mtFoot(){
   const f = $("#acctFoot"); if(!f) return;
@@ -128,7 +132,7 @@ async function mtKill(){
 }
 function mtDecorate(){
   document.body.classList.toggle("is-mt5", mtOn());
-  mtBanner(); mtPanel(); mtFoot(); mtPositions(); mtTicketHint(); mtPlace(); mtOpening(); mtKillBtn();
+  mtBanner(); mtPanel(); mtFoot(); mtPositions(); mtTicketHint(); mtPlace(); mtOpening(); mtKillBtn(); mtDeTicket(); mtDeChip();
 }
 
 /* ---------------------------------------------------------------- the first change on an account: its login, once */
@@ -180,6 +184,10 @@ const MT5_RULES = [
   ["max_margin_pct", "Max margin use %", "0 = off"],
   ["max_trades", "Max trades a day", "Pending orders count; 0 = no limit"],
   ["sl_required", "Stop loss required", "", [[true, "required"], [false, "optional"]]],
+  ["dayend_on", "Day-end close", "Close trades a few minutes before the broker's day ends (its midnight: FundingPips 03:30 IST in winter, 02:30 in US summer time); pending orders are cancelled and new ones refused until the new day", [[false, "off"], [true, "on"]]],
+  ["dayend_min", "Minutes before the broker's day ends", "1 to 240"],
+  ["dayend_when", "Day-end close: when", "", [["day", "every day"], ["weekend", "only before the weekend (Fridays)"]]],
+  ["dayend_scope", "Day-end close: which trades", "Marked: you choose per trade (At the day end on the ticket, ⏱ on each trade); the choice stays the default for later trades", [["all", "all trades"], ["marked", "only trades marked to close"]]],
 ];
 function mtRulesHTML(r){
   return MT5_RULES.map(([k, label, help, opts]) => `<div class="rf"><label>${label}${k === "size" || k === "comm_default" ? ` (${CUR().trim()})` : ""}</label>` +
@@ -283,7 +291,8 @@ function mtAccountPage(){
   paperUpdate = function(s, events){ pu(s, events); mtDecorate(); };
   if(typeof pgPositions === "function"){ const pp = pgPositions; pgPositions = function(){ pp(); mtPositions(); }; }
   if(typeof renderPlan === "function"){ const rp = renderPlan; renderPlan = function(){ rp(); mtPlace(); mtPerMove(); }; }
-  if(typeof toolOverlay === "function"){ const to = toolOverlay; toolOverlay = function(){ to(); mtPlace(); }; }
+  if(typeof ticketBody === "function"){ const tb = ticketBody; ticketBody = function(){ const b = tb(); if(mtOn()) b.dayend = mtDeNow(); return b; }; }   // (v0.40.0: preview and PLACE)
+  if(typeof toolOverlay === "function"){ const to = toolOverlay; toolOverlay = function(){ to(); mtPlace(); mtDeChip(); }; }
   if(typeof pgAccount === "function"){ const pa = pgAccount; pgAccount = function(){ if(mtOn()) return mtAccountPage(); pa(); }; }
   if(typeof renderRules === "function"){                  // Settings › rules: an MT5 account's own limits
     const rr = renderRules;
@@ -343,3 +352,81 @@ function mtPerMove(){
   if(!d){ d = document.createElement("div"); d.className = "mtper muted"; d.style.cssText = "font-size:11px;margin-top:4px"; el.appendChild(d); }
   if(d.textContent !== h) d.textContent = h;
 }
+
+/* ---------------------------------------------------------------- v0.40.0: the day-end close (rules on the Account page)
+   MT5 trades are closed X minutes before the broker's day ends, every day or only on Fridays, all of them or only the ones
+   marked "close". The ticket's "At the day end" (the chart tool's DAY END / HOLD) marks new orders and stays the default
+   (trades placed in MT5 itself take it too); ⏱ on each trade changes its own. */
+function mtDeNow(){ return P.mtDe != null ? P.mtDe : !!((P.snap && P.snap.ticket) || {}).dayend; }
+function mtDeTip(d){ return `${d.at_ist} IST, ${(+d.min).toLocaleString("en-US")} min before the broker's day ends${d.when === "weekend" ? " (Fridays only)" : ""}`; }
+async function mtDeSet(v){
+  P.mtDe = !!v; mtDeTicket(); mtDeChip();
+  const j = await api("/api/paper/ticket", {body: {dayend: !!v}});
+  if(j.ok){ if(P.snap && P.snap.ticket) P.snap.ticket.dayend = !!v; P.mtDe = null; } else toast(j.error || "Couldn't save");
+  if(P.armed && typeof preview === "function") preview();
+  if(typeof mTicketFill === "function") mTicketFill();
+}
+function mtDeTicket(){
+  const pe = $("#tkProd"); if(!pe) return;
+  const host = pe.parentElement && pe.parentElement.parentElement; if(!host) return;
+  let b = $("#mtDeBox");
+  const d = mtOn() ? mtM().dayend : null;
+  if(!d){ if(b) b.classList.add("hide"); return; }
+  if(!b){ b = document.createElement("div"); b.id = "mtDeBox";
+    b.innerHTML = `<label>At the day end</label><select id="mtDeSel"><option value="1">Close it</option><option value="0">Hold</option></select>`;
+    host.append(b); $("#mtDeSel").onchange = e => mtDeSet(e.target.value === "1"); }
+  b.classList.remove("hide");
+  const sel = $("#mtDeSel"), all = d.scope === "all";
+  sel.disabled = all; sel.value = all || mtDeNow() ? "1" : "0";
+  b.title = all ? `Every MT5 trade is closed at the day end: ${mtDeTip(d)} (Account › rules)` : `Close this trade at the day end (${mtDeTip(d)}) or hold it. Stays the default for later trades.`;
+}
+function mtDeChip(){
+  let c = $("#tDayEnd");
+  const d = mtOn() ? mtM().dayend : null, pl = $("#tPlace");
+  if(!d || !pl){ if(c) c.remove(); return; }
+  if(!c || c.nextElementSibling !== pl){ if(c) c.remove(); c = document.createElement("button"); c.id = "tDayEnd"; c.className = "tx tprod";
+    pl.before(c); c.onclick = () => { const x = mtM().dayend; if(x && x.scope !== "all") mtDeSet(!mtDeNow()); }; }
+  const on = d.scope === "all" || mtDeNow();
+  c.textContent = on ? "DAY END" : "HOLD"; c.classList.toggle("carry", !on);
+  c.title = d.scope === "all" ? `Closed at the day end: ${mtDeTip(d)} (every MT5 trade)` : on ? `Closed at the day end (${mtDeTip(d)}). Click to hold it` : `Held over the day end. Click to close it at ${d.at_ist} IST`;
+}
+function mtDeBtn(host, x){
+  const d = mtM().dayend;
+  let b = host.querySelector(":scope > .mtde");
+  if(!d || d.scope === "all"){ if(b) b.remove(); return; }
+  if(!b){ b = document.createElement("button"); b.type = "button"; b.className = "mtde"; host.append(b);
+    b.onclick = async ev => { ev.stopPropagation(); ev.preventDefault();
+      const j = await api("/api/mt5acct/dayend", {body: {id: b.dataset.id, on: b.dataset.on !== "1"}});
+      if(j.paper) paperUpdate(j.paper); else if(!j.ok) toast(j.error || "Refused"); }; }
+  const on = !!x.dayend;
+  b.dataset.id = x.id; b.dataset.on = on ? "1" : "0"; b.classList.toggle("on", on);
+  const txt = on ? `⏱ closes at ${d.at_ist} IST` : "⏱ held over the day end";
+  if(b.textContent !== txt) b.textContent = txt;
+  b.title = on ? "Closed at the day end. Click to hold it" : `Click to close it at the day end (${mtDeTip(d)})`;
+}
+/* the phone: the order sheet's row, and the trade / order sheets' mark */
+document.addEventListener("DOMContentLoaded", () => {
+  const rowHtml = (on, all) => `<div class="mrow mtde-row"><span>At the day end</span><div class="mseg" data-g="mtde" style="margin:0">
+    <button data-v="1" class="${on ? "on" : ""}">Close it</button><button data-v="0" class="${on ? "" : "on"}"${all ? " disabled" : ""}>Hold</button></div></div>`;
+  if(typeof mTicketBuild === "function"){
+    const tb = mTicketBuild;
+    mTicketBuild = function(){ tb.apply(this, arguments); const d = mtOn() ? mtM().dayend : null, box = document.querySelector("#mTk .sbody"), pv = document.querySelector("#mtPv");
+      if(!d || !box || !pv || box.querySelector(".mtde-row")) return;
+      pv.insertAdjacentHTML("beforebegin", rowHtml(d.scope === "all" || mtDeNow(), d.scope === "all"));
+      box.querySelectorAll('[data-g="mtde"] button').forEach(b => b.onclick = () => { if(mtM().dayend.scope === "all") return;
+        box.querySelectorAll('[data-g="mtde"] button').forEach(x => x.classList.toggle("on", x === b)); mtDeSet(b.dataset.v === "1"); }); };
+  }
+  const sheet = (orig, find) => function(id){
+    orig.apply(this, arguments);
+    const d = mtOn() ? mtM().dayend : null, x = find(id), sh = document.querySelector("#mSheet");
+    if(!d || !x || !sh || d.scope === "all" || sh.querySelector(".mtde-row")) return;
+    const anchor = sh.querySelector(".mbtns") || sh.lastElementChild;
+    anchor.insertAdjacentHTML("beforebegin", rowHtml(!!x.dayend, false));
+    sh.querySelectorAll('[data-g="mtde"] button').forEach(b => b.onclick = async () => {
+      const j = await api("/api/mt5acct/dayend", {body: {id, on: b.dataset.v === "1"}});
+      if(j.paper) paperUpdate(j.paper);
+      if(j.ok) sh.querySelectorAll('[data-g="mtde"] button').forEach(y => y.classList.toggle("on", y === b)); else toast(j.error || "Refused"); });
+  };
+  if(typeof mPosSheet === "function") window.mPosSheet = mPosSheet = sheet(mPosSheet, id => P.snap && P.snap.positions.find(p => p.id === id));
+  if(typeof mOrdSheet === "function") window.mOrdSheet = mOrdSheet = sheet(mOrdSheet, id => P.snap && P.snap.orders.find(o => o.id === id));
+});

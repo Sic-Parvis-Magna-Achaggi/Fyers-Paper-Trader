@@ -698,6 +698,20 @@ async def mt5acct_resume(request: Request):
     return _ok(e)
 
 
+@app.post("/api/mt5acct/dayend")
+async def mt5acct_dayend(request: Request):
+    """{id, on}: mark an MT5 trade or pending order "close at day end" (on) or hold it (off) (v0.40.0)."""
+    _same_origin(request)
+    _user(request)
+    b = await _body(request)
+    e = _mt5e(request, b)
+    try:
+        e.set_dayend(str(b.get("id") or ""), bool(b.get("on")))
+    except Refused as x:
+        return _err(x)
+    return _ok(e)
+
+
 @app.post("/api/mt5acct/news")
 async def mt5acct_news(request: Request):
     """Read ForexFactory's calendar now (it's read every hour)."""
