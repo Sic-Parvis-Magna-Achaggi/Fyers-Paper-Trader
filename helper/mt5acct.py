@@ -155,7 +155,8 @@ class Mt5Engine(Paper):
                   "info": m.get("info") or {}, "caught": bool(m.get("caught")), "size_set": bool(m.get("size_set")),
                   "dreset": bool(m.get("dreset")), "first_seen": m.get("first_seen") or 0, "ea": m.get("ea") or "",
                   "opening": m.get("opening") or {}, "placed": m.get("placed") or {}, "halted": bool(m.get("halted")),
-                  "trail_sent": m.get("trail_sent") or {}, "trail_at": 0, "etrail": m.get("etrail") or {}}
+                  "trail_sent": m.get("trail_sent") or {}, "trail_at": 0, "etrail": m.get("etrail") or {},
+                  "ppl": m.get("ppl") or {}}      # v0.37.2: $ per 1.00 of price per 1 lot, learned from MT5's own position profit
         self.ea = self.M["ea"]
 
     def _save_extra(self) -> dict:
@@ -266,10 +267,57 @@ class Mt5Engine(Paper):
                  "k": None, "o": "", "f": "CFD", "x": "MT5", "g": "MT5", "on": True, "sess": "", "frz": "", "it": None,
                  "mt5": {"digits": si.get("dg"), "tick_value": si.get("tv"), "vstep": si.get("vs"), "contract": si.get("cs")}}
         m = r.get("mt5") or {}
-        out = {**r, "lot": 1, "prod": "MT5", "tick": si.get("ts") or r.get("tick") or 0.01,
-               "tv": si.get("tv") or m.get("tick_value") or 0.0, "vstep": si.get("vs") or m.get("vstep") or 0.01,
+        tick = si.get("ts") or r.get("tick") or 0.01
+        tv, src, rep = self.tick_value(name, tick, m)
+        out = {**r, "lot": 1, "prod": "MT5", "tick": tick, "tv": tv, "tv_src": src, "tv_mt5": rep,
+               "vstep": si.get("vs") or m.get("vstep") or 0.01,
                "comm": self.comm_for(name), "digits": si.get("dg") if si.get("dg") is not None else m.get("digits")}
         return out
+
+    def tick_value(self, name: str, tick: float, m: dict | None = None) -> tuple:
+        """What one tick is worth on 1 lot, in the account's currency: (value, where from, what MT5 reported).
+        v0.37.2 (owner, 11 Nov: the app showed -$3.78 at the stop, MT5 -$217.94): MT5's SYMBOL_TRADE_TICK_VALUE isn't
+        trusted alone. In order: (1) learned from MT5's own profit on an open position of the symbol (what MT5 really
+        pays); (1b) EA 1.21's OrderCalcProfit for 1 lot over a 1.00 move; (2) tick size x contract size, when the symbol's profit currency is the account's (XAUUSD on a $ account:
+        0.01 x 100 = $1); (3) MT5's reported tick value. A reported figure off by more than 2% is flagged."""
+        si = self.M["sym"].get(name) or {}
+        m = m if m is not None else ((mt5.row(self.uid, mt5.PREFIX + name) or {}).get("mt5") or {})
+        rep = float(si.get("tv") or m.get("tick_value") or 0.0)
+        cs = float(si.get("cs") or m.get("contract") or 0.0)
+        cp = str(m.get("cprofit") or "").upper()
+        learned = float((self.M.get("ppl") or {}).get(name) or 0.0)
+        pp = float(si.get("pp") or 0.0)
+        if learned > 0:
+            tv, src = learned * tick, "learned from MT5's profit on your position"
+        elif pp > 0:
+            tv, src = pp * tick, "MT5's own profit sum (OrderCalcProfit)"
+        elif cs > 0 and cp and cp == self.ccy():
+            tv, src = tick * cs, f"tick size x contract size ({cs:g})"
+        elif rep > 0:
+            tv, src = rep, "MT5's tick value"
+        else:
+            tv, src = 0.0, ""
+        if rep > 0 and tv > 0 and src != "MT5's tick value" and abs(rep - tv) / tv > 0.02:
+            self._warn_once(f"tv:{name}", f"{name}: MT5 reported a tick value of {rep:g} {self.ccy()} per lot, but {src} gives "
+                                          f"{tv:g} - the app uses {tv:g}")
+        return round(tv, 10), src, rep
+
+    def _learn_value(self, name: str, side: int, vol: float, open_px: float, cur: float, profit: float) -> None:
+        """$ per 1.00 of price per lot from MT5's own figure for an open position (profit before commission and swap)."""
+        si = self.M["sym"].get(name) or {}
+        ts = float(si.get("ts") or 0.01)
+        d = side * (cur - open_px)
+        if vol <= 0 or not profit or abs(d) < 20 * ts or profit * d <= 0:
+            return
+        ppl = profit / (d * vol)
+        L = self.M.setdefault("ppl", {})
+        old = float(L.get(name) or 0)
+        if old and abs(ppl - old) / old < 0.005:
+            return
+        if not old or abs(ppl - old) / old > 0.05:
+            self.event(f"{name}: MT5's profit on your position shows {ppl:g} {self.ccy()} per 1.00 move per lot"
+                       + (f" (was {old:g})" if old else "") + " - used for every figure from now on", "info")
+        L[name] = round(ppl, 6)
 
     def comm_for(self, name: str) -> dict:
         L = self.M["comm"].get(name) or {}
@@ -317,6 +365,8 @@ class Mt5Engine(Paper):
                 si = {"tv": _f(v[0]), "ts": _f(v[1]), "vs": _f(v[2]) or 0.01, "cs": _f(v[3]), "dg": _i(v[4])}
                 if len(v) >= 10:                   # EA 1.20: margin for 1 lot (buy, sell), volume min / max, stops level
                     si.update(mb=_f(v[5]), ms=_f(v[6]), vmin=_f(v[7]), vmax=_f(v[8]), sl=_i(v[9]))
+                if len(v) >= 11 and _f(v[10]) > 0:  # EA 1.21: MT5's OrderCalcProfit for 1 lot over a 1.00 rise
+                    si["pp"] = _f(v[10])
                 self.M["sym"][name] = si
         for r in body.get("res") or []:
             changed |= self._result(r)
@@ -586,6 +636,7 @@ class Mt5Engine(Paper):
             sl, tp = self._rnd(row, sl), self._rnd(row, tp)
             pos = next((p for p in self.positions if p.get("ticket") == tk), None)
             mt = {"sl": sl, "tp": tp, "pc": pc, "profit": round(pr, 2), "swap": round(sw, 2), "vol": vol, "at": t}
+            self._learn_value(name, side, vol, po, pc, pr)
             if pos is None:
                 pos = self._adopt(row, tk, ident, side, vol, po, sl, tp, sw, tmsc, magic, cm, srv_now, first)
                 pos["mt"] = mt
@@ -1034,6 +1085,8 @@ class Mt5Engine(Paper):
                 req["lots"] = int(round(float(req.get("lots") or 0) / float(row["vstep"])))
         if not (self.px(s).get("bid") or self.px(s).get("ltp")):
             raise Refused(f"waiting for {row['u']}'s price from MT5 {self.login} (its terminal streams it from now)")
+        if not row.get("tv"):
+            raise Refused(f"{row['u']}: the value of a price move isn't known yet (MT5 hasn't sent the symbol's details)")
         out = super().plan(req, place)
         si = self.M["sym"].get(row["u"]) or {}
         steps = int(out.get("lots") or 0)
@@ -1045,7 +1098,8 @@ class Mt5Engine(Paper):
             out["notes"].append(f"cut to MT5's maximum volume ({vmax * row['vstep']:g} lot)")
             steps = vmax
         out.update(steps=steps, lots=round(steps * float(row["vstep"]), 8), vol=round(steps * float(row["vstep"]), 8),
-                   ccy=self.ccy(), product="MT5")
+                   ccy=self.ccy(), product="MT5",
+                   per_move=round(float(row["tv"]) / float(row["tick"]), 6), tv_src=row.get("tv_src"))   # (v0.37.2: shown on the ticket)
         if out.get("risk_1lot") is not None:
             out["risk_1step"] = out["risk_1lot"]
         w = self._news_note(row)
@@ -1492,7 +1546,17 @@ class Mt5Engine(Paper):
                                         + (" - Master: no opening or closing from the app around it; MT5's own SL / TP can "
                                            "still fire inside the window" if R.get("phase") == "master" else ""))
                         break
+        vals = []                                  # v0.37.2: what a 1.00 move is worth on 1 lot, per symbol, and where from
+        for name in sorted(set(self.M["sym"]) | set(self.M.get("ppl") or {})):
+            try:
+                rw = self.row(mt5.PREFIX + name)
+            except Refused:
+                continue
+            if rw.get("tv") and rw.get("tick"):
+                vals.append({"s": name, "per": round(rw["tv"] / rw["tick"], 6), "src": rw.get("tv_src"),
+                             "mt5": round(rw["tv_mt5"] / rw["tick"], 6) if rw.get("tv_mt5") else None})
         s.update(ccy=self.ccy(), mt5={
+            "values": vals,
             "login": self.login, "none": self.none, "online": self.online(), "seen": int(self.seen) or None,
             "ea": self.ea, "ea_ok": ver_ok(self.ea), "ea_min": EA_MIN, "trade": self.trade, "confirmed": self.M["confirmed"],
             "info": info, "comm": comm, "comm_default": R.get("comm_default"), "phase": R.get("phase"),

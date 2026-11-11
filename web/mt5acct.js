@@ -235,6 +235,14 @@ function mtAccountPage(){
             `<tr><td class="mono">${esc(s)}</td><td>${pc(c.in)} <span class="muted">(${c.in_n || 0})</span></td><td>${pc(c.out)} <span class="muted">(${c.out_n || 0})</span></td><td>${pc((c.in || 0) + (c.out || 0))}</td>
               <td>${c.diff ? `<span class="warnc">${pc(c.diff.was)} → ${pc(c.diff.now)} (${c.diff.leg === "in" ? "opening" : "closing"})</span>` : "–"}</td></tr>`).join("")}</table>`
           : '<p class="muted">No deal seen yet.</p>'}</div>
+        <div class="pg-card"><h3 class="pg-h3" style="margin-top:0">What a 1.00 move is worth on 1 lot</h3>
+          <p class="help">Every ${CUR().trim()} figure is worked out from this. Taken from MT5's own profit on an open position of the symbol
+            when there is one; otherwise tick size × contract size (when the symbol's profit currency is the account's); otherwise MT5's
+            tick value. Check it against MT5 (XAUUSD, 100 oz a lot: ${pc(100)}).</p>
+          ${(M.values || []).length ? `<table class="mtcomm"><tr><th>Symbol</th><th>Used</th><th>From</th><th>MT5's tick value says</th></tr>${M.values.map(v =>
+            `<tr><td class="mono">${esc(v.s)}</td><td>${pc(v.per)}</td><td style="text-align:left">${esc(v.src || "")}</td>
+              <td>${v.mt5 == null ? "–" : `<span class="${Math.abs(v.mt5 - v.per) / v.per > 0.02 ? "warnc" : ""}">${pc(v.mt5)}</span>`}</td></tr>`).join("")}</table>`
+          : '<p class="muted">No symbol yet.</p>'}</div>
         <div class="pg-card"><h3 class="pg-h3" style="margin-top:0">Trailing defaults</h3><p class="help">For trades this account opens or shows. Changing them also changes every open trade (and moves MT5's stops).</p>
           <div class="trail"><span>Trail BE</span><input id="pgTrBeR" value="${t.be_r}"><button id="pgTrBe" class="${t.be_on ? "on" : ""}">${t.be_on ? "ON" : "off"}</button>
             <span>Trail SL</span><input id="pgTrSlR" value="${t.sl_r}"><button id="pgTrSl" class="${t.sl_on ? "on" : ""}">${t.sl_on ? "ON" : "off"}</button></div></div>
@@ -271,7 +279,7 @@ function mtAccountPage(){
   const pu = paperUpdate;
   paperUpdate = function(s, events){ pu(s, events); mtDecorate(); };
   if(typeof pgPositions === "function"){ const pp = pgPositions; pgPositions = function(){ pp(); mtPositions(); }; }
-  if(typeof renderPlan === "function"){ const rp = renderPlan; renderPlan = function(){ rp(); mtPlace(); }; }
+  if(typeof renderPlan === "function"){ const rp = renderPlan; renderPlan = function(){ rp(); mtPlace(); mtPerMove(); }; }
   if(typeof toolOverlay === "function"){ const to = toolOverlay; toolOverlay = function(){ to(); mtPlace(); }; }
   if(typeof pgAccount === "function"){ const pa = pgAccount; pgAccount = function(){ if(mtOn()) return mtAccountPage(); pa(); }; }
   if(typeof renderRules === "function"){                  // Settings › rules: an MT5 account's own limits
@@ -310,3 +318,13 @@ setInterval(async () => {
     if(key(j.accounts) !== key(S.accounts)){ S.accounts = j.accounts; acctSetup(); }
   }catch(e){}
 }, 15000);
+
+/* v0.37.2: the ticket's preview says what a 1.00 move is worth on 1 lot and where that comes from, so a wrong figure shows */
+function mtPerMove(){
+  const el = $("#tkPv"), p = P.plan;
+  if(!el || !mtOn() || !p || !p.per_move) return;
+  let d = el.querySelector(".mtper");
+  const h = `1 lot: ${CUR()}${(+p.per_move).toLocaleString("en-US", {maximumFractionDigits: 2})} per 1.00 move · ${p.tv_src || ""}`;   // (textContent: no escaping)
+  if(!d){ d = document.createElement("div"); d.className = "mtper muted"; d.style.cssText = "font-size:11px;margin-top:4px"; el.appendChild(d); }
+  if(d.textContent !== h) d.textContent = h;
+}

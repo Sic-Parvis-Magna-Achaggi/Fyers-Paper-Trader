@@ -356,6 +356,33 @@ async def main():
        abs(p1["lots"] - p1["steps"] * 0.01) < 1e-9 and 0 < p1["risk"] <= e.balance() * 0.005 + 0.01 and not p1.get("blocked"), p1)
     ok("its margin from MT5's own figure (OrderCalcMargin)", p1.get("margin_source") == "mt5" and p1.get("margin") > 0, p1.get("margin"))
     ok("money in $, product MT5", p1.get("ccy") == "USD" and p1.get("product") == "MT5")
+    print("v0.37.2: the value of a price move (owner 11 Nov: the app showed -$3.78 at the stop, MT5 -$217.94)")
+    print("    plan keys:", sorted(k for k in p1 if not isinstance(p1[k], (dict, list))))
+    def by_hand(p):                                     # what MT5 itself would show: move x 100 oz x lots, + commission 3 + 3 a lot
+        return (p["entry"] - req["sl"]) * 100 * p["lots"] + 6.0 * p["lots"]
+    ok("the loss at the stop is MT5's: move x 100 oz x lots + commission", abs(p1["risk"] - by_hand(p1)) < 0.05,
+       (p1["risk"], round(by_hand(p1), 2), p1["lots"]))
+    ok("the ticket says what 1 lot's 1.00 move is worth: $100", abs(p1.get("per_move", 0) - 100) < 1e-6, p1.get("per_move"))
+    good_tv = e.M["sym"]["XAUUSD"]["tv"]
+    learned = dict(e.M.get("ppl") or {})
+    ok("learned from MT5's profit on the open XAUUSD position: $100 per 1.00 per lot", abs(learned.get("XAUUSD", 0) - 100) < 0.5, learned)
+    e.M["sym"]["XAUUSD"]["tv"] = good_tv / 100          # MT5 reporting a tick value 100x too small (as on the owner's terminal)
+    pbad = e.plan(dict(req))
+    ok("MT5's tick value 100x too small: the learned value still gives MT5's own figures", abs(pbad["risk"] - by_hand(pbad)) < 0.05
+       and pbad["lots"] == p1["lots"], (pbad["risk"], round(by_hand(pbad), 2), pbad["lots"]))
+    e.M["ppl"].pop("XAUUSD", None)
+    pcp = e.plan(dict(req))
+    ok("... with nothing learned: EA 1.21's OrderCalcProfit ($100 for 1 lot over 1.00)", abs(pcp["risk"] - by_hand(pcp)) < 0.05
+       and "OrderCalcProfit" in str(pcp.get("tv_src")), (pcp["risk"], pcp.get("tv_src")))
+    good_pp = e.M["sym"]["XAUUSD"].pop("pp", None)
+    pbad2 = e.plan(dict(req))
+    ok("... and an EA without it (1.20): tick size x contract size (USD profit on a USD account)", abs(pbad2["risk"] - by_hand(pbad2)) < 0.05
+       and pbad2["lots"] == p1["lots"] and "contract" in str(pbad2.get("tv_src")), (pbad2["risk"], pbad2.get("tv_src")))
+    ok("... and the wrong tick value is flagged", any("tick value" in ev.get("msg", ev.get("m", "")) for ev in e.snapshot().get("events", [])[-5:])
+       or any("tick value" in str(x) for x in (e.snapshot().get("log") or [])[-5:]), [str(x)[:90] for x in (e.snapshot().get("events") or [])[-3:]])
+    e.M["sym"]["XAUUSD"]["tv"] = good_tv
+    e.M["sym"]["XAUUSD"]["pp"] = good_pp
+    e.M["ppl"] = learned
     p2 = e.plan({**req, "mode": "lots", "lots": 0.05})
     ok("fixed lots: 0.05 lot = 5 steps", p2["steps"] == 5 and p2["lots"] == 0.05, (p2["steps"], p2["lots"]))
     p3 = e.plan({**req, "mode": "lots", "lots": 0.004})

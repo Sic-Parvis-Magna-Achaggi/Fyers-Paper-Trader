@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 11 Nov 2026, version **0.37.1**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 11 Nov 2026, version **0.37.2**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -107,6 +107,20 @@ automatic pictures off itself (other suites turn them on).
 (v0.22.0; passed on re-run, 37/37). Same advice.
 
 ## MT5 accounts (v0.36.0 b1; v0.37.0 b2 / b3: stage b complete)
+
+**v0.37.2 (serious bug, 11 Nov):** the owner's first real order from the app: SELL 0.33 XAUUSD at 4,057.76, SL 4,064.22,
+0.25% risk; the app showed −$3.78 at the stop, MT5 −$217.94 (= 6.41 × 100 oz × 0.33 + commission). The app's gross was
+move × 0.33, i.e. tick value / tick size = 1 instead of 100: his terminal's SYMBOL_TRADE_TICK_VALUE (or what reached the app)
+was 100× too small (the fake sent the right 1.0, so no test caught it). Fix: `Mt5Engine.tick_value(name, tick)` picks
+(1) `M.ppl[name]` learned in `_learn_value` from each open position's MT5 profit (POSITION_PROFIT / (move × volume), moves of
+20+ ticks, saved), (1b) `si.pp` = EA 1.21's OrderCalcProfit(BUY, 1 lot, bid -> bid + 1.00), (2) tick size × contract when
+`cprofit` (the symbol list) = the account's currency, (3) MT5's tick value; a reported one off by > 2% -> `_warn_once`.
+`row()` carries `tv`, `tv_src`, `tv_mt5`; `plan()` refuses with no value and returns `per_move` / `tv_src`; snapshot
+`mt5.values` (the Account page's table). Page: `mtPerMove()` (a line in `#tkPv`). **Ask the owner** for the Account page's
+"What a 1.00 move is worth" table: its "MT5's tick value says" column shows what his terminal really reported.
+Noticed in testing (not changed): the chart tool's SL / TP come from the chart's prices (the price terminal), the entry from
+the account's own terminal; two terminals at the same broker agree, but an account at another broker whose price differs by
+more than the stop distance gets "the stop loss is on the wrong side". Worth a look if the owner adds a second broker.
 
 **v0.37.1:** no login to type on MT5 accounts (owner, 11 Nov: "I'm the only one trading. We don't need so much security"):
 `M.confirmed` is always True on load, so `NeedLogin` is never raised; the route `/api/mt5acct/confirm`, the dialog and

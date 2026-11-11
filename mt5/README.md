@@ -110,3 +110,6 @@ downloaded EA.
   trades.
 - **1.20** (11 Nov 2026): places the orders I place in the app (OPEN, with SL / TP); margin per symbol for the app's sizing;
   trails my trades' stops by itself, by my own rules from the app, when it can't reach the app for 20 s.
+- **1.21** (11 Nov 2026): also sends each symbol's profit for 1 lot over a 1.00 price move, worked out by MT5 itself
+  (OrderCalcProfit), so the app's dollar figures use MT5's own sum. Nothing else changes; optional (the app checks the
+  figure other ways too).

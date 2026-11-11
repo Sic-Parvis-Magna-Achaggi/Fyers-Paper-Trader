@@ -162,6 +162,10 @@ const code = async pg => { if(await pg.isVisible("#codeAsk:not(.hide) #caCode"))
     btn: (document.querySelector("#tPlace") || {}).textContent, ccy: P.plan && P.plan.ccy, size: document.querySelector("#tkSizeUnit").textContent}));
   ok(pv.lots === 0.03 && !pv.blocked && /^MT5 PLACE/.test(pv.btn || "") && pv.ccy === "USD", `the chart tool on MT5: 0.03 lot, net risk $${pv.risk}, "${pv.btn}"`);
   ok(/0\.01 steps/.test(pv.size) && !(await pg.isVisible("#tProd")), "lots in MT5's 0.01 steps; no Fyers product on MT5");
+  const pm = await pg.evaluate(() => ({per: P.plan && P.plan.per_move, entry: P.plan && P.plan.entry, sl: P.plan && P.plan.sl, risk: P.plan && P.plan.risk,
+    txt: ((document.querySelector("#tkPv .mtper") || {}).textContent || "")}));
+  ok(pm.per === 100 && /\$100 per 1\.00 move/.test(pm.txt) && Math.abs(pm.risk - ((pm.entry - pm.sl) * 100 * 0.03 + 6 * 0.03)) < 0.05,
+     `v0.37.2: the preview's risk is MT5's (move x 100 oz x 0.03 + commission = $${pm.risk}); "${pm.txt}"`);
   const before = (await ctl("/state")).positions.length;
   await pg.click("#tPlace");
   for(let i = 0; i < 20 && (await ctl("/state")).positions.length === before; i++) await pg.waitForTimeout(250);
@@ -210,6 +214,7 @@ const code = async pg => { if(await pg.isVisible("#codeAsk:not(.hide) #caCode"))
   await pg.evaluate(() => pgShow("chart"));
 
   // ---- v0.37.1: PLACE as the very first change on a brand-new account (a second terminal, a new login each run): straight to MT5
+  await ctl("/shift", { sym: "XAUUSD", by: -12 });    // (terminal 1's gold back on the broker's price: the second terminal sees the same)
   const L2 = 30000000 + Math.floor(Math.random() * 9000000), CTL2 = "http://127.0.0.1:8770";
   ea2 = spawn("python3", [__dirname + "/fake_mt5.py", "http://localhost:8766", k, "--ctl", "8770", "--login", String(L2)], { stdio: ["ignore", "pipe", "pipe"] });
   ea2.stderr.on("data", d => fs.writeSync(1, "  [fake MT5 #2 err] " + d));

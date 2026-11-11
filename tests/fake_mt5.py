@@ -102,7 +102,7 @@ def spec(n):
 
 class FakeEA:
     def __init__(self, url, key, login=21182752, server="FundingPips-SIM1", poll=0.25, fixed_offset=None, log=print,
-                 old=False, balance=5000.0, history=False, ver="1.20"):
+                 old=False, balance=5000.0, history=False, ver="1.21"):
         self.url, self.key, self.login, self.server = url.rstrip("/"), key, login, server
         self.poll, self.fixed, self.log, self.old = poll, fixed_offset, log, old
         self.subs, self.last = [], {}
@@ -385,7 +385,7 @@ class FakeEA:
             syms |= set(self.subs)
             b["sym"] = {s: [spec(s)["tick_value"], spec(s)["tick_size"], 0.01, SYMS[s][6], SYMS[s][2],
                             round(SYMS[s][6] * self.quote(s)[1] / 100.0, 2), round(SYMS[s][6] * self.quote(s)[0] / 100.0, 2),
-                            0.01, 100, 0] for s in syms}
+                            0.01, 100, 0] + ([float(SYMS[s][6])] if self.ver >= "1.21" else []) for s in syms}
             self.trailed_sent = len(self.trailed)
             b["trailed"] = list(self.trailed)
             if self.dcur == (0, 0):
@@ -602,7 +602,7 @@ if __name__ == "__main__":
     ap.add_argument("--ctl", type=int, default=0, help="a control API on this port (tests)")
     ap.add_argument("--history", action="store_true", help="two closed trades 10 days ago in MT5's history")
     ap.add_argument("--old", action="store_true", help="play EA 1.00 (prices only)")
-    ap.add_argument("--ver", default="1.20", help="the EA version it reports (1.10: manages, doesn't place)")
+    ap.add_argument("--ver", default="1.21", help="the EA version it reports (1.10: manages, doesn't place)")
     ap.add_argument("--balance", type=float, default=5000.0)
     a = ap.parse_args()
     ea = FakeEA(a.url, a.key, a.login, a.server, fixed_offset=None if a.offset == "auto" else int(a.offset), old=a.old,

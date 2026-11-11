@@ -528,6 +528,7 @@ marked before relying on it.
 
 ## Done
 
+- [x] **v0.37.2** (11 Nov): MT5 money fixed (owner: −$3.78 shown at a stop that was −$217.94 in MT5, XAUUSD 0.33 lots): a 1.00 move's value is cross-checked (MT5's profit on your position, OrderCalcProfit in EA 1.21, contract size) instead of MT5's tick value alone; shown on the ticket and the Account page.
 - [x] **v0.37.1** (11 Nov): MT5 accounts: no login to type before the first change or order (owner: "We don't need so much security"); the 2FA code to switch to MT5 stays. Fixed: PLACE as an account's first change showed "type its login" as a red line instead of asking.
 - [x] **v0.37.0** (11 Nov): MT5 stage b complete (item 8 b2 / b3): orders placed from the app on MT5 accounts (MT5 PLACE, real SL / TP, sizing in 0.01 lots net of commission, margin from MT5, FundingPips' floors and the other guards, no hedging across your MT5 accounts); the MT5 kill switch; the ForexFactory news guard (Master blocks ±5 min, evaluation warns); the EA trailing by itself when the link drops. EA 1.20.
 - [x] **v0.36.0** (10 Nov): MT5 accounts (item 8 b1): PAPER | LIVE | MT5 at the top left; each MT5 login with FTM Bridge 1.10 an account of its own (positions, orders, balance, history from MT5; trades placed in MT5 too); SL / TP, BE, BE-T, TRAIL, ✕ and pending orders managed at the broker through the EA (the login typed once); $ net of commission learned from MT5's deals and swap; FundingPips' daily (broker's midnight) and max (typed size) floors shown. EA 1.10 opens no new trades.

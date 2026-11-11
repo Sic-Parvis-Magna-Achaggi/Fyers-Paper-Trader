@@ -35,6 +35,9 @@
 //| Each request has a tag; it is carried out once, and its result is |
 //| sent back with the next call (a tag seen again is not repeated).  |
 //|                                                                   |
+//| Version 1.21: also sends each symbol's profit for 1 lot over a    |
+//| 1.00 price move (OrderCalcProfit), so the app's $ figures use     |
+//| MT5's own sum (1.20's tick value alone was 100x off on XAUUSD).   |
 //| Version 1.20 (stage b, slices b2 / b3): also places the orders    |
 //| you place in the app (OPEN, each with its own real SL / TP), and  |
 //| if it can't reach the app for OfflineTrailSec seconds it moves    |
@@ -47,8 +50,8 @@
 //| Version 1.00 (stage a): prices and candles only.                  |
 //+------------------------------------------------------------------+
 #property copyright   "Ashwin Kumar"
-#property version     "1.20"
-#property description "FTM Bridge 1.20: sends this terminal's prices, candles, symbol list and account to your Fyers Trade Manager,"
+#property version     "1.21"
+#property description "FTM Bridge 1.21: sends this terminal's prices, candles, symbol list and account to your Fyers Trade Manager,"
 #property description "places the orders you place in the app, manages your trades when you ask (SL / TP, close, cancel), and"
 #property description "trails their stops by itself if it can't reach the app. It opens nothing on its own."
 #property description "Calls out only (WebRequest)."
@@ -63,7 +66,7 @@ input bool   AllowTrading   = true;                          // Let the app mana
 input int    SlippagePoints = 30;                            // Market orders: most slippage accepted (points)
 input int    OfflineTrailSec = 20;                           // Can't reach the app this long: trail stops here (0 = never)
 
-#define EA_VER        "1.20"
+#define EA_VER        "1.21"
 #define MAGIC         20261110  // the magic number on the app's closing deals
 #define DEALS_PER_CALL 200      // deals per call (the app is told when there are more)
 #define TAGS_KEPT     200       // requests remembered, so a tag is never carried out twice
@@ -785,18 +788,21 @@ string SymInfo(string &syms[])
    for(int i = 0; i < ArraySize(syms); i++)
      {
       string s = syms[i];
-      double mb = 0, ms = 0;
+      double mb = 0, ms = 0, pp = 0;
+      double bid = SymbolInfoDouble(s, SYMBOL_BID);
       if(!OrderCalcMargin(ORDER_TYPE_BUY, s, 1.0, SymbolInfoDouble(s, SYMBOL_ASK), mb))
          mb = 0;
       if(!OrderCalcMargin(ORDER_TYPE_SELL, s, 1.0, SymbolInfoDouble(s, SYMBOL_BID), ms))
          ms = 0;
+      if(bid <= 0 || !OrderCalcProfit(ORDER_TYPE_BUY, s, 1.0, bid, bid + 1.0, pp))   // 1.21: profit, 1 lot, a 1.00 rise
+         pp = 0;
       if(out != "")
          out += ",";
       out += Js(s) + ":[" + Jd(SymbolInfoDouble(s, SYMBOL_TRADE_TICK_VALUE), 10) + "," + Jd(SymbolInfoDouble(s, SYMBOL_TRADE_TICK_SIZE), 10)
              + "," + Jd(SymbolInfoDouble(s, SYMBOL_VOLUME_STEP), 4) + "," + Jd(SymbolInfoDouble(s, SYMBOL_TRADE_CONTRACT_SIZE), 4)
              + "," + IntegerToString(SymbolInfoInteger(s, SYMBOL_DIGITS)) + "," + Jd(mb, 2) + "," + Jd(ms, 2)
              + "," + Jd(SymbolInfoDouble(s, SYMBOL_VOLUME_MIN), 4) + "," + Jd(SymbolInfoDouble(s, SYMBOL_VOLUME_MAX), 4)
-             + "," + IntegerToString(SymbolInfoInteger(s, SYMBOL_TRADE_STOPS_LEVEL)) + "]";
+             + "," + IntegerToString(SymbolInfoInteger(s, SYMBOL_TRADE_STOPS_LEVEL)) + "," + Jd(pp, 6) + "]";
      }
    return(out);
   }

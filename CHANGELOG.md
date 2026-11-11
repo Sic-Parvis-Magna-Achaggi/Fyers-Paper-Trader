@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.37.2 — 11 Nov 2026 — MT5: dollar figures 100× too small on XAUUSD (fixed)
+
+Fixed
+- **MT5 money was 100× too small on the owner's XAUUSD** (reported 11 Nov: a 0.25% risk SELL 0.33 lots at 4,057.76, stop
+  4,064.22: the app showed −$3.78 at the stop, MT5 −$217.94). The app valued a price move from MT5's tick value alone, and
+  his terminal reported it 100× too small; the size was worked out from the same figure, so the trade was 100× too big for
+  its risk. Now the value of a 1.00 move on 1 lot comes, in order, from MT5's own profit on an open position of the symbol
+  (learned, saved), EA 1.21's OrderCalcProfit, tick size × contract size (profit currency = the account's), and only then
+  MT5's tick value; a tick value that disagrees is flagged in the Log. A symbol with no figure at all can't be placed.
+  Sizing, the loss / gain at SL / TP, BE + commission, trailing, R and the guards all follow.
+
+Added
+- The ticket's preview on MT5: "1 lot: $100 per 1.00 move · <where from>". The Account page: a table of that figure per
+  symbol beside what MT5's tick value says (a mismatch in amber).
+- EA **1.21** (optional): sends OrderCalcProfit for 1 lot over a 1.00 move per symbol.
+
+Tests
+- `tests/mt5acct_test.py` (123): the preview's risk equals move × 100 oz × lots + commission; with MT5's tick value 100×
+  too small: still right from the learned figure, then OrderCalcProfit, then contract size, and the mismatch flagged.
+- `tests/mt5acct_flow.js` (52): the preview's risk on 0.03 lot equals MT5's sum and shows "$100 per 1.00 move".
+  `tests/fake_mt5.py` reports 1.21 (sends OrderCalcProfit); `mt5_flow.js` checks the EA's source is 1.21.
+
 ## v0.37.1 — 11 Nov 2026 — MT5: no login to type; PLACE's first-change prompt fixed
 
 Changed
