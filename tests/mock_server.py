@@ -16,6 +16,7 @@ os.environ["TELEGRAM_API"] = f"http://127.0.0.1:{TG_PORT}"
 # the MT5 news guard (v0.37.0) never reads the real ForexFactory in tests: a file the tests write (mt5acct_flow.js)
 os.environ.setdefault("FTM_NEWS_URL", "file://" + os.path.join(os.environ.get("FYERS_HELPER_DATA", "."), "ff_test.json"))
 os.environ.setdefault("HC_API", f"http://127.0.0.1:{TG_PORT}")
+os.environ.setdefault("FTM_WEBHOOK_PRIVATE", "1")     # alerts' webhooks may reach the test's own receiver (/_mock/hook)
 fake_telegram.start(TG_PORT)
 from helper import fyers_link, feed as feedmod  # noqa: E402
 
@@ -173,6 +174,32 @@ async def _caddy(request, call_next):
     for k, v in CADDY.items():
         resp.headers.setdefault(k, v)
     return resp
+
+
+HOOKS = []
+
+
+@app.post("/_mock/price")
+async def _mock_price(s: str, p: float):
+    """Alerts tests (v0.38.0): the symbol's price jumps to p now (the random walk carries on from there)."""
+    from helper import rt
+    PX[s] = p
+    for urt in list(rt.RT.values()):
+        if s in urt.feed.fy_wanted():
+            urt.feed.publish({"s": s, "ltp": p, "bid": p - 1, "ask": p + 1, "t": int(time.time()), "vol": VOL.get(s, 10000), "src": "ws"})
+    return {"ok": True}
+
+
+@app.post("/_mock/hook")
+async def _mock_hook(request: Request):
+    """Alerts' webhooks land here in the tests (GET /_mock/hooks lists them)."""
+    HOOKS.append({"type": request.headers.get("content-type"), "body": (await request.body()).decode()})
+    return {"ok": True}
+
+
+@app.get("/_mock/hooks")
+async def _mock_hooks():
+    return {"hooks": HOOKS}
 
 
 @app.post("/_mock/allday")

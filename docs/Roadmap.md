@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 11 Nov 2026 (v0.37.4: Pine lines with breaks drawn as on TradingView). This is the one task list for the project.
+Updated 11 Nov 2026 (v0.38.0: alerts like TradingView's, item 21). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -466,6 +466,44 @@ fallback"):** item 8 is built now, stage by stage. Stage a shipped in **v0.34.0*
     Manager" in the header (its commit and the server's up-time in its tip), at the top of the Settings page, and at the
     top of the phone's More tab.
 
+21. [x] **Alerts like TradingView: price, technical, multi-condition, watchlist** — shipped in **v0.38.0** (asked 11 Nov 2026: "We need to build
+    alerts like tradingview along with addition of multiple conditions. Both price and technical alerts ... Let's build the
+    entire thing so I don't need to buy Tradingview. I also want to know how we can get alerts in mobile"). Design
+    (Claude's, 11 Nov, from TradingView's help pages and pricing page; the owner can change any of it):
+    - **Runs on the server**, page open or not (as TradingView's do). Every user has their own; no plan limits beyond what
+      the server and Fyers allow (TradingView Premium: 400 price + 400 technical; here 400 per user, of which 100 technical).
+    - **What an alert watches:** the price (last, bid or ask: the real price, ticks between snapshots included through the
+      day's high / low, like paper fills); Volume and its average; any plot of a Pine script on the chart (a copy of the
+      code and inputs is kept, as TradingView does: editing the indicator later doesn't change the alert); a script's
+      `alertcondition()`s and "any `alert()` call"; built-in quick indicators without adding them to the chart (MA / EMA,
+      RSI, MACD, Bollinger, Supertrend, VWAP, ATR, Stochastic, CCI, ADX, MFI, OBV, Donchian); drawings (horizontal line /
+      ray, trend line, ray, extended line, parallel channel, rectangle: the alert follows the drawing when you move it);
+      P&F signals (DTB / TTB / DBS / TBS) on P&F charts. Every chart type: an alert set on a Heikin-Ashi / Renko / P&F
+      chart works on those bars, with the same Pine engine as the chart (the page's own Pine runner, run by Node on the server).
+    - **TradingView's 13 operators:** crossing, crossing up, crossing down, greater than, less than, entering / exiting /
+      inside / outside channel, moving up / down (amount within N bars), moving up % / down %. Against a value, another
+      plot / price, or a drawing; each condition has its own timeframe.
+    - **Multi-condition:** up to 5 conditions on one symbol, All (like TradingView) or Any (extra).
+    - **Trigger:** only once, once per bar, once per bar close, once per minute; expiry date or open-ended (the default).
+    - **Watchlist alerts:** one alert over a watchlist, each symbol on its own. Bounded by Fyers' 100-symbol price socket
+      (shared with charts and open trades): alerts may use up to 60 symbols, the rest reported as "not watched".
+    - **Message** with TradingView's placeholders ({{ticker}}, {{exchange}}, {{close}}, {{open}}, {{high}}, {{low}},
+      {{volume}}, {{time}}, {{timenow}}, {{interval}}, {{plot_0}}…, {{plot("Name")}}) plus {{bid}}, {{ask}}, IST times.
+    - **Where it reaches you:** a pop-up with sound on every open page; **phone notifications** (the app installed on the
+      phone's home screen: Android Chrome, or iPhone Safari › Share › Add to Home Screen, iOS 16.4+; Web Push, no app
+      store, works with the phone locked); Telegram (the bot in Settings › Telegram alerts); a webhook (POST, like
+      TradingView's, for ntfy / Pushover / Discord / bots; private addresses refused). Email and SMS: not now (SMS in
+      India needs DLT registration and costs per message; say if you want email).
+    - **Where you set them:** 🔔 on the chart / Alt+A, right-click on the chart ("Add alert at …"), a drawing's menu, an
+      indicator's row in ƒx; the Alerts page (manager: pause, edit, clone, delete, search; the log of what fired;
+      notification set-up); 🔔 lines on the chart for price levels (drag to move). The phone: the same, in More › Alerts.
+    - [x] Built as designed *(v0.38.0)*. The top-bar item is a 🔔 icon with the count (the bar had no room for a word at 1500 px).
+    - [ ] **The owner's checks:** after the update, the Alerts page shows no "Node.js isn't installed" warning (install.sh
+      downloads Node 22 from nodejs.org into /opt/ftm-node); turn on notifications on the phone (Android: install the app;
+      iPhone: Add to Home Screen first) and press Send a test; one real price alert and one RSI alert during market hours.
+    - [ ] Email notifications (not built: needs an email account's SMTP login typed in Settings; say if wanted). SMS: not
+      planned (India's DLT registration and a cost per message).
+
 ## Rules that shape live trading and other users (checked 30 Oct 2026)
 
 Sources: SEBI circular of 4 Feb 2025, NSE's API operating procedures, and Fyers' rules in force from 1 Apr 2026.
@@ -528,6 +566,7 @@ marked before relying on it.
 
 ## Done
 
+- [x] **v0.38.0** (11 Nov): alerts like TradingView's (item 21): price, candle, Pine plot / alertcondition() / alert(), built-in indicator, drawing and P&F-signal alerts on the server; TradingView's 13 conditions against a value or another series, each condition on its own timeframe; up to 5 conditions (all / any); once / once per bar / once per bar close / once per minute; expiry; watchlist alerts; every chart type; placeholders; pop-up + sound, phone / desktop push (installable app), Telegram, webhook; the Alerts page (manager, log, notifications); 🔔 lines on the chart that drag; Alt+A, right-click, drawings' and ƒx's 🔔; the phone. Node.js installed on the server for Pine.
 - [x] **v0.37.4** (11 Nov): Pine `plot.style_linebr` / `steplinebr` / `areabr` and a colour of na break the line instead of joining it with a diagonal (owner: Chandelier Exit on XAUUSD differed from TradingView); no price label while a plot's latest value is na.
 - [x] **v0.37.3** (11 Nov): MT5 commission known before a symbol's first trade (EA 1.22 reads MT5's commission rules; else a traded symbol of the same group; else the typed default; else refused, never $0); profit in another currency converted with the broker's own FX price and checked against MT5's profit sum; a symbol with only MT5's tick value can't be placed.
 - [x] **v0.37.2** (11 Nov): MT5 money fixed (owner: −$3.78 shown at a stop that was −$217.94 in MT5, XAUUSD 0.33 lots): a 1.00 move's value is cross-checked (MT5's profit on your position, OrderCalcProfit in EA 1.21, contract size) instead of MT5's tick value alone; shown on the ticket and the Account page.

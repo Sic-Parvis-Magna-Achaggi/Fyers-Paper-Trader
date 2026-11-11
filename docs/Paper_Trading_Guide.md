@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.37.4)
+# Paper and live trading: how it works (v0.38.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -214,13 +214,14 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
 
 ## Pages
 
-The top bar has **Chart · Trades · History · Journal · Book · Account · Log**. The chart keeps running while you're on another page, and the address remembers the page.
+The top bar has **Chart · Trades · History · Journal · Book · Account · 🔔 Alerts · Log**. The chart keeps running while you're on another page, and the address remembers the page.
 
 - **Trades:** all open positions and pending orders in tables. Click any price to change it; set Trail BE / Trail SL per trade; BE, close, cancel. BE all, Cancel all orders and Close all at the top.
 - **History:** filters, stats (net, win rate, profit factor, average R, expectancy, drawdown, streaks...), an equity curve, daily P&L, results by contract and by exit, and each trade's charges. Download the filtered list as CSV.
 - **Journal:** your trade journal, the Octagon (see below).
 - **Book:** up to 4 order books side by side.
 - **Account:** the account's figures, your paper accounts (new, rename, archive), rules, trailing defaults, reset and the charges in use.
+- **🔔 Alerts:** your price and indicator alerts, what fired (Log), and phone / desktop notifications (see Alerts below).
 - **Log:** everything the paper account did, the helper's own log, and **Security** (your logins, 2FA and password changes).
 
 ## Journal (the Octagon)
@@ -351,6 +352,77 @@ trade with all 8 pillars and why each held or broke, your plan and reflections; 
 (a zip with the whole journal and all its pictures); **Restore from a backup** adds whatever the journal doesn't have and
 never changes or removes anything already there.
 
+## Alerts (like TradingView's)
+
+Alerts run **on the server**, so they fire with every page closed. Each user has their own (up to 400, of which 100
+technical at once, each symbol of a watchlist alert counting); there's no plan to buy.
+
+**Setting one up:** 🔔 on the chart's top bar or **Alt+A** (the price crossing where it is now, ready to edit);
+**right-click** on the chart → *Add alert at* that price; a drawing's right-click menu → **🔔 Add alert…**; the 🔔 on a
+script's row in **ƒx**; or **+ Create alert** on the Alerts page.
+
+**What it can watch** (each condition picks one):
+- **Price** (the last price, or the bid or the ask): checked on every tick, against the price before, so a crossing is the
+  moment it happens. A trade through your level between two price updates (the day's new high or low) counts too, the
+  same rule as paper fills. It starts from the price when you set it: a *Crossing up* set above the price waits for the
+  price to come from below.
+- **Candles:** open, high, low, close, (H+L)/2, (H+L+C)/3, (O+H+L+C)/4, volume, on the chart's type (Heikin-Ashi,
+  Renko, P&F... when you tick *Work out on ... bars*).
+- **Your Pine scripts on the chart:** any plot, any `alertcondition()` (its own message comes with it), or *any alert()
+  call* (the script's own `alert.freq_*` decides how often). The alert keeps a copy of the code and inputs, as TradingView
+  does: editing the script later doesn't change the alert. It runs in the same Pine engine as the chart, so the numbers
+  match what you see.
+- **Built-in indicators** without adding them to the chart: SMA, EMA, WMA, VWAP, RSI, MACD, Bollinger, Supertrend, ATR,
+  Stochastic, CCI, ADX / DMI, MFI, OBV, Donchian, Volume average (their settings right in the dialog).
+- **Drawings:** horizontal line / ray, trend line, ray, extended line, parallel channel (top / bottom / middle),
+  rectangle (top / bottom, between its two ends). Move the drawing and the alert follows; delete it and the alert says so.
+- **P&F signals** on a Point & Figure chart: buy (double / triple top) or sell (double / triple bottom).
+
+**The 13 conditions:** Crossing, Crossing up, Crossing down, Greater than, Less than; Entering / Exiting / Inside /
+Outside channel (an upper and a lower edge, each a number, a line or another value); Moving up / down by an amount, or by
+a %, within a number of bars. Each compares with a **value** or **anything in the list above** (price crossing the
+EMA 20, RSI crossing its signal line...). **Each condition has its own timeframe.**
+
+**Several conditions:** **+ Add condition**, up to 5 on one symbol, with **All must be true** (TradingView's) or
+**Any one**.
+
+**Trigger:** *Only once* (then it shows Triggered; a watchlist alert fires once per symbol), *Once per bar* (of the first
+condition's timeframe), *Once per bar close* (worked out when the bar closes: on the next bar's first price, or 2 s after
+its time is up; a move that didn't hold to the close doesn't fire), *Once per minute*. **Expiry:** open-ended, or a date
+and time.
+
+**Symbol:** this chart, or **a watchlist**: one alert, each symbol on its own. Fyers' price socket carries 100 symbols on
+the Standard plan, shared with your charts and open trades, so alerts use up to 60; any that don't fit are listed on the
+Alerts page as *not watched*.
+
+**Message:** leave it empty for the condition and the price, or write your own with TradingView's placeholders:
+`{{ticker}} {{exchange}} {{close}} {{open}} {{high}} {{low}} {{volume}} {{bid}} {{ask}} {{interval}} {{time}}
+{{timenow}} {{plot_0}} {{plot("Name")}}` (plus `{{timenow_ist}}`, `{{name}}`). Numbers come without thousands separators,
+so a JSON message stays valid for a webhook.
+
+**Where it reaches you** (ticked per alert):
+- **A pop-up and a sound** on every open page of the app (chime, bell, beep, alarm, soft or none). A browser plays sound
+  only after you've clicked the page once.
+- **Phone and desktop notifications:** Alerts › Notifications › **Turn on for this device**, once per device. They arrive
+  with the app closed and the phone locked.
+  - Android (Chrome): ⋮ › *Add to Home screen* / *Install app*, open it from the home screen, More › Alerts ›
+    Notifications › Turn on, allow.
+  - iPhone / iPad (iOS 16.4 or later): Safari › Share › *Add to Home Screen*, open the app from the home screen (iPhone
+    only allows notifications there), More › Alerts › Notifications › Turn on, allow.
+  - Desktop Chrome / Edge / Firefox: Turn on; notifications come while the browser runs.
+- **Telegram:** the bot in Settings › Telegram alerts (the admin).
+- **Webhook:** like TradingView's, a POST of the message (JSON when it's JSON) to your address on port 80 or 443. Works
+  with ntfy.sh, Pushover, Discord, Slack or a bot of your own. Private or local addresses are refused.
+
+**On the chart:** a dotted 🔔 line at each price level of an active alert on that contract; **drag it** to move the
+alert's level. **The Alerts page:** search, filter (active / triggered / paused / expired), ⏸ pause, ▶ resume or restart,
+✎ edit (saving a triggered alert starts it again), ⧉ clone, 📈 open its chart, 🗑 delete; **Log** lists what fired;
+**Notifications** sets up the devices and plays the sounds. The phone: More › Alerts, the dialog full screen.
+
+Technical alerts need candles: the server loads them from your saved candles (one Fyers request per symbol and
+timeframe, within the data budget) and builds the live bar from each price, as the chart does; every 10 minutes it checks
+Fyers' candles again. Before the first price after a restart, a crossing between the two can't be seen.
+
 ## On a phone
 
 Phones get their own layout, like MT5's app (a desktop browser never does). **More → Desktop layout** switches to the desktop page on that phone; **Settings → Layout** switches back (Automatic / Phone / Desktop).
@@ -364,7 +436,7 @@ Phones get their own layout, like MT5's app (a desktop browser never does). **Mo
 - **A pending order** (Trade tab): move its price, SL and target, Save; or Cancel order.
 - **Trade tab:** the account figures, every position and order, BE all, Close all (tap twice), Cancel all, and the trailing defaults for new trades.
 - **History tab:** Today, 7 days, 30 days or All, with net P&L, win rate, profit factor, average R and charges. Tap a trade for every charge. The full History page (equity curve, filters) is linked at the bottom.
-- **More tab:** Journal; Account, rules and charges; switch account; trades table; order book; log; settings (Fyers app, security, users, reset); theme; desktop layout; log out.
+- **More tab:** Alerts; Journal; Account, rules and charges; switch account; trades table; order book; log; settings (Fyers app, security, users, reset); theme; desktop layout; log out.
 - **Full screen:** ⛶ in the chart's toolbar, or turn the phone sideways on the Chart tab. Only the chart and the SELL / BUY bar stay. ✕ (or turning it back upright) returns.
 - **Live (the admin):** the first button in the top bar is the PAPER / LIVE switch (green / red; tap to switch, Live asks for the client ID and a 2FA code). On Live: **KILL** in the top bar, live warnings under it, LIVE on the PLACE button (and on the bubble's), the stop at Fyers on each position, and **NO STOP · Place my stop** in the sheet of a trade placed in Fyers without one.
 

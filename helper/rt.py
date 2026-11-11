@@ -11,7 +11,7 @@ import secrets
 import shutil
 import time
 
-from . import journal, mt5, mt5acct, store, users
+from . import chartalerts, journal, mt5, mt5acct, store, users
 from .feedcheck import FC
 from .feed import Feed
 from .fyers_link import FyersLink
@@ -41,6 +41,7 @@ class UserRT:
         self.feed.extra = self.watch_symbols
         self.feed.on_tick = self.on_tick
         self.feed.mt5 = lambda: mt5.brief(uid)     # the MT5 bridge's state for the price pill
+        self.feed.alert_syms = lambda: chartalerts.book(self).symbols()   # the alerts' symbols (v0.38.0), after the pages'
         self._mt5_none = None                      # the MT5 side's empty account (before any terminal has called)
         self._migrate_live()
         for a in self.accounts():
@@ -164,6 +165,10 @@ class UserRT:
         self.feed.start(loop)
         for e in self.live_engines():
             e.start(loop)
+        try:
+            chartalerts.start(self, loop)           # price and technical alerts (v0.38.0), page open or not
+        except Exception as ex:
+            log.exception("[%s] alerts didn't start: %s", self.label, ex)
 
     def set_mode(self, aid: str, mode: str, capital: float | None = None) -> dict:
         """Before v0.33.0 a paper account could be switched to Live. Live is now the Fyers account itself (ensure_live),
@@ -350,6 +355,12 @@ class UserRT:
                 e.on_tick(t)
             except Exception as ex:
                 log.exception("[%s] tick: %s", self.label, ex)
+        b = chartalerts.BOOKS.get(self.uid)
+        if b:
+            try:
+                b.on_tick(t)
+            except Exception as ex:
+                log.exception("[%s] alerts tick: %s", self.label, ex)
 
     def housekeeping(self):
         for e in list(self.engines.values()):
@@ -359,6 +370,7 @@ class UserRT:
                 log.exception("[%s] housekeeping: %s", self.label, ex)
 
     def stop(self):
+        chartalerts.drop(self.uid)
         self.feed.stop()
         if self.ostream:
             self.ostream.stop()

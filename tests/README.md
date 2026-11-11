@@ -16,6 +16,7 @@ node tests/github_upload_flow.js                      # tools/github_upload.html
 python3 tests/journal_test.py                         # the journal: the server's Octagon port vs Octagon's own JS (fixtures/octagon_core.js), then on paper engines: lockouts, switches, audit
 python3 tests/jshots_test.py                          # journal pictures: the server's drawing, entry / exit on paper engines, labels, the Telegram copy (fake Telegram on :8771)
 python3 tests/jreview_test.py                         # journal v0.28.0: weekly review + its Telegram summary, CSV, backup and restore (fake Telegram on :8772)
+python3 tests/chartalerts_test.py                     # v0.38.0: alerts without a browser: every operator, the four triggers, multi-condition, watchlists, Pine (real Node), drawings, Renko, expiry, placeholders, webhook, phone push (decrypted), Telegram
 python3 tests/candles_test.py                         # saved candles: exact contract (cont_flag=0 on every request), clean-out, a day fetched again replaces it
 bash tests/server_conf_test.sh                        # each server's own settings (address, outgoing IP, branch): fake DigitalOcean metadata + "what's my IP"; safe anywhere
 FYERS_TEST_CONTAINER=1 bash tests/server_flow.sh      # a new server's first install + updates (startup.sh's scripts, update.sh) on a local "GitHub"; ONLY in a throwaway container, as root
@@ -47,6 +48,7 @@ FYERS_HELPER_DATA=/tmp/fyers_test node tests/mobile_flow.js        # the phone l
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/replay_flow.js        # trade replay: ▶ On chart (recorded chart + Pine code, nothing saved), ▶ Play, every chart type, History, the phone; ~5 min (resets the admin's paper account)
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/settings_search_flow.js  # v0.35.0: the ƒx search (filter, marks, ↑ / ↓ / Enter / Esc, "/") and Settings as a page (sections list, jumps, #settings, Esc / ← Back), the phone
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/mt5acct_flow.js       # v0.36.0 / v0.37.0 (~2 min): placing from the chart tool (MT5 PLACE), hedging refused, the news guard (a ForexFactory file), KILL / Resume; PAPER | LIVE | MT5 (2FA), the MT5 account from fake_mt5 (--ctl 8769 --history): switcher, $, floors, a trade from MT5 on the panel / chart, the login dialog, SL / BE / TRAIL / ✕ from the entry line's bar reaching MT5, a pending order moved / cancelled, 403 from Paper, History, Account page, rules, the phone
+FYERS_HELPER_DATA=/tmp/fyers_test node tests/chartalerts_flow.js    # v0.38.0 (~3 min): the alert dialog (Alt+A, 🔔, right-click, drawings, ƒx), a price alert firing (pop-up, line, triggered), dragging its line, Pine / multi-condition / webhook alerts, the Alerts page, a watchlist alert, the service worker, the phone
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/mt5_flow.js           # v0.34.0: Settings › MT5 bridge (key with 2FA), a fake MT5 terminal connecting (fake_mt5.py), Find, an MT5 chart with every chart type + Volume + Pine, the broker's day, trading refused, MT5 off, the phone
 ```
 
@@ -87,3 +89,8 @@ on bid / ask, the app's MOD / CLOSE / CANCEL / OMOD with retcodes); `--old` play
 v0.37.0: it plays EA 1.20 (OPEN, margin per symbol, TRAIL and the offline trailing; `--ver 1.10` plays the older one; control
 `/offline` cuts the link). `mock_server.py` sets `FTM_NEWS_URL` to `file://<data folder>/ff_test.json`, so the news guard
 reads a file the test writes, never the real ForexFactory.
+
+**Alerts (v0.38.0):** `POST /_mock/price?s=<symbol>&p=<price>` makes a price jump now (the random walk carries on from it);
+`POST /_mock/hook` receives alerts' webhooks and `GET /_mock/hooks` lists them (`FTM_WEBHOOK_PRIVATE=1`, set by
+`mock_server.py`, lets webhooks reach localhost on any port; on the server only public addresses on ports 80 / 443).
+Technical alerts need Node on the test machine (the `node` on PATH, or `FTM_NODE`).

@@ -43,6 +43,7 @@ class Feed:
         self.extra = None               # callable -> symbols the paper engine needs, page open or not
         self.on_tick = None             # callable(tick), run on the event loop
         self.mt5 = None                 # callable -> the MT5 bridge's state for the price pill (helper/mt5.py)
+        self.alert_syms = None          # callable -> the symbols price / technical alerts watch (helper/chartalerts.py)
 
     # ------------------------------------------------------------ page side
     def start(self, loop):
@@ -93,7 +94,14 @@ class Feed:
                 first = set(self.extra())          # open trades and orders (and the order-flow check): never cut
             except Exception as e:
                 log.warning(self._tag() + "engine symbols: %s", e)
-        return (sorted(first) + sorted(u - first))[:95]   # Standard plan: 100 symbols on the data socket
+        lst = sorted(first) + sorted(u - first)
+        if self.alert_syms:                        # alerts (v0.38.0) take what room the pages leave
+            try:
+                have = set(lst)
+                lst += [s for s in self.alert_syms() if s not in have]
+            except Exception as e:
+                log.warning(self._tag() + "alert symbols: %s", e)
+        return lst[:95]                            # Standard plan: 100 symbols on the data socket
 
     def fy_wanted(self) -> list:
         """What Fyers streams: everything wanted except MT5 symbols (those come from the MT5 bridge, helper/mt5.py)."""

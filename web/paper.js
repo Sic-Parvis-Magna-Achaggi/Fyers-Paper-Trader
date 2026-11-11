@@ -671,7 +671,7 @@ function toolRedraw(rebuild){
         else { T.tpMode = "dist"; T.tpDist = roundTick(Math.abs(v - b), tickOf(bs)); } },
       drop: () => { renderTicket(); preview(0); }});
   }
-  P.drags = [...(P.posDrags || []), ...P.toolDrags];
+  P.drags = [...(P.posDrags || []), ...P.toolDrags, ...(P.alertDrags || [])];   // (alerts: calerts.js)
   if(P.prim) P.prim.update();
   toolOverlay(); posBars();
 }

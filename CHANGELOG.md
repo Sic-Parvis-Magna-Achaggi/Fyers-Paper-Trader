@@ -1,5 +1,72 @@
 # Changelog
 
+## v0.38.0 — 11 Nov 2026 — Alerts like TradingView's: price, technical, multi-condition, watchlist, on your phone
+
+Added
+- **Alerts that run on the server** (roadmap 21), page open or not, for every user: up to 400 each (100 technical at once),
+  no plan to buy. 🔔 on the chart's top bar or **Alt+A**, **right-click** on the chart (*Add alert at* that price), a
+  drawing's menu (**🔔 Add alert…**), the 🔔 on a script's row in ƒx, or **+ Create alert** on the new **Alerts** page
+  (🔔 in the top bar, with the number active).
+- **What an alert watches:** the price (last, bid or ask; every tick, a trade through the level between updates counted
+  through the day's high / low, as paper fills are); candles (open / high / low / close / hl2 / hlc3 / ohlc4 / volume);
+  any plot of your Pine scripts on the chart, their `alertcondition()`s (with their own message) and "any alert() call"
+  (the script's `alert.freq_*`); built-in indicators without adding them to the chart (SMA, EMA, WMA, VWAP, RSI, MACD,
+  Bollinger, Supertrend, ATR, Stochastic, CCI, ADX / DMI, MFI, OBV, Donchian, Volume average); drawings (horizontal line /
+  ray, trend line, ray, extended line, parallel channel, rectangle: move the drawing and the alert follows); P&F buy / sell
+  signals on P&F charts. Works on every chart type (Heikin-Ashi, Renko, P&F... bars), with the chart's own Pine engine.
+- **TradingView's 13 conditions** (crossing, crossing up / down, greater / less than, entering / exiting / inside /
+  outside channel, moving up / down by an amount or %, within N bars) against a value or any other series; **each
+  condition on its own timeframe**; **up to 5 conditions**, all (TradingView's) or any.
+- **Triggers:** only once, once per bar, once per bar close, once per minute; **expiry** or open-ended.
+- **Watchlist alerts:** one alert over a watchlist, each symbol on its own (up to 60 symbols on Fyers' price socket,
+  after your charts' and trades'; any that don't fit are listed as not watched).
+- **Messages** with TradingView's placeholders (`{{ticker}}`, `{{close}}`, `{{interval}}`, `{{time}}`, `{{plot_0}}`,
+  `{{plot("Name")}}`...) plus `{{bid}}`, `{{ask}}`, `{{timenow_ist}}`; plain numbers, so JSON stays valid.
+- **Notifications:** a pop-up and a sound (5 sounds) on every open page; **phone and desktop notifications** with the app
+  closed (Web Push, encrypted end to end; the app can be installed on the home screen: Android, and iPhone with iOS 16.4+);
+  **Telegram** (the bot in Settings › Telegram alerts); a **webhook** (POST, JSON when the message is JSON; public addresses,
+  ports 80 / 443 only).
+- **The Alerts page:** the list (search, filter, pause / resume / restart, edit, clone, open its chart, delete), the Log of
+  what fired, and Notifications (turn on this device, test, devices, how-to for Android / iPhone / desktop).
+- **🔔 lines on the chart** at an alert's price levels; drag one to move the alert.
+- **The phone:** More › Alerts; the dialog full screen; pop-ups at the top.
+- **Server:** `server/install.sh` installs Node.js 22 (pinned, checked against nodejs.org's SHA-256 list) into
+  `/opt/ftm-node` for the alerts' Pine runner; if it can't, price alerts still work and the Alerts page says technical
+  ones are waiting.
+
+Changed
+- `helper/feed.py`: the price socket's list = open trades / orders, then the open pages' symbols, then the alerts'.
+- `web/paper.js`: draggable lines include the alerts' (`P.alertDrags`).
+- The top bar's page buttons are a little tighter (7 px each side instead of 10), so the 🔔 fits with room to spare.
+
+New files
+- `helper/chartalerts.py`, `helper/pine_node.mjs`, `helper/webpush.py`, `web/calerts.js`, `web/calerts.css`, `web/sw.js`,
+  `web/manifest.webmanifest`, `web/icons/` (5 icons), `tests/chartalerts_test.py`, `tests/chartalerts_flow.js`.
+  Nothing deleted or renamed.
+
+Tests
+- `tests/chartalerts_test.py` (67, real Node): every operator, the four triggers (including a crossing that didn't hold to
+  the bar's close, and a bar closed by its time with no tick), multi-condition all / any, moving %, built-in RSI, a Pine
+  plot, `alertcondition()` and `alert()`, a trend line and a parallel channel (and a moved drawing), Renko bricks,
+  watchlists, expiry, refusals, placeholders, a webhook (JSON), phone push (encrypted, then decrypted as a browser does;
+  the encryption matches RFC 8291's worked example byte for byte), Telegram (fake bot).
+- `tests/chartalerts_flow.js` (40, Chromium on the mock): the dialog from each way in, a price alert firing (pop-up, line,
+  triggered), dragging its line, Pine / multi-condition / webhook alerts, once per bar, the Alerts page actions, a
+  watchlist alert, the service worker showing a pushed message (Chrome's DevTools push), the manifest, the phone; the top
+  bar still on one line at 1500 px. Passed on consecutive runs.
+- Every other suite re-run on this code: `settings_search_flow` (34), `drawings_flow` (78), `legend_flow` (12),
+  `pine_compat_flow` (271), `multichart_flow` (43), `mobile_flow` (61), `navigation_flow` (41), `indicator_settings_flow`
+  (37), `watchlists_flow` (16), `layouts_flow` (31), `rr_lock_flow` (36), `charttypes_flow` (92), `journal_flow` (43),
+  `live_flow` (60) and `mt5_flow` (44) (both check the top bar stays on one line: they failed until the page buttons were
+  tightened a little; now 88 px spare at 1500 px, 52 before), `jshots_flow` (50), `jinsights_flow` (41), `replay_flow`
+  (48, on 2 of 3 runs: the known random-walk timing checks), `github_upload_flow` (25), `routes_check.py`, `ctype_test.js`
+  and every Python suite: pass. `telegram_flow` (its watchdog check: no watchdog service on the test machine),
+  `mt5acct_flow` (MT5's own history check) and `chain_lists_flow` (the option fixtures' expiries have passed) fail the
+  same way on v0.37.4's code. `mt5acct_test` 133 (one check flaky on v0.37.4 too).
+- `server/install.sh`'s Node step tested with a local copy of nodejs.org's files (install, a bad checksum refused, a failed
+  download skipped); **not run on the droplet**. Phone push **not tested with Google's or Apple's real push services**
+  (no internet from the test machine): check it on your phone (Alerts › Notifications › Send a test).
+
 ## v0.37.4 — 11 Nov 2026 — Pine: lines with breaks drawn with breaks (Chandelier Exit)
 
 Fixed

@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 
 from fastapi.staticfiles import StaticFiles
 
-from . import alerts, charges, charges_watch, fyers_link, journal, jreplay, jshots, logbuf, mt5, mt5acct, news, rt, store, symbols, telegram, users
+from . import alerts, charges, charges_watch, chartalerts, fyers_link, journal, jreplay, jshots, logbuf, mt5, mt5acct, news, rt, store, symbols, telegram, users, webpush
 from .feedcheck import FC
 from . import candles as candles_store
 from .paper import Refused
@@ -958,6 +958,7 @@ async def drawings_save(request: Request):
         return _err("drawings too large")
     now = int(time.time())
     store.save(_draw_file(r, s), {"s": s, "items": items, "updated": now})
+    chartalerts.book(r).drawings_changed(s)          # an alert on a drawing follows it (v0.38.0)
     return {"ok": True, "updated": now}
 
 
@@ -1344,6 +1345,138 @@ async def charge_reviewed(request: Request):
 
 
 # ------------------------------------------------------------------ Telegram alerts (your own bot)
+# ------------------------------------------------------------------ price and technical alerts (v0.38.0, roadmap 21)
+def _book(request: Request):
+    u, r = _urt(request)
+    return u, chartalerts.book(r)
+
+
+@app.get("/api/alerts")
+async def alerts_list(request: Request):
+    """The user's alerts with their state, the limits, the operators and built-in indicators, phone push and Telegram."""
+    u, b = _book(request)
+    out = b.summary()
+    out["push"] = {"key": webpush.public_key(), "subs": webpush.public(u["uid"])}
+    out["tg"] = telegram.ready(telegram.load(u["uid"])) if u["role"] == "admin" else None
+    return {"ok": True, **out}
+
+
+@app.post("/api/alerts/save")
+async def alerts_save(request: Request):
+    """{alert}: a new alert (no id) or a change to one (with its id); {level: {id, ci, role, v}}: a 🔔 line dragged."""
+    _same_origin(request)
+    u, b = _book(request)
+    body = await _body(request)
+    try:
+        lv = body.get("level")
+        a = b.set_level(lv.get("id"), lv.get("ci"), lv.get("role"), lv.get("v")) if isinstance(lv, dict) else b.upsert(body.get("alert") or {})
+    except chartalerts.Bad as e:
+        return _err(e)
+    return {"ok": True, "alert": b.public(a), "counts": b.counts()}
+
+
+@app.post("/api/alerts/action")
+async def alerts_action(request: Request):
+    """{id, do: pause | resume | restart | clone | delete} (ids: [...] for several)."""
+    _same_origin(request)
+    u, b = _book(request)
+    body = await _body(request)
+    ids = body.get("ids") if isinstance(body.get("ids"), list) else [body.get("id")]
+    out = []
+    try:
+        for i in ids[:MAX_BULK]:
+            a = b.action(str(i or ""), str(body.get("do") or ""))
+            if a:
+                out.append(b.public(a))
+    except chartalerts.Bad as e:
+        return _err(e)
+    return {"ok": True, "alerts": out, "counts": b.counts()}
+
+
+MAX_BULK = 500
+
+
+@app.get("/api/alerts/log")
+async def alerts_log(request: Request, n: int = 300):
+    u, b = _book(request)
+    return {"ok": True, "log": b.read_log(max(1, min(int(n), 2000)))}
+
+
+@app.post("/api/alerts/log/clear")
+async def alerts_log_clear(request: Request):
+    _same_origin(request)
+    u, b = _book(request)
+    b.clear_log()
+    return {"ok": True}
+
+
+@app.post("/api/alerts/test")
+async def alerts_test(request: Request):
+    """{notify, name?}: a test message through the chosen ways (Telegram, phone, webhook); the page plays its own sound."""
+    _same_origin(request)
+    u, b = _book(request)
+    body = await _body(request)
+    try:
+        nt = chartalerts.clean({"target": {"s": "NSE:TEST"}, "conds": [{"a": {"k": "price"}, "op": "gt", "b": {"k": "value", "v": 0}, "tf": "5m"}],
+                                "notify": body.get("notify") or {}}, None)["notify"]
+    except chartalerts.Bad as e:
+        return _err(e)
+    e = {"id": "test", "aid": "test", "name": str(body.get("name") or "Test alert")[:100], "s": "NSE:TEST",
+         "msg": "This is a test message from your Fyers Trade Manager alerts.", "t": time.time(), "px": None, "tf": "5m"}
+    res = await b.deliver({"id": "test", "notify": nt}, e, test=True)
+    return {"ok": True, "res": res}
+
+
+@app.post("/api/push/subscribe")
+async def push_subscribe(request: Request):
+    """{sub: PushSubscription.toJSON(), name}: this browser gets alerts as notifications (phone: the app on the home screen)."""
+    _same_origin(request)
+    u = _user(request)
+    body = await _body(request)
+    try:
+        s = webpush.subscribe(u["uid"], body.get("sub") or {}, request.headers.get("user-agent", ""), str(body.get("name") or ""),
+                              f"https://{request.headers.get('host')}")
+    except ValueError as e:
+        return _err(e)
+    users.audit(u["uid"], "push notifications on", s.get("host", ""), _ip(request))
+    return {"ok": True, "sub": s, "subs": webpush.public(u["uid"])}
+
+
+@app.post("/api/push/unsubscribe")
+async def push_unsubscribe(request: Request):
+    _same_origin(request)
+    u = _user(request)
+    body = await _body(request)
+    webpush.unsubscribe(u["uid"], str(body.get("endpoint") or ""), str(body.get("id") or ""))
+    return {"ok": True, "subs": webpush.public(u["uid"])}
+
+
+@app.post("/api/push/test")
+async def push_test(request: Request):
+    """{id?}: a test notification to one browser (or all of this user's)."""
+    _same_origin(request)
+    u = _user(request)
+    body = await _body(request)
+    res = await asyncio.get_running_loop().run_in_executor(None, webpush.send, u["uid"], {
+        "title": "🔔 Test notification", "body": "Alerts will arrive like this, with the page closed.", "tag": "test", "url": "/#alerts",
+        "t": time.time(), "test": True}, str(body.get("id") or ""))
+    return {"ok": True, "res": res, "subs": webpush.public(u["uid"])}
+
+
+@app.get("/sw.js")
+def service_worker():
+    """The service worker (phone / desktop notifications) at the site's root, so it covers every page."""
+    return FileResponse(ROOT / "web" / "sw.js", media_type="text/javascript",
+                        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
+
+
+@app.get("/manifest.webmanifest")
+def manifest():
+    """What a phone needs to install the page as an app (Add to Home Screen): iPhone push needs that."""
+    return FileResponse(ROOT / "web" / "manifest.webmanifest", media_type="application/manifest+json",
+                        headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/api/ping")
 def ping():
     """For the watchdog (and any outside monitor): answers while the helper's event loop runs. Says nothing else."""

@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 11 Nov 2026, version **0.37.4**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 11 Nov 2026, version **0.38.0** (alerts like TradingView's, roadmap 21). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -106,6 +106,51 @@ automatic pictures off itself (other suites turn them on).
 `indicator_settings_flow.js`'s "at the start of a contract's history it stops asking" failed once in 2 runs on 1 Nov
 (v0.22.0; passed on re-run, 37/37). Same advice. 11 Nov (v0.37.4): 2 fails in 4 runs (200 daily candles loaded, the
 "No older candles" note not yet up in its 4.5 s window); passed on v0.37.3's code too. Worth widening that window.
+
+## Alerts (v0.38.0, roadmap 21)
+
+Asked 11 Nov ("build alerts like tradingview ... multiple conditions ... both price and technical ... so I don't need to buy
+Tradingview ... how we can get alerts in mobile"). Design in the roadmap (item 21); user's guide: Paper_Trading_Guide › Alerts.
+- **`helper/chartalerts.py`** (one `Book` per user, `BOOKS`; `rt.UserRT.attach` starts it, `on_tick` feeds it, `stop` drops
+  it): `clean()` validates the page's alert (Bad = a sentence for the page); `_keep_libs` keeps a script's libraries on an edit
+  (the page's copy has none: `public()` strips them); `set_level` = a dragged 🔔 line. Files `u/<uid>/alerts.json`,
+  `alerts_log.jsonl`. Limits: 400 alerts, 100 technical symbols, 5 conditions, 15 watchlist alerts, 60 symbols on the feed
+  (`feed.alert_syms`, added AFTER the pages' symbols in `Feed.wanted()`; the rest listed as `unwatched`).
+  - **Tick conditions** (`tick_mode`: the real price vs numbers / drawings, not "close", not moving): `on_tick` -> `_eval(tick=)`,
+    previous tick in `st["prev"]` (seeded from `feed.last` when armed), day high / low sweep (`hl`). Need no candles when
+    the comparands are numbers.
+  - **Series conditions:** `Series` (port of the page's tfPlan / bucket / aggBars / noTradeDrop / liveBar) per (symbol, tf),
+    loaded by `candles.get` / `mt5.history`, refreshed every REFRESH_SEC (recalculates only if closed bars changed).
+    `Sess` = one Node session: "B|" bars (+ drawings, P&F signals) or "P|" a script / built-in (`IND` -> `ind_code`) with
+    its inputs; shared by alerts with the same key. `_pump` every 0.25 s: load, `_open`, `_update` (paced max(1 s, 3 x took),
+    `time.monotonic`). `_after` -> `_eval` (live bar vs the one before) or `_close_check` (once per bar close: all sessions of
+    that tf must show the new bar; the first output is only a baseline) / `_calls` (any alert() call, the script's freq).
+    `_timers`: expiry; a bar whose time is up + 2 s -> `_close_timer` (brings every session up to date, Pine in full via op
+    "full"; if that brings a new bar, `_close_check` already did it).
+  - `_fire` -> log, `feed.broadcast({"calert"})`, `deliver` (thread: Telegram `send_user(who="alerts")`, `webpush.send`,
+    `webhook` (public IPs, ports 80 / 443; `FTM_WEBHOOK_PRIVATE=1` in tests)). Placeholders: `render` (`_plain` numbers).
+- **`helper/pine_node.mjs`**: Node runs `web/pine_worker.js` UNCHANGED (its text + `export {run, tick, sessions}`, imported
+  as a data: URL), `self.postMessage` captured; PineTS's `run` patched to `setAlertMode('all')` (alertcondition / alert() on
+  every bar). Chart types by `web/ctype.js` (`CT.transform`, box from `CT.size` once per open), drawings by a port of
+  draw.js `t2L` (bar index, snapped), P&F signals by `CT.pfTools`. Ops open / bars / full / draws / close / data (the answer
+  to a `need`: request.security, fetched by `chartalerts.need_candles` for the user of the oldest pending request).
+  `chartalerts.RUNNER` starts it (`node_path()`: `FTM_NODE`, `/opt/ftm-node/bin/node`, PATH), restarts on exit.
+- **Node on the server:** `server/install.sh` `node_install` (pinned `NODE_VER` v22.12.0, nodejs.org tarball + SHASUMS256,
+  `/opt/ftm-node`); a failure only prints a warning (technical alerts wait; the Alerts page shows `RUNNER.err`).
+  **Not yet run on the real droplet** (no internet to nodejs.org from the build machine; tested with a file:// mirror).
+- **`helper/webpush.py`**: VAPID key (sealed, `webpush.json`), RFC 8291 encryption (checked against the RFC's worked
+  example), `u/<uid>/push.json`. Routes `/api/push/subscribe|unsubscribe|test`; `/sw.js` (Service-Worker-Allowed: /) and
+  `/manifest.webmanifest` from `web/`; icons in `web/icons/`. **Not tested against Google's / Apple's push services** (no
+  internet here): the browser test drives the service worker through Chrome's DevTools push.
+- **`web/calerts.js` + `calerts.css`** (after replay.js, before mobile.js): wraps `connectWS` (the socket's "calert"),
+  `pgShow` (page `alerts`, inserted before Log), `drawLines` (`caLines`: 🔔 price lines -> `P.alertDrags`, paper.js's drag
+  code moves them; `P.drags` includes them), `drMenu` (🔔 Add alert…), `renderIndPick` (🔔 per script), `mMore`,
+  `refreshState` (loads after login). Alt+A; right-click on the chart (not a drawing: draw.js handles those first) ->
+  `#caCtx`. Dialog keys: price:, bar:, pine:<ind id>:plot|ac|any, draw:<id>:<edge>, ind:<t>:<out>, pf:, saved:<n>.
+  In a multi-chart cell (`FTM_CELL`) no pop-up / sound / service worker (the page around it has them). The nav item is a
+  bell icon with an overlaid count; calerts.css tightens `#nav button` to 7 px padding, so the top bar has 88 px spare at
+  1500 px (52 before; the flow, live_flow and mt5_flow check it stays on one line).
+- **Tests:** `tests/chartalerts_test.py` (67), `tests/chartalerts_flow.js` (40); mock: `/_mock/price`, `/_mock/hook(s)`.
 
 ## Pine plots: breaks (v0.37.4)
 
@@ -358,6 +403,13 @@ owner, his call whether to set a default.
   FundingPips (10 Nov): no hedging even in Hedge mode; his 21182752 is Phase 1 of the 2-Step; news: ForexFactory (owner).
 
 ## Next job
+
+**v0.38.0 (11 Nov), alerts:** the owner updates the server, then: (1) the Alerts page shows no "Node.js isn't installed"
+warning (if it does: `journalctl -u fyers-update -n 50` shows why install.sh's Node step failed; `/opt/ftm-node/bin/node
+--version` should say v22.12.0); (2) Alerts › Notifications › Turn on for this device on his phone (Android: install the
+app first; iPhone: Add to Home Screen first) and Send a test; (3) one price alert and one RSI alert in market hours.
+Not built: email (asked in roadmap 21). Watch the droplet's memory / CPU with many technical alerts (Node starts with
+`--max-old-space-size=768`).
 
 **v0.37.4 (11 Nov):** the owner checks his Chandelier Exit on XAUUSD against TradingView after the update: no diagonals
 between the stops, only the current direction's stop on the price scale.
