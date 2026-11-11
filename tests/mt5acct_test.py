@@ -127,19 +127,8 @@ async def main():
     ok("open net now ≈ MT5's profit minus commission", abs(v["net"] - (p["mt"]["profit"] - 0.6)) < 0.02, (v["net"], p["mt"]))
     ok("the account's figures: MT5's balance and equity", e.balance() == ea.balance and abs(e.equity() - ea.equity()) < 0.02)
 
-    print("managing it: the login, once")
-    try:
-        e.modify_pos(p["id"], sl=round(bid - 4, 2))
-        ok("the first change asks for the login", False)
-    except mt5acct.NeedLogin as x:
-        ok("the first change asks for the login", x.login == 21182752)
-    try:
-        e.confirm("12345")
-        ok("a wrong login is refused", False)
-    except Refused:
-        ok("a wrong login is refused", True)
-    e.confirm(" 21182752 ")
-    ok("the right login: confirmed (saved)", e.M["confirmed"] and store.load(e.dir + "paper.json")["mt5"]["confirmed"])
+    print("managing it: no login prompt (v0.37.1, owner 11 Nov)")
+    ok("an MT5 account can be changed from the start (no login to type)", e.M["confirmed"])
 
     print("SL / TP from the app reach MT5")
     e.modify_pos(p["id"], sl=round(bid - 4, 2), tp=round(bid + 40, 2))
@@ -539,7 +528,7 @@ async def main():
     ok("its prices are its own terminal's (shifted +50), not the price terminal's", px2 and abs(px2 - ea2.quote("XAUUSD")[0]) < 0.05, (px2, ea2.quote("XAUUSD")))
     px1 = e.px("MT5:XAUUSD").get("bid")
     ok("... and the first account's are still its own", px1 and abs(px1 - ea.quote("XAUUSD")[0]) < 1, (px1, ea.quote("XAUUSD")))
-    ok("the second account needs its own confirmation", not e2.M["confirmed"])
+    ok("the second account needs no login typed either", e2.M["confirmed"])
     ea.open("US30.cash", 1, 0.1, sl=round(ea.quote("US30.cash")[0] - 300, 2))
     await calls(ea, 1)
     q30 = {"s": "MT5:US30.cash", "side": -1, "type": "market", "sl": round(ea2.quote("US30.cash")[1] + 300, 2), "tp_r": 2,

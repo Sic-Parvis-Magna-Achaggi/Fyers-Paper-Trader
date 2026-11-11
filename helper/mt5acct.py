@@ -150,7 +150,7 @@ class Mt5Engine(Paper):
 
     def _load_extra(self, s: dict):
         m = s.get("mt5") or {}
-        self.M = {"comm": m.get("comm") or {}, "cmd": m.get("cmd") or {}, "confirmed": bool(m.get("confirmed")),
+        self.M = {"comm": m.get("comm") or {}, "cmd": m.get("cmd") or {}, "confirmed": True,                # (v0.37.1, owner 11 Nov: no login prompt; the bridge key + 2FA to MT5 suffice)
                   "base": bool(m.get("base")), "sym": m.get("sym") or {}, "seq": int(m.get("seq") or 0),
                   "info": m.get("info") or {}, "caught": bool(m.get("caught")), "size_set": bool(m.get("size_set")),
                   "dreset": bool(m.get("dreset")), "first_seen": m.get("first_seen") or 0, "ea": m.get("ea") or "",

@@ -1136,6 +1136,9 @@ async def paper_place(request: Request):
         jreplay.note_order(u["uid"], aid, b)          # the chart it came from, for the trade replay (v0.29.0)
     try:
         plan = engine.place(b)
+    except mt5acct.NeedLogin as e:                     # an MT5 account's first change: the page asks for its login
+        jreplay.drop_pending(u["uid"], aid, b)
+        return JSONResponse({"ok": False, "error": str(e), "need_login": e.login, "paper": engine.snapshot()}, status_code=400)
     except Refused as e:
         jreplay.drop_pending(u["uid"], aid, b)
         return _err(e)
@@ -1185,6 +1188,8 @@ async def paper_be_all(request: Request):
             try:
                 engine.be_now(p["id"])
                 done.append(p["s"])
+            except mt5acct.NeedLogin:
+                raise                                  # (asks for the MT5 login, then the same request again)
             except Refused:
                 pass
         if not done:

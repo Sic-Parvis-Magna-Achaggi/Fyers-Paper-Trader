@@ -130,6 +130,6 @@ document.addEventListener("DOMContentLoaded", () => {
   if(typeof paperOnSymbol === "function"){ const po = paperOnSymbol; paperOnSymbol = function(row){
     const r = po.apply(this, arguments), h = mq5("#tkHint");
     if(h && !(typeof mtOn === "function" && mtOn())){ if(!h.dataset.txt) h.dataset.txt = h.textContent;
-      h.textContent = row && isMT5(row.s) ? "MT5 symbols aren't traded on paper accounts: your MT5 trades are on the MT5 side (top left). Placing orders from the app comes in the next step." : h.dataset.txt; }
+      h.textContent = row && isMT5(row.s) ? "MT5 symbols aren't traded on paper accounts: trade them on the MT5 side (top left)." : h.dataset.txt; }
     return r; }; }
 });

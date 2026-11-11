@@ -238,7 +238,8 @@ fallback"):** item 8 is built now, stage by stage. Stage a shipped in **v0.34.0*
          switch, **PAPER | LIVE | MT5** (MT5 in its own colour). On the MT5 side the account switcher lists only the MT5
          accounts, one per login whose terminal has called (each MT5 terminal on the laptop runs the EA): "● 21182752 ·
          FundingPips-SIM1 · DEMO · $5,012.50". Fyers never appears there and MT5 accounts never on the Live side. Going
-         to MT5: a fresh 2FA code, and the login typed the first time an account trades. The admin only.
+         to MT5: a fresh 2FA code (the login typed once per account was dropped in v0.37.1, owner 11 Nov: "I'm the only one
+         trading. We don't need so much security"). The admin only.
        - **Each MT5 account is its own account:** its own rules, history, journal account, kill switch (that account
          only). Prices for charts still come from the price terminal (Settings › MT5 bridge).
        - **Money: $, net** (owner, 10 Nov): gross from MT5's tick value; **commission learned from MT5's real deals**
@@ -527,6 +528,7 @@ marked before relying on it.
 
 ## Done
 
+- [x] **v0.37.1** (11 Nov): MT5 accounts: no login to type before the first change or order (owner: "We don't need so much security"); the 2FA code to switch to MT5 stays. Fixed: PLACE as an account's first change showed "type its login" as a red line instead of asking.
 - [x] **v0.37.0** (11 Nov): MT5 stage b complete (item 8 b2 / b3): orders placed from the app on MT5 accounts (MT5 PLACE, real SL / TP, sizing in 0.01 lots net of commission, margin from MT5, FundingPips' floors and the other guards, no hedging across your MT5 accounts); the MT5 kill switch; the ForexFactory news guard (Master blocks ±5 min, evaluation warns); the EA trailing by itself when the link drops. EA 1.20.
 - [x] **v0.36.0** (10 Nov): MT5 accounts (item 8 b1): PAPER | LIVE | MT5 at the top left; each MT5 login with FTM Bridge 1.10 an account of its own (positions, orders, balance, history from MT5; trades placed in MT5 too); SL / TP, BE, BE-T, TRAIL, ✕ and pending orders managed at the broker through the EA (the login typed once); $ net of commission learned from MT5's deals and swap; FundingPips' daily (broker's midnight) and max (typed size) floors shown. EA 1.10 opens no new trades.
 - [x] **v0.35.0** (10 Nov): the ƒx search, like TradingView (item 18: filter as you type, marks, ↑ / ↓ / Enter, Esc, "/") and Settings as a page of its own (item 19: sections listed on the left, cards, ← Back / Esc, #settings; chips on the phone); the version at the top (item 20).

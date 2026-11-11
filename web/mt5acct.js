@@ -7,7 +7,7 @@
      - the warnings (MT5 not connected, an old EA, app trading off in the EA, a limit breached),
      - FundingPips' limits under the account figures,
      - the Account page of an MT5 account (MT5's figures, the limits form, the commission learned per symbol),
-     - the first change on an account: its login typed once (the server says so with need_login).
+     - (v0.37.1: no login prompt any more - every account is ready at once; the need_login dialog stays for safety, unused.)
    v0.37.0 (b2 / b3): placing from the ticket and the chart tool (PLACE says MT5), orders on their way to MT5, the MT5 kill
    switch (KILL in the top bar, Resume on the Account page), the news guard's events and its settings.
    Uses globals from index.html, paper.js, pages.js, security.js and live.js. */
@@ -168,7 +168,7 @@ const MT5_RULES = [
   ["day_from", "The day starts from", "At the broker's midnight", [["balance", "balance"], ["equity", "equity"], ["higher", "the higher of the two"]]],
   ["max_pct", "Max loss limit %", "0 = off. FundingPips 2-Step: 10%"],
   ["max_mode", "Max loss floor", "static: size − max %. trailing: follows the highest balance", [["static", "static"], ["trailing", "trailing"]]],
-  ["buffer_pct", "Buffer %", "Kept from each floor, % of size (the guards use it from the next step)"],
+  ["buffer_pct", "Buffer %", "Kept from each floor, % of size (new orders must leave it)"],
   ["phase", "Phase", "Master: no opening or closing from the app around high-impact news. Evaluation: a warning only", [["evaluation", "evaluation"], ["master", "master"]]],
   ["news_on", "News guard (ForexFactory)", "High-impact events on the symbol's currencies", [[true, "on"], [false, "off"]]],
   ["news_min", "Master: minutes either side", "FundingPips: 5"],
@@ -220,7 +220,7 @@ function mtAccountPage(){
     <div class="btns">${M.halted ? '<button class="primary" id="mtResume">Resume trading</button>' : ""}<button class="danger" id="mtKillGo" title="Close every position and cancel every order of this account at MT5, then pause new orders">Kill switch</button></div>
     <div class="pg-split">
       <div class="pg-card mtcard"><h3 class="pg-h3" style="margin-top:0">FundingPips' loss limits</h3>
-        <p class="help">${mtLimitsText()}. Shown here and on the panel; they refuse new orders once placing from the app arrives (next step). FundingPips
+        <p class="help">${mtLimitsText()}. Shown here and on the panel; new orders that could break them are refused. FundingPips
           measures on its own server - its dashboard is the official figure.</p>
         <div class="pg-cards">${lim.map(([k, v]) => `<div class="pgc"><span>${k}</span><b>${v}</b></div>`).join("")}</div>
         <h4 style="margin:12px 0 4px">This account's limits</h4>
@@ -299,3 +299,14 @@ function mtAccountPage(){
     return j;
   };
 })();
+
+/* v0.37.1: on the MT5 side, a terminal that connects after the page loaded joins the switcher (and ● / ○ stays current)
+   without a reload: the account list is re-read every 15 s and the switcher rebuilt only when it changed */
+setInterval(async () => {
+  try{
+    if(typeof sideMT5 !== "function" || !sideMT5() || document.hidden) return;
+    const j = await api("/api/accounts"); if(!j.ok) return;
+    const key = a => JSON.stringify((a || []).filter(x => x.mode === "mt5").map(x => [x.id, x.online, x.balance != null ? Math.round(x.balance) : null]));
+    if(key(j.accounts) !== key(S.accounts)){ S.accounts = j.accounts; acctSetup(); }
+  }catch(e){}
+}, 15000);

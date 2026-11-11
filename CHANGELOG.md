@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.37.1 — 11 Nov 2026 — MT5: no login to type; PLACE's first-change prompt fixed
+
+Changed
+- MT5 accounts: no login to type before the first change or order on an account (owner, 11 Nov: "I'm the only one trading.
+  We don't need so much security"). Every MT5 account can trade as soon as its terminal connects; switching a page to MT5
+  still asks for a 2FA code, and the bridge key still has to match.
+
+Fixed
+- PLACE as the first change on an MT5 account showed "first change on MT5 account …: type its login" as a red line under the
+  button instead of asking (the place route and BE all didn't pass the request on to the page). Moot now the prompt is gone,
+  but fixed in case it's ever brought back.
+- A terminal that connects after the page loaded now joins the MT5 account switcher within 15 s (before: only after a
+  reload); its ● / ○ stays current too.
+- Old hints that said placing MT5 orders "comes in the next step" (the paper ticket on an MT5 symbol, the MT5 Account page's
+  limits and buffer).
+
+Tests
+- `tests/mt5acct_test.py` (116): an MT5 account is ready from the start, the second one too.
+- `tests/mt5acct_flow.js` (now 51): no login dialog on the first SL move; a second fake terminal with a new login each run:
+  it joins the switcher and PLACE as its very first change goes straight to MT5. `mt5_flow.js` 44, `mobile_flow.js` 61,
+  `mt5_test.py` 52, `routes_check.py`: pass.
+
 ## v0.37.0 — 11 Nov 2026 — MT5: placing orders from the app, the kill switch, the news guard, the EA trailing when the link drops (FundingPips, stage b complete)
 
 Added

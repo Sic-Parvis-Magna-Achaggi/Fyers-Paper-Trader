@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 11 Nov 2026, version **0.37.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 11 Nov 2026, version **0.37.1**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -107,6 +107,15 @@ automatic pictures off itself (other suites turn them on).
 (v0.22.0; passed on re-run, 37/37). Same advice.
 
 ## MT5 accounts (v0.36.0 b1; v0.37.0 b2 / b3: stage b complete)
+
+**v0.37.1:** no login to type on MT5 accounts (owner, 11 Nov: "I'm the only one trading. We don't need so much security"):
+`M.confirmed` is always True on load, so `NeedLogin` is never raised; the route `/api/mt5acct/confirm`, the dialog and
+`papi`'s `need_login` handling stay (unused). Also fixed: `/api/paper/place` and `be_all` now pass `NeedLogin` on as
+`need_login` (they swallowed it as a plain refusal: the owner saw "first change ... type its login" in red under PLACE).
+On the MT5 side the page re-reads `/api/accounts` every 15 s (end of `web/mt5acct.js`), so a terminal that connects later
+joins the switcher. Asked 11 Nov about leverage: the ticket's margin is MT5's OrderCalcMargin ($13,462 a lot of XAUUSD on
+his demo = gold's own leverage, not the account's 1:100); MT5 accounts' Max margin use % defaults to 0 (off): told the
+owner, his call whether to set a default.
 
 **v0.37.0 (b2 / b3, EA 1.20)** - on top of the b1 notes below:
 - **EA 1.20:** `OPEN <tag> <sym> <side> <market|limit|stop> <vol> <price> <sl> <tp>` (`DoOpen`: CTrade Buy / Sell /

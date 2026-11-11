@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.37.0)
+# Paper and live trading: how it works (v0.37.1)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -159,8 +159,8 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
   entry line's bar (or the panel, the Trades page, the phone's sheet). The app sends the change to the EA, which makes it in
   MT5; each trade's line on the panel says what MT5 has: "MT5 SL 2650.10 · TP 2680.00 ✓", "→ moving to …", "MT5 refused: …"
   (retried after a pause), "closing in MT5…". Trailing never moves a stop back or below BE + commission. Pending orders
-  placed in MT5 can be moved (their SL / TP move with them) or cancelled here. **The first change on each account asks you
-  to type its login** (once).
+  placed in MT5 can be moved (their SL / TP move with them) or cancelled here. No login to type: switching the page to MT5
+  (a 2FA code) is the check (v0.37.1).
 - **Pacing (FundingPips: no server spamming):** at most one change per trade every 2 seconds and 30 requests a minute per
   account; a newer stop replaces one still waiting.
 - **If the app's stop is passed before MT5 has taken it** (MT5 refused the change, or it was on its way), the app closes the

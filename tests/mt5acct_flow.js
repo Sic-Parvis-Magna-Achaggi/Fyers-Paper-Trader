@@ -1,6 +1,6 @@
 // MT5 accounts (roadmap 8 b, slice b1) in the browser: the PAPER | LIVE | MT5 switch (a 2FA code), the MT5 account in the
 // switcher (login · server · DEMO · $ balance), its positions and pending orders straight from MT5 (a fake terminal,
-// tests/fake_mt5.py with its control API), money in $, the trade's state at MT5 on the panel, the login typed once, SL moves,
+// tests/fake_mt5.py with its control API), money in $, the trade's state at MT5 on the panel, no login prompt (v0.37.1), SL moves,
 // BE and TRAIL from the chart's entry-line bar moving MT5's real stop, ✕ closing it in MT5, a pending order moved and cancelled,
 // History (MT5's own history + the app's closes, $ net of commission and swap), the Account page (FundingPips' limits, the
 // commission learned), Settings' rules form, the server refusing MT5 changes from a page on Paper, back to PAPER (₹), the
@@ -14,7 +14,7 @@ fs.mkdirSync(SHOT, { recursive: true });
 const ok = (c, m) => { fs.writeSync(1, (c ? "PASS " : "FAIL ") + m + "\n"); if(!c) process.exitCode = 1; };
 const CTL = "http://127.0.0.1:8769";
 const ctl = async (path, body) => (await fetch(CTL + path, body ? { method: "POST", body: JSON.stringify(body) } : {})).json();
-let br, ea;
+let br, ea, ea2;
 const startEA = key => { ea = spawn("python3", [__dirname + "/fake_mt5.py", "http://localhost:8766", key, "--ctl", "8769", "--history"], { stdio: ["ignore", "pipe", "pipe"] });
   ea.stdout.on("data", d => fs.writeSync(1, "  [fake MT5] " + d)); ea.stderr.on("data", d => fs.writeSync(1, "  [fake MT5 err] " + d)); };
 const code = async pg => { if(await pg.isVisible("#codeAsk:not(.hide) #caCode")){ await pg.fill("#caCode", await LOGIN.code(pg)); await pg.click("#caGo"); } };
@@ -71,17 +71,11 @@ const code = async pg => { if(await pg.isVisible("#codeAsk:not(.hide) #caCode"))
   const v = await pg.evaluate(id => P.snap.positions.find(p => p.id === id), `P${tk}`);
   ok(v && v.vol === 0.1 && v.at_sl < 0 && v.init_risk > 0 && Math.abs(v.at_sl + v.init_risk) < 0.02, `1R = $${v && v.init_risk} net of commission (at SL ${v && v.at_sl})`);
 
-  // ---- the first change: the login, once; an SL move reaches MT5
+  // ---- the first change goes straight to MT5 (v0.37.1, owner 11 Nov: no login to type); an SL move reaches MT5
   const newSl = +(q[0] - 5).toFixed(2);
-  const confirmed = await pg.evaluate(() => P.snap.mt5.confirmed);
   await pg.evaluate(([id, sl]) => { window._m = papi("modify", {id, sl}); }, [`P${tk}`, newSl]);
-  if(!confirmed){
-    await pg.waitForSelector("#mtConfDlg:not(.hide) #mtcLogin", { timeout: 5000 });
-    ok(/First change on MT5 account 21182752/.test(await pg.textContent("#mtConfDlg")), "the first change asks for the account's login");
-    await pg.fill("#mtcLogin", "999"); await pg.click("#mtcGo"); await pg.waitForTimeout(400);
-    ok(/isn't this account's login/.test(await pg.textContent("#mtcErr")), "a wrong login: refused");
-    await pg.fill("#mtcLogin", "21182752"); await pg.click("#mtcGo");
-  } else ok(true, "(the login was confirmed in an earlier run on this data: asked once per account, kept)");
+  await pg.waitForTimeout(600);
+  ok(!(await pg.isVisible("#mtConfDlg #mtcLogin")), "no login dialog: the change goes straight to MT5");
   const pos = async () => (await ctl("/state")).positions.find(p => p.ticket === tk);
   for(let i = 0; i < 20 && (await pos()).sl !== newSl; i++) await pg.waitForTimeout(250);
   ok((await pos()).sl === newSl, `the SL moved in MT5 (${newSl})`);
@@ -152,7 +146,9 @@ const code = async pg => { if(await pg.isVisible("#codeAsk:not(.hide) #caCode"))
   await pg.screenshot({ path: SHOT + "mt5acct_account.png", fullPage: true });
   await pg.evaluate(() => pgShow("chart"));
   await pg.evaluate(() => openDrawer()); await pg.waitForTimeout(600);
-  ok(/Starting size/.test(await pg.textContent("#rulesForm")) && !/square-off/i.test(await pg.textContent("#rulesForm")), "Settings' rules: the MT5 account's own limits (no Fyers square-off)");
+  await pg.waitForFunction(() => /Starting size/.test((document.querySelector("#rulesForm") || {}).textContent || ""), null, { timeout: 5000 }).catch(() => {});
+  const rf = await pg.textContent("#rulesForm");
+  ok(/Starting size/.test(rf) && !/square-off/i.test(rf), "Settings' rules: the MT5 account's own limits (no Fyers square-off)" + (/Starting size/.test(rf) ? "" : " [" + rf.slice(0, 120) + "]"));
   await pg.click("#bClose");
 
   // ---- b2: placing from the app (the chart tool, PLACE)
@@ -213,6 +209,32 @@ const code = async pg => { if(await pg.isVisible("#codeAsk:not(.hide) #caCode"))
   ok(await pg.evaluate(() => !P.snap.mt5.halted), "Resume (a 2FA code): orders allowed again");
   await pg.evaluate(() => pgShow("chart"));
 
+  // ---- v0.37.1: PLACE as the very first change on a brand-new account (a second terminal, a new login each run): straight to MT5
+  const L2 = 30000000 + Math.floor(Math.random() * 9000000), CTL2 = "http://127.0.0.1:8770";
+  ea2 = spawn("python3", [__dirname + "/fake_mt5.py", "http://localhost:8766", k, "--ctl", "8770", "--login", String(L2)], { stdio: ["ignore", "pipe", "pipe"] });
+  ea2.stderr.on("data", d => fs.writeSync(1, "  [fake MT5 #2 err] " + d));
+  for(let i = 0; i < 60 && !(await pg.evaluate(async l => (await api("/api/accounts")).accounts.some(a => a.id === "mt5-" + l), L2)); i++) await pg.waitForTimeout(500);
+  await pg.evaluate(async l => { await acctRefresh(); acctSwitch("mt5-" + l); }, L2); await pg.waitForTimeout(1500);
+  await pg.waitForFunction(l => P.snap && P.snap.mt5 && +P.snap.mt5.login === l, L2, { timeout: 8000 }).catch(() => {});
+  const s2 = await pg.evaluate(() => ({acct: ACCT, login: P.snap && P.snap.mt5 && P.snap.mt5.login, conf: P.snap && P.snap.mt5 && P.snap.mt5.confirmed,
+    list: mt5List().map(a => a.id).join(",")}));
+  ok(+s2.login === L2 && s2.conf, `a second MT5 account (${L2}), ready to trade at once` + (+s2.login === L2 ? "" : " " + JSON.stringify(s2)));
+  await pg.evaluate(() => { arm(1); P.T.mode = "lots"; P.T.lots = 0.01; P.T.slDist = 5; P.T.tpMode = "r"; P.T.tp_r = 2; renderTicket(); toolRedraw(); preview(0); });
+  await pg.waitForFunction(() => P.plan && P.plan.lots === 0.01 && !P.plan.blocked && document.querySelector("#tPlace") && !document.querySelector("#tPlace").disabled,
+    null, { timeout: 20000, polling: 500 }).catch(() => {});
+  await pg.click("#tPlace");
+  await pg.waitForTimeout(600);
+  ok(!(await pg.isVisible("#mtConfDlg #mtcLogin")) && !/type its login/.test(await pg.evaluate(() => (document.querySelector("#tkStatus") || {}).textContent || "")),
+     "PLACE on a new account: no login dialog, no red line");
+  let st2 = { positions: [] };
+  for(let i = 0; i < 40 && !st2.positions.length; i++){ await pg.waitForTimeout(250); st2 = await (await fetch(CTL2 + "/state")).json(); }
+  const d2 = await pg.evaluate(() => ({plan: P.plan && {lots: P.plan.lots, blocked: P.plan.blocked, err: P.plan.error}, st: (document.querySelector("#tkStatus") || {}).textContent,
+    acct: ACCT, opening: P.snap && P.snap.mt5 && P.snap.mt5.opening, ev: (P.snap && P.snap.events || []).slice(-3)}));
+  ok(st2.positions.length === 1 && st2.positions[0].vol === 0.01 && /^FTM /.test(st2.positions[0].comment), "... the order is in MT5" + (st2.positions.length ? "" : " " + JSON.stringify(d2).slice(0, 600)));
+  await pg.evaluate(() => disarm());
+  await fetch(CTL2 + "/close", { method: "POST", body: JSON.stringify({ ticket: st2.positions[0] && st2.positions[0].ticket }) }).catch(() => {});
+  ea2.kill();
+
   // ---- back to PAPER
   await pg.click('#sideSw [data-s="paper"]'); await pg.waitForTimeout(1500);
   ok(await pg.evaluate(() => S.side === "paper" && P.snap.mode === "paper" && !document.body.classList.contains("is-mt5") && /₹/.test(document.querySelector("#acct").textContent)),
@@ -236,4 +258,4 @@ const code = async pg => { if(await pg.isVisible("#codeAsk:not(.hide) #caCode"))
 
   ok(!errs.length, "no page errors" + (errs.length ? ": " + errs.slice(0, 3).join(" | ") : ""));
   await br.close(); ea.kill();
-})().catch(async e => { ok(false, "crashed: " + e.message); try{ await br.close(); }catch(x){} if(ea) ea.kill(); });
+})().catch(async e => { ok(false, "crashed: " + e.message); try{ await br.close(); }catch(x){} if(ea) ea.kill(); if(ea2) ea2.kill(); });
