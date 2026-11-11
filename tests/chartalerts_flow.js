@@ -24,6 +24,7 @@ plot(r, "RSI")
 plot(ta.sma(close, 5), "SMA5")
 alertcondition(r > 0, "RSI above 0", "{{ticker}} RSI {{plot_0}}")
 `;
+const fmtNum = v => Number(v).toLocaleString("en-IN", {maximumFractionDigits: 2});
 const post = (pg, path) => pg.evaluate(p => fetch(p, {method: "POST"}).then(r => r.json()), path);
 let br;
 (async () => {
@@ -112,7 +113,7 @@ let br;
   await pg.mouse.click(box.x, box.y, { button: "right" });
   await pg.waitForSelector("#caCtx:not(.hide)");
   const ctxTxt = await pg.textContent("#caCtx");
-  ok(/Add alert at [\d,.]+/.test(ctxTxt), "right-click on the chart: Add alert at that price", ctxTxt);
+  ok(/price crossing [\d,.]+/.test(ctxTxt) && /Alert at [\d,.]+…/.test(ctxTxt), "right-click on the chart: an alert at that price (at once, or in the dialog)", ctxTxt);
   await pg.click('#caCtx [data-a="at"]');
   await pg.waitForSelector("#caDlg:not(.hide) .cadlg");
   const atV = +(await pg.inputValue('#caDlg [data-v="b"]'));
@@ -136,10 +137,53 @@ let br;
   ok((await pg.inputValue('#caDlg [data-slot="a"]')) === "pine:ao:plot:RSI", "...the dialog starts on its first plot");
   await pg.click("#caCancel");
 
+  // ---------------------------------------------------------------- v0.38.1: the price scale's 🔔 +, the drawing bar's 🔔
+  await pg.evaluate(() => { document.querySelectorAll("#caCtx").forEach(m => m.classList.add("hide")); });
+  const ps = await pg.evaluate(() => { const r = document.querySelector("#chart").getBoundingClientRect(), w = chart.priceScale("right").width();
+    return {x: r.right - w / 2, y: r.top + 160, psw: w}; });
+  await pg.mouse.move(ps.x - ps.psw / 2 - 20, ps.y);
+  ok(!(await pg.isVisible("#caPlus")), "not shown inside the chart near the scale (where the position bars sit)");
+  await pg.mouse.move(ps.x, ps.y, { steps: 4 });
+  ok(await pg.isVisible("#caPlus"), "hovering the price scale shows 🔔+ at that price (TradingView's plus)");
+  await pg.screenshot({ path: SHOT + "calerts_plus.png", clip: {x: ps.x - 260, y: ps.y - 120, width: 330, height: 240} });
+  const plusAt = await pg.evaluate(() => { const b = document.querySelector("#caPlus").getBoundingClientRect(), r = document.querySelector("#chart").getBoundingClientRect();
+    return {mid: b.top + b.height / 2 - r.top, title: document.querySelector("#caPlus").title}; });
+  const nBefore = await pg.evaluate(() => CA.list.length);
+  await pg.mouse.move(ps.x - ps.psw / 2 - 8, ps.y, { steps: 3 });       // from the scale onto the button
+  await pg.click("#caPlus");
+  await pg.waitForSelector("#caCtx:not(.hide)");
+  const want2 = await pg.evaluate(y => roundTick(series.coordinateToPrice(y), cur.tick), plusAt.mid);
+  ok(/crossing [\d,.]+/.test(await pg.textContent("#caCtx")) && plusAt.title.includes(fmtNum(want2)), "its menu: an alert at that price, one click", [plusAt, want2]);
+  await pg.click('#caCtx [data-a="now"]');
+  await pg.waitForFunction(n => CA.list.length === n + 1, nBefore, { timeout: 5000 });
+  const inst = await pg.evaluate(() => CA.list.find(a => a.conds[0].op === "cross" && a.conds[0].b.k === "value" && !a.name && a.freq === "once"));
+  ok(inst && Math.abs(inst.conds[0].b.v - want2) < 0.001, "...created at once: price crossing that level, only once", inst && inst.conds[0]);
+  ok(await pg.evaluate(v => CA.lines.some(l => l.options().price === v), want2), "...with its 🔔 line on the chart");
+  await pg.evaluate(() => { DR.sel = "tline1"; drRedraw(); drUiSel(); });
+  await pg.waitForSelector("#dsel:not(.hide) [data-cab]");
+  ok(/1/.test(await pg.textContent("#dsel [data-cab]")) && await pg.evaluate(() => document.querySelector("#dsel [data-cab]").classList.contains("on")), "a selected drawing's bar: 🔔 with its number of alerts");
+  await pg.click("#dsel [data-cab]");
+  await pg.waitForSelector("#caCtx:not(.hide) [data-e]");
+  ok(await pg.$$eval("#caCtx [data-e]", x => x.length) === 1 && await pg.isVisible("#caCtx [data-n]"), "...click: edit its alert, or add another");
+  await pg.click("#caCtx [data-e]");
+  await pg.waitForSelector("#caDlg:not(.hide) .cadlg");
+  ok((await pg.inputValue('#caDlg [data-slot="b"]')) === "draw:tline1:v" && /Edit alert/.test(await pg.textContent("#caDlg .cadh")), "...which opens it to edit");
+  await pg.click("#caCancel");
+  await pg.evaluate(() => drMenu(DR.items.find(d => d.id === "tline1"), 300, 300));
+  ok(await pg.isVisible('#drMenu [data-cae]'), "the drawing's right-click menu lists its alert too");
+  await pg.evaluate(() => drUiMenuClose());
+
   // ---------------------------------------------------------------- the Alerts page
   await pg.click('#nav [data-pg="alerts"]');
   await pg.waitForSelector("#pg_alerts:not(.hide) .calist");
   await pg.screenshot({ path: SHOT + "calerts_page.png" });
+  const ld = await pg.textContent("#caLoad");
+  ok(/Calculations \d+ of \d+/.test(ld) && /Node/.test(ld) && /CPU/.test(ld), "the Alerts page shows the server's load (calculations of the limit, Node, CPU)", ld);
+  await pg.click("#caLim"); await pg.fill("#caLimN", "123"); await pg.click("#caLimSave");
+  await pg.waitForFunction(() => /of 123/.test(document.querySelector("#caLoad").textContent));
+  await pg.click("#caLim"); await pg.click("#caLimAuto");
+  await pg.waitForFunction(() => /automatic/.test(document.querySelector("#caLoad").textContent));
+  ok(true, "the admin sets the limit, and back to automatic");
   ok(await pg.evaluate(() => !document.querySelector("#nbAlerts").classList.contains("hide") && document.querySelector("header").offsetHeight < 60), "the top bar still fits with the alerts count on the 🔔");
   const rows = await pg.$$eval("#pg_alerts .carowa", r => r.length);
   ok(rows >= 5, "the Alerts page lists them", rows);
@@ -213,6 +257,15 @@ let br;
   ok(await ph.evaluate(() => document.querySelector("#pg_alerts").scrollWidth <= innerWidth + 1), "phone: the page fits the screen");
   await ph.evaluate(() => { pgShow("chart"); mShow("chart"); });
   await ph.waitForFunction(() => cur && DISP.length > 50, null, { timeout: 30000 });
+  const pps = await ph.evaluate(() => { const r = document.querySelector("#chart").getBoundingClientRect(), w = chart.priceScale("right").width(); return {x: r.right - w / 2, y: r.top + 140}; });
+  await ph.touchscreen.tap(pps.x, pps.y);
+  await ph.waitForSelector("#caPlus:not(.hide)", { timeout: 3000 }).catch(() => {});
+  ok(await ph.isVisible("#caPlus"), "phone: a tap on the price scale shows 🔔+ there");
+  await ph.screenshot({ path: SHOT + "calerts_phone_plus.png" });
+  await ph.tap("#caPlus");
+  await ph.waitForSelector("#caCtx:not(.hide)", { timeout: 3000 }).catch(() => {});
+  ok(await ph.isVisible('#caCtx [data-a="now"]'), "phone: ...and its menu");
+  await ph.evaluate(() => document.querySelector("#caCtx").classList.add("hide"));
   await ph.evaluate(() => caQuick());
   await ph.waitForSelector("#caDlg:not(.hide) .cadlg");
   const full = await ph.evaluate(() => { const r = document.querySelector("#caDlg .cadlg").getBoundingClientRect(); return {w: r.width, h: r.height, W: innerWidth, H: innerHeight}; });
@@ -230,7 +283,9 @@ let br;
   await ph.screenshot({ path: SHOT + "calerts_phone_popup.png" });
 
   ok(!errs.length, "no page errors", errs);
-  // tidy up: this run's alerts go, so later suites don't get pop-ups
+  // tidy up: the price back where the mock's candles are (a price left far off them squashes P&F charts in later suites),
+  // and this run's alerts go, so later suites don't get pop-ups
+  for(const s of [SYM, SYM2]) await post(pg, `/_mock/price?s=${encodeURIComponent(s)}&p=5600`);
   await pg.evaluate(async () => { const j = await api("/api/alerts"); if(j.alerts.length) await api("/api/alerts/action", {body: {ids: j.alerts.map(a => a.id), do: "delete"}});
     WL = [{id: "w1", name: "Watchlist", items: []}]; wlId = "w1"; watch = []; prefSet("wlists", WL); prefSet("wl", "w1"); prefSet("watch", []); });
   await br.close();

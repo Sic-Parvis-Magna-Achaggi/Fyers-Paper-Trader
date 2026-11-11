@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 11 Nov 2026, version **0.38.0** (alerts like TradingView's, roadmap 21). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 11 Nov 2026, version **0.38.1** (alerts like TradingView's, roadmap 21; 0.38.1: no alert-count limits, 🔔+ on the price scale, 🔔 on drawings). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -114,8 +114,14 @@ Tradingview ... how we can get alerts in mobile"). Design in the roadmap (item 2
 - **`helper/chartalerts.py`** (one `Book` per user, `BOOKS`; `rt.UserRT.attach` starts it, `on_tick` feeds it, `stop` drops
   it): `clean()` validates the page's alert (Bad = a sentence for the page); `_keep_libs` keeps a script's libraries on an edit
   (the page's copy has none: `public()` strips them); `set_level` = a dragged 🔔 line. Files `u/<uid>/alerts.json`,
-  `alerts_log.jsonl`. Limits: 400 alerts, 100 technical symbols, 5 conditions, 15 watchlist alerts, 60 symbols on the feed
-  (`feed.alert_syms`, added AFTER the pages' symbols in `Feed.wanted()`; the rest listed as `unwatched`).
+  `alerts_log.jsonl`. **v0.38.1: no limit on the number of alerts** (owner); the limit is on calculations, server-wide:
+  `calcs_in_use(exclude)` = every Book's "P|" sessions with refs; `Book.keys_for(a)` / `_check_room(a)` (upsert, resume /
+  restart) refuse only the NEW keys past `max_calcs()` (`alerts_cfg.json` `max_calcs`, else `auto_calcs()` = 35% of
+  /proc/meminfo's MemTotal at CALC_MB 5, min 20); route `/api/alerts/limits` (admin). `load()` for the page's Server load
+  (`RUNNER.busy` = Node's `took` per request over 60 s -> CPU %; `RUNNER.ping()` every 20 s -> `mem`); Node's heap =
+  `node_heap_mb()` (half the RAM, 512-4096). Measured 11 Nov: ~4 MB per session (3,000 bars, RSI + MACD + Supertrend + EMA),
+  a live update of 200 sessions ~1 s of one core. Other limits: 5 conditions, 60 symbols on the feed (`feed.alert_syms`,
+  added AFTER the pages' symbols in `Feed.wanted()`; the rest listed as `unwatched`).
   - **Tick conditions** (`tick_mode`: the real price vs numbers / drawings, not "close", not moving): `on_tick` -> `_eval(tick=)`,
     previous tick in `st["prev"]` (seeded from `feed.last` when armed), day high / low sweep (`hl`). Need no candles when
     the comparands are numbers.
@@ -147,10 +153,15 @@ Tradingview ... how we can get alerts in mobile"). Design in the roadmap (item 2
   code moves them; `P.drags` includes them), `drMenu` (🔔 Add alert…), `renderIndPick` (🔔 per script), `mMore`,
   `refreshState` (loads after login). Alt+A; right-click on the chart (not a drawing: draw.js handles those first) ->
   `#caCtx`. Dialog keys: price:, bar:, pine:<ind id>:plot|ac|any, draw:<id>:<edge>, ind:<t>:<out>, pf:, saved:<n>.
+  v0.38.1: `caPlusWire` (`#caPlus`, appended to section.chartwrap: shown while the pointer is over the price scale of pane
+  0 only, `inScale`; the phone: a tap on the scale, 4 s; click -> `caCtxMenu`: "now" = `caInstant` (cross, once, the usual
+  notify) / "at" = the dialog); `caDselBell` (wraps `drUiSel`: `[data-cab]` on `#dsel`, gold + count from `caDrawAlerts(id)`,
+  click -> `caDrawMenu`); `drMenu` lists ✎ each alert (`[data-cae]`); `caLoadHtml` / `caLoadWire` (Server load, refreshed
+  every 15 s on the page).
   In a multi-chart cell (`FTM_CELL`) no pop-up / sound / service worker (the page around it has them). The nav item is a
   bell icon with an overlaid count; calerts.css tightens `#nav button` to 7 px padding, so the top bar has 88 px spare at
   1500 px (52 before; the flow, live_flow and mt5_flow check it stays on one line).
-- **Tests:** `tests/chartalerts_test.py` (67), `tests/chartalerts_flow.js` (40); mock: `/_mock/price`, `/_mock/hook(s)`.
+- **Tests:** `tests/chartalerts_test.py` (74), `tests/chartalerts_flow.js` (53); mock: `/_mock/price`, `/_mock/hook(s)`.
 
 ## Pine plots: breaks (v0.37.4)
 
@@ -408,8 +419,8 @@ owner, his call whether to set a default.
 warning (if it does: `journalctl -u fyers-update -n 50` shows why install.sh's Node step failed; `/opt/ftm-node/bin/node
 --version` should say v22.12.0); (2) Alerts › Notifications › Turn on for this device on his phone (Android: install the
 app first; iPhone: Add to Home Screen first) and Send a test; (3) one price alert and one RSI alert in market hours.
-Not built: email (asked in roadmap 21). Watch the droplet's memory / CPU with many technical alerts (Node starts with
-`--max-old-space-size=768`).
+Not built: email (asked in roadmap 21). v0.38.1: the Alerts page's Server load shows memory / CPU; the owner may set the
+calculations limit there (automatic = 35% of the droplet's memory).
 
 **v0.37.4 (11 Nov):** the owner checks his Chandelier Exit on XAUUSD against TradingView after the update: no diagonals
 between the stops, only the current direction's stop on the price scale.

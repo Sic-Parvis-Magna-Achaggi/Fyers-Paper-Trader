@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.38.0)
+# Paper and live trading: how it works (v0.38.1)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -354,12 +354,18 @@ never changes or removes anything already there.
 
 ## Alerts (like TradingView's)
 
-Alerts run **on the server**, so they fire with every page closed. Each user has their own (up to 400, of which 100
-technical at once, each symbol of a watchlist alert counting); there's no plan to buy.
+Alerts run **on the server**, so they fire with every page closed. Each user has their own, **as many as you like**;
+there's no plan to buy.
 
-**Setting one up:** 🔔 on the chart's top bar or **Alt+A** (the price crossing where it is now, ready to edit);
-**right-click** on the chart → *Add alert at* that price; a drawing's right-click menu → **🔔 Add alert…**; the 🔔 on a
-script's row in **ƒx**; or **+ Create alert** on the Alerts page.
+**Setting one up:**
+- **🔔+ on the price scale** (like TradingView's plus): hover over the price scale (on the phone, tap it) and 🔔+ appears at
+  that price. Its menu: **Alert: price crossing <price>** creates it at once (crossing, only once, your usual
+  notifications; drag its 🔔 line to move it), or **Alert at <price>…** opens the dialog.
+- **Right-click** on the chart: the same two, at the price you clicked.
+- **Drawings:** select a line, ray, channel or rectangle and press **🔔** on its bar (or its right-click menu → **🔔 Add
+  alert…**). A drawing that has alerts shows a gold 🔔 with their number; click it to edit one or add another.
+- 🔔 on the chart's top bar or **Alt+A** (the price crossing where it is now, ready to edit); the 🔔 on a script's row in
+  **ƒx**; or **+ Create alert** on the Alerts page.
 
 **What it can watch** (each condition picks one):
 - **Price** (the last price, or the bid or the ask): checked on every tick, against the price before, so a crossing is the
@@ -418,6 +424,13 @@ so a JSON message stays valid for a webhook.
 alert's level. **The Alerts page:** search, filter (active / triggered / paused / expired), ⏸ pause, ▶ resume or restart,
 ✎ edit (saving a triggered alert starts it again), ⧉ clone, 📈 open its chart, 🗑 delete; **Log** lists what fired;
 **Notifications** sets up the devices and plays the sounds. The phone: More › Alerts, the dialog full screen.
+
+**Server load** (top of the Alerts page): the one limit is on **calculations**. Each distinct symbol + timeframe + chart
+type + script (or built-in indicator) with its settings runs once on the server, and every alert that uses it shares it
+(50 alerts on RSI 14 of NIFTY 5m are one calculation). Each takes about 4-5 MB of memory and a little CPU. The limit is
+automatic (35% of the server's memory: about 71 on a 1 GB server, 143 on 2 GB) unless the admin sets one (**Limit…**). An
+alert that would pass it is refused with how many it needs; pause or delete some, or raise the limit. The strip also
+shows the memory and CPU the alerts use and the server's free memory. Price alerts against a number need no calculation.
 
 Technical alerts need candles: the server loads them from your saved candles (one Fyers request per symbol and
 timeframe, within the data budget) and builds the live bar from each price, as the chart does; every 10 minutes it checks

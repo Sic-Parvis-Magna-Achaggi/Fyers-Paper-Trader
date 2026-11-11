@@ -110,6 +110,7 @@ async def settle(b, n=80):
 def new_book(uid):
     urt = FakeRT(uid)
     b = CA.Book(urt)
+    CA.BOOKS[uid] = b                          # (as chartalerts.book() does: the server-wide count sees it)
     return urt, b
 
 
@@ -396,6 +397,43 @@ if ta.crossover(r, 50)
             check(f"refused: {why}", True)
 
     os.environ["FTM_WEBHOOK_PRIVATE"] = "1"
+    print("No limit on the number of alerts; a limit on calculations (v0.38.1)")
+    for bk in list(CA.BOOKS.values()):                # (earlier sections' calculations stop: this one counts from 0)
+        bk.stop()
+    CA.BOOKS.clear()
+    urt, b = new_book("L1")
+    for i in range(450):
+        b.upsert(alert(name=f"n{i}", conds=[{"a": P(), "op": "gt", "b": V(10000 + i), "tf": "5m"}]))
+    check("450 price alerts: no limit (they need no calculation)", len(b.alerts) == 450 and CA.load()["calcs"] == 0)
+    CA.set_max_calcs(2)
+    rsi = lambda n: {"k": "ind", "t": "rsi", "p": {"len": n}, "out": "RSI"}
+    b.upsert(alert(name="r1", target={"s": "NSE:BBB"}, conds=[{"a": rsi(14), "op": "gt", "b": V(50), "tf": "5m"}], freq="bar"))
+    b.upsert(alert(name="r1 again", target={"s": "NSE:BBB"}, conds=[{"a": rsi(14), "op": "lt", "b": V(30), "tf": "5m"}], freq="bar"))
+    check("two alerts on the same RSI share one calculation", CA.load()["calcs"] == 1, CA.load())
+    b.upsert(alert(name="r2", target={"s": "NSE:BBB"}, conds=[{"a": rsi(7), "op": "gt", "b": V(50), "tf": "5m"}], freq="bar"))
+    try:
+        b.upsert(alert(name="r3", target={"s": "NSE:BBB"}, conds=[{"a": rsi(21), "op": "gt", "b": V(50), "tf": "5m"}], freq="bar"))
+        check("a third calculation is refused at a limit of 2", False)
+    except CA.Bad as e:
+        check("a third calculation is refused at a limit of 2 (saying how to make room)", "Server load" in str(e), str(e))
+    r2 = next(a for a in b.alerts if a["name"] == "r2")
+    b.action(r2["id"], "pause")
+    b.upsert(alert(name="r3", target={"s": "NSE:BBB"}, conds=[{"a": rsi(21), "op": "gt", "b": V(50), "tf": "5m"}], freq="bar"))
+    check("pausing one makes room for another", CA.load()["calcs"] == 2)
+    try:
+        b.action(r2["id"], "resume")
+        check("resuming past the limit is refused", False)
+    except CA.Bad:
+        check("resuming past the limit is refused", True)
+    r3 = next(a for a in b.alerts if a["name"] == "r3")
+    b.upsert({**r3, "conds": [{"a": rsi(28), "op": "gt", "b": V(50), "tf": "5m"}]})
+    check("editing an alert's own calculation doesn't count it twice", CA.load()["calcs"] == 2)
+    CA.set_max_calcs(None)
+    L = CA.load()
+    check("automatic limit: from the machine's memory", L["auto"] and L["max"] == CA.auto_calcs() >= 20, L)
+    for a in list(b.alerts):
+        b.action(a["id"], "delete")
+
     print("Webhook, phone push, Telegram")
     got = []
 

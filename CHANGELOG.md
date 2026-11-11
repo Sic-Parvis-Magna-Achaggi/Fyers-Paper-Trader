@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.38.1 — 11 Nov 2026 — Alerts: no limit on how many; 🔔+ on the price scale; 🔔 on drawings
+
+Changed
+- **No limit on the number of alerts** (owner: "Why can't we have unlimited?"). The 400 alerts, 100 technical and 15
+  watchlist alerts per user are gone. A price alert against a number costs one comparison per price update, so there's
+  no reason to cap it.
+- **The one limit left is on calculations**, for the whole server: each distinct symbol + timeframe + chart type + script
+  (or built-in indicator) with its settings runs once in Node, and every alert that uses it shares it (50 alerts on RSI 14
+  of NIFTY 5m = 1 calculation). Measured: about 4 MB and a little CPU each (200 = 820 MB, and one CPU core to keep them
+  all live). The limit is automatic, 35% of the server's memory at 5 MB each (1 GB: 71, 2 GB: 143, 4 GB: 286), or what
+  the admin types. A new alert or a resume that would pass it is refused, saying how many it needs and how to make room.
+- Node's memory ceiling follows the server's memory (half of it, 512 MB to 4 GB) instead of a fixed 768 MB.
+
+Added
+- **Server load** on the Alerts page: calculations of the limit (with a bar), Node's memory, the CPU the alerts' Pine used
+  in the last minute, the server's free memory; refreshed every 15 s. **Limit…** (the admin): type a number or go back to
+  automatic (saved on the server; in the security log).
+- **🔔+ on the price scale**, like TradingView's plus: hover over the price scale (tap it on the phone) and a 🔔+ appears at
+  that price; its menu has **Alert: price crossing <price>** (created at once: crossing, only once, your usual
+  notifications, its 🔔 line on the chart to drag) and **Alert at <price>…** (the dialog). It shows only over the scale
+  itself, never over the position bars next to it.
+- **The right-click menu on the chart** offers the same two.
+- **🔔 on a selected drawing's bar** (lines, rays, channels, rectangles): adds an alert on it; with alerts already on it,
+  it's gold with their number, and a click lists them to edit (or add another). The drawing's right-click menu lists them
+  too (✎ Alert: …).
+
+Tests
+- `tests/chartalerts_test.py` (74): 450 price alerts with no limit; two alerts sharing one calculation; a third refused at
+  a limit of 2 (pausing one makes room; a resume past it refused; an edit doesn't count itself twice); the automatic limit.
+- `tests/chartalerts_flow.js` (53): the 🔔+ on hovering the price scale (not inside the chart beside it), its one-click
+  alert and line, the phone's tap on the scale; a drawing's bar 🔔 with its count, editing its alert from there and from the
+  right-click menu; the Server load strip and the admin's limit (a number, then automatic).
+- Re-run: `drawings_flow` (78), `rr_lock_flow` (36), `mobile_flow` (61), `multichart_flow` (43), `live_flow` (60),
+  `mt5_flow` (44), `legend_flow` (12), `layouts_flow` (31), `settings_search_flow` (34), `pine_compat_flow` (271),
+  `routes_check.py`: pass. (`pine_compat_flow` first failed 13 P&F checks after several runs of the alerts flow: its test
+  price jumps had left the fake CRUDEOIL price far from the fake candles; the alerts flow now puts the price back when it
+  ends, and the two pass back to back.)
+
 ## v0.38.0 — 11 Nov 2026 — Alerts like TradingView's: price, technical, multi-condition, watchlist, on your phone
 
 Added

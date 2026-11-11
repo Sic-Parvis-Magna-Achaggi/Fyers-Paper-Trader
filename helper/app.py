@@ -1396,6 +1396,21 @@ async def alerts_action(request: Request):
 MAX_BULK = 500
 
 
+@app.post("/api/alerts/limits")
+async def alerts_limits(request: Request):
+    """{max_calcs: n | null}: the server's limit on running calculations (every user's); null = from the machine's memory.
+    The admin only (it's the server's memory and CPU)."""
+    _same_origin(request)
+    u = _admin(request)
+    body = await _body(request)
+    try:
+        n = chartalerts.set_max_calcs(body.get("max_calcs"))
+    except chartalerts.Bad as e:
+        return _err(e)
+    users.audit(u["uid"], "alerts limit", str(body.get("max_calcs")), _ip(request))
+    return {"ok": True, "load": chartalerts.load(), "max": n}
+
+
 @app.get("/api/alerts/log")
 async def alerts_log(request: Request, n: int = 300):
     u, b = _book(request)

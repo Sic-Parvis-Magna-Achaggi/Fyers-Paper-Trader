@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 11 Nov 2026 (v0.38.0: alerts like TradingView's, item 21). This is the one task list for the project.
+Updated 11 Nov 2026 (v0.38.1: alerts with no count limit, 🔔+ on the price scale, 🔔 on drawings, item 21). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -471,7 +471,7 @@ fallback"):** item 8 is built now, stage by stage. Stage a shipped in **v0.34.0*
     entire thing so I don't need to buy Tradingview. I also want to know how we can get alerts in mobile"). Design
     (Claude's, 11 Nov, from TradingView's help pages and pricing page; the owner can change any of it):
     - **Runs on the server**, page open or not (as TradingView's do). Every user has their own; no plan limits beyond what
-      the server and Fyers allow (TradingView Premium: 400 price + 400 technical; here 400 per user, of which 100 technical).
+      the server and Fyers allow (v0.38.0 had 400 per user, of which 100 technical; v0.38.1: no count limit, only the server's calculations).
     - **What an alert watches:** the price (last, bid or ask: the real price, ticks between snapshots included through the
       day's high / low, like paper fills); Volume and its average; any plot of a Pine script on the chart (a copy of the
       code and inputs is kept, as TradingView does: editing the indicator later doesn't change the alert); a script's
@@ -498,6 +498,16 @@ fallback"):** item 8 is built now, stage by stage. Stage a shipped in **v0.34.0*
       indicator's row in ƒx; the Alerts page (manager: pause, edit, clone, delete, search; the log of what fired;
       notification set-up); 🔔 lines on the chart for price levels (drag to move). The phone: the same, in More › Alerts.
     - [x] Built as designed *(v0.38.0)*. The top-bar item is a 🔔 icon with the count (the bar had no room for a word at 1500 px).
+    - [x] **No limit on the number of alerts; a limit on calculations instead** (owner, 11 Nov: "Why can't we have
+      unlimited?" ... "Let's build 1 and 2"): the 400 / 100 / 15 caps removed; alerts sharing a calculation share it; one
+      server-wide limit on calculations, automatic from the server's memory or typed by the admin; Server load on the Alerts
+      page (calculations, memory, CPU). *(v0.38.1)* (Option 3, watchlist alerts past the 100-symbol socket by slower quote
+      polling: not asked for.)
+    - [x] **🔔+ on the price scale like TradingView** (owner, 11 Nov: "click on the extreme right on a chart to set an alert
+      like Tradingview"): hover (tap on the phone) shows 🔔+ at that price; one click makes a crossing alert, or opens the
+      dialog. *(v0.38.1)*
+    - [x] **Alerts on drawings, easy to reach** (owner, 11 Nov): 🔔 on the selected drawing's bar, gold with the number of its
+      alerts, click to edit them or add one; the right-click menu lists them. *(v0.38.1)*
     - [ ] **The owner's checks:** after the update, the Alerts page shows no "Node.js isn't installed" warning (install.sh
       downloads Node 22 from nodejs.org into /opt/ftm-node); turn on notifications on the phone (Android: install the app;
       iPhone: Add to Home Screen first) and press Send a test; one real price alert and one RSI alert during market hours.
@@ -566,6 +576,7 @@ marked before relying on it.
 
 ## Done
 
+- [x] **v0.38.1** (11 Nov): alerts: no limit on how many (the limit is on calculations, server-wide, automatic from the server's memory or set by the admin; alerts sharing one calculation share it; Server load on the Alerts page); 🔔+ on the price scale like TradingView (one click = a crossing alert); 🔔 on a selected drawing's bar with its alerts.
 - [x] **v0.38.0** (11 Nov): alerts like TradingView's (item 21): price, candle, Pine plot / alertcondition() / alert(), built-in indicator, drawing and P&F-signal alerts on the server; TradingView's 13 conditions against a value or another series, each condition on its own timeframe; up to 5 conditions (all / any); once / once per bar / once per bar close / once per minute; expiry; watchlist alerts; every chart type; placeholders; pop-up + sound, phone / desktop push (installable app), Telegram, webhook; the Alerts page (manager, log, notifications); 🔔 lines on the chart that drag; Alt+A, right-click, drawings' and ƒx's 🔔; the phone. Node.js installed on the server for Pine.
 - [x] **v0.37.4** (11 Nov): Pine `plot.style_linebr` / `steplinebr` / `areabr` and a colour of na break the line instead of joining it with a diagonal (owner: Chandelier Exit on XAUUSD differed from TradingView); no price label while a plot's latest value is na.
 - [x] **v0.37.3** (11 Nov): MT5 commission known before a symbol's first trade (EA 1.22 reads MT5's commission rules; else a traded symbol of the same group; else the typed default; else refused, never $0); profit in another currency converted with the broker's own FX price and checked against MT5's profit sum; a symbol with only MT5's tick value can't be placed.

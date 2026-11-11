@@ -28,7 +28,7 @@ async function caLoad(){
   const j = await api("/api/alerts");
   if(!j.ok) return;
   CA.list = j.alerts || []; CA.meta = j; CA.push = j.push; CA.tg = j.tg; CA.loaded = true;
-  caBadge(); caLines(true);
+  caBadge(); caLines(true); try{ caDselBell(); }catch(e){}
   if(typeof PG !== "undefined" && PG.page === "alerts") caRender();
 }
 async function caLogLoad(){ const j = await api("/api/alerts/log?n=500"); if(j.ok) CA.log = j.log || []; }
@@ -420,6 +420,16 @@ function caQuick(price){
   const p = price != null ? +(+price).toFixed(6) : caNow();
   caDialog({conds: [{a: {key: "price:last"}, op: "cross", b: {key: "value", v: p}}]});
 }
+/* one click, like TradingView's price-scale +: price crossing that level, only once, your usual notifications */
+async function caInstant(price){
+  if(!cur) return;
+  if(!CA.loaded) await caLoad();
+  const j = await api("/api/alerts/save", {body: {alert: {target: {s: cur.s}, conds: [{a: {k: "price", f: "last"}, op: "cross", b: {k: "value", v: +price}, tf: typeof tf !== "undefined" ? tf : "5m"}],
+    freq: "once", notify: caDefNotify(), ctype: {type: "candles", hideNoTrade: typeof chartCfg === "function" ? chartCfg().hideNoTrade !== false : true}}}});
+  if(!j.ok){ toast(j.error || "Alert not created"); return; }
+  await caLoad();
+  toast(`🔔 Alert: price crossing ${fmt(price, cur.tick)} (drag its line to move it; Alerts page to edit)`);
+}
 function caOnDrawing(d){
   if(!cur || !CA_DRAW.includes(d.type)){ toast("Alerts work on lines, rays, channels and rectangles"); return; }
   const open = () => {
@@ -521,12 +531,14 @@ const CA_ST = {active: ["Active", "ok"], paused: ["Paused", "warn"], triggered: 
 function caRender(){
   const el = caq("#pg_alerts"); if(!el) return;
   if(!CA.loaded){ el.innerHTML = `<div class="pg-head"><h2>Alerts</h2></div><p class="muted">Loading…</p>`; caLoad(); return; }
-  const c = CA.meta.counts || {}, L = CA.meta.limits || {};
-  el.innerHTML = `<div class="pg-head"><h2>Alerts</h2><span class="muted sm">${c.active || 0} active · ${c.all || 0} of ${L.alerts} · technical ${c.tech || 0} of ${L.tech}</span><span class="sp"></span>
+  const c = CA.meta.counts || {};
+  el.innerHTML = `<div class="pg-head"><h2>Alerts</h2><span class="muted sm">${c.active || 0} active of ${c.all || 0}</span><span class="sp"></span>
       <button class="primary" id="caNew">+ Create alert</button></div>
+    <div id="caLoad">${caLoadHtml()}</div>
     <div class="catabs">${[["list", "Alerts"], ["log", "Log"], ["notify", "Notifications"]].map(([k, n]) => `<button data-t="${k}" class="${CA.tab === k ? "on" : ""}">${n}</button>`).join("")}</div>
     <div id="caBody"></div>`;
   caq("#caNew").onclick = () => caDialog();
+  caLoadWire();
   caqa(el, ".catabs [data-t]").forEach(b => b.onclick = async () => { CA.tab = b.dataset.t; if(CA.tab === "log") await caLogLoad(); if(CA.tab === "notify") await caSw(); caRender(); });
   const body = caq("#caBody");
   const runner = CA.meta.runner || {};
@@ -599,6 +611,112 @@ function caRender(){
     const ts = caq("#caTgSet"); if(ts) ts.onclick = () => { openDrawer(); setTimeout(() => typeof setGo === "function" && setGo("tgSec"), 200); };
   }
 }
+/* Server load (v0.38.1): no limit on the number of alerts; the limit is on calculations (each distinct symbol + timeframe +
+   chart type + script with its inputs runs once in Node, shared by every alert that uses it), server-wide */
+function caLoadHtml(){
+  const L = (CA.meta && CA.meta.load) || {}, admin = ((typeof S !== "undefined" && S.user) || {}).role === "admin";
+  if(L.max == null) return "";
+  const pct = L.max ? Math.min(100, Math.round(100 * L.calcs / L.max)) : 0, cls = pct >= 90 ? "down" : pct >= 70 ? "cawarn" : "";
+  return `<div class="caload"><b>Server load</b>
+    <span title="Indicator calculations running for every user's alerts (alerts that use the same one share it)">Calculations <b class="mono ${cls}">${L.calcs} of ${L.max}</b>${L.auto ? ' <span class="muted">(automatic)</span>' : ""}</span>
+    <span class="bar"><i style="width:${pct}%" class="${cls}"></i></span>
+    <span title="The Pine runner's memory (its ceiling)">Node <b class="mono">${L.node_mb ? L.node_mb + " MB" : "–"}</b><span class="muted"> / ${L.node_cap} MB</span></span>
+    <span title="Share of one CPU core the alerts' Pine used in the last minute">CPU <b class="mono">${L.cpu}%</b></span>
+    ${L.ram ? `<span title="The server's memory">Memory free <b class="mono">${(L.ram_free || 0).toLocaleString("en-IN")}</b><span class="muted"> of ${L.ram.toLocaleString("en-IN")} MB</span></span>` : ""}
+    ${admin ? `<span class="sp"></span><button class="ghost" id="caLim">Limit…</button>` : ""}
+    <div id="caLimBox" class="hide"><span class="muted">Most calculations at once:</span>
+      <input id="caLimN" type="number" min="1" max="5000" value="${L.auto ? "" : L.max}" placeholder="${L.auto_max} (automatic)" style="width:150px">
+      <button id="caLimSave">Save</button><button class="ghost" id="caLimAuto">Automatic (${L.auto_max})</button>
+      <span class="muted sm">Each takes about 4-5 MB and a little CPU; automatic = 35% of the server's memory. Price alerts against a number cost nothing and have no limit.</span>
+      <span class="err" id="caLimErr"></span></div></div>`;
+}
+function caLoadWire(){
+  const b = caq("#caLim"); if(!b) return;
+  b.onclick = () => caq("#caLimBox").classList.toggle("hide");
+  const save = async v => {
+    const j = await api("/api/alerts/limits", {body: {max_calcs: v}});
+    if(!j.ok){ caq("#caLimErr").textContent = j.error; return; }
+    CA.meta.load = j.load; caq("#caLoad").innerHTML = caLoadHtml(); caLoadWire(); toast(`Limit: ${j.max} calculations`);
+  };
+  caq("#caLimSave").onclick = () => save(caq("#caLimN").value ? +caq("#caLimN").value : null);
+  caq("#caLimAuto").onclick = () => save(null);
+}
+setInterval(async () => {                            // the meter stays fresh while the page is open
+  if(typeof PG === "undefined" || PG.page !== "alerts" || !CA.loaded || !caq("#caLoad") || caq("#caLimBox:not(.hide)")) return;
+  const j = await api("/api/alerts"); if(!j.ok) return;
+  CA.meta.load = j.load; caq("#caLoad").innerHTML = caLoadHtml(); caLoadWire();
+}, 15000);
+
+/* ---------------------------------------------------------------- 🔔 + on the price scale (TradingView's plus) */
+function caPlusWire(){
+  const ch = caq("#chart"); if(!ch || caq("#caPlus")) return;
+  const host = ch.parentElement;
+  const b = document.createElement("button"); b.id = "caPlus"; b.className = "hide"; b.title = "Add alert at this price"; b.innerHTML = "🔔<b>+</b>";
+  host.append(b);
+  let price = null, hideT = null;
+  const geo = () => { const r = ch.getBoundingClientRect(); let psw = 60; try{ psw = chart.priceScale("right").width() || 60; }catch(e){}
+    let ph = r.height; try{ ph = chart.panes()[0].getHeight(); }catch(e){} return {r, psw, ph}; };
+  const show = (clientY) => {
+    if(typeof series === "undefined" || !series || !cur) return false;
+    const {r, psw, ph} = geo(), y = clientY - r.top;
+    if(y < 4 || y > ph - 4) return false;                 // the candles' pane only (its price scale)
+    const p = series.coordinateToPrice(y); if(p == null) return false;
+    price = typeof roundTick === "function" ? roundTick(p, cur.tick) : p;
+    const hr = host.getBoundingClientRect();
+    b.style.top = (r.top - hr.top + y - 11) + "px";
+    b.style.left = (r.left - hr.left + r.width - psw - 31) + "px";      // touching the scale, so the pointer can move onto it
+    b.title = `Add alert at ${fmt(price, cur.tick)}`;
+    b.classList.remove("hide"); clearTimeout(hideT); return true;
+  };
+  // only on the price scale itself (the position bars' ✕ BE TRAIL sit just left of it and must never be covered)
+  const inScale = (e) => { const {r, psw} = geo(); return e.clientX >= r.right - psw && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; };
+  host.addEventListener("mousemove", e => {
+    if(e.target === b || b.contains(e.target)) return;
+    if(inScale(e) && !(typeof P !== "undefined" && P.dragging)) show(e.clientY);
+    else { clearTimeout(hideT); hideT = setTimeout(() => b.classList.add("hide"), 120); }
+  });
+  host.addEventListener("mouseleave", () => b.classList.add("hide"));
+  // the phone: a tap on the price scale shows it there (a drag on the scale still zooms)
+  let t0 = null;
+  host.addEventListener("touchstart", e => { const t = e.touches[0]; t0 = t && inScale(t) ? {x: t.clientX, y: t.clientY, at: Date.now()} : null; }, {passive: true});
+  host.addEventListener("touchend", e => { const t = e.changedTouches[0];
+    if(t0 && t && Math.abs(t.clientY - t0.y) < 8 && Math.abs(t.clientX - t0.x) < 8 && Date.now() - t0.at < 400){ if(show(t.clientY)){ clearTimeout(hideT); hideT = setTimeout(() => b.classList.add("hide"), 4000); } }
+    t0 = null; }, {passive: true});
+  b.onclick = e => { e.stopPropagation(); if(price == null) return; const r = b.getBoundingClientRect(); caCtxMenu(r.left, r.bottom + 2, price); };
+}
+
+/* a drawing's alerts: 🔔 on its floating bar; its menu lists them */
+function caDrawAlerts(id){
+  return CA.list.filter(a => a.status === "active" && (a.target || {}).s === (cur && cur.s) && a.conds.some(c => ["a", "b", "lo", "hi"].some(k => c[k] && c[k].k === "draw" && c[k].id === id)));
+}
+function caDselBell(){
+  const el = caq("#dsel"); if(!el || el.classList.contains("hide")) return;
+  const d = typeof DR !== "undefined" && DR.sel && drFind(DR.sel);
+  let b = el.querySelector("[data-cab]");
+  if(!d || !CA_DRAW.includes(d.type)){ if(b) b.remove(); return; }
+  if(!b){
+    b = document.createElement("button"); b.dataset.cab = "1"; b.className = "ds-bell";
+    for(const ev of ["mousedown", "touchstart"]) b.addEventListener(ev, e => e.stopPropagation(), {passive: true});
+    const set = el.querySelector('[data-a="set"]'); if(set) set.before(b); else el.append(b);
+  }
+  const n = caDrawAlerts(d.id);
+  b.innerHTML = "🔔" + (n.length ? `<sup>${n.length}</sup>` : "");
+  b.classList.toggle("on", !!n.length);
+  b.title = n.length ? `Alerts on this drawing: ${n.map(a => a.name || a.conds_text.join(" and ")).join(" · ")}. Click: edit / add` : "Add an alert on this drawing";
+  b.onclick = e => { e.stopPropagation(); const x = drFind(d.id); if(!x) return;
+    if(!n.length){ caOnDrawing(x); return; }
+    const r = b.getBoundingClientRect(); caDrawMenu(x, n, r.left, r.bottom + 4); };
+}
+function caDrawMenu(d, list, x, y){
+  let m = caq("#caCtx");
+  if(!m){ caCtxMenu(-999, -999, 0); m = caq("#caCtx"); }
+  m.innerHTML = list.map(a => `<button data-e="${a.id}">✎ Edit: ${esc((a.name || a.conds_text.join(" and ")).slice(0, 48))}</button>`).join("") + `<button data-n="1">🔔 Add another alert…</button>`;
+  m.querySelectorAll("[data-e]").forEach(b => b.onclick = () => { m.classList.add("hide"); caDialog({alert: CA.list.find(a => a.id === b.dataset.e)}); });
+  m.querySelector("[data-n]").onclick = () => { m.classList.add("hide"); caOnDrawing(d); };
+  m.classList.remove("hide");
+  m.style.left = Math.max(4, Math.min(x, innerWidth - 300)) + "px"; m.style.top = Math.min(y, innerHeight - 40 * (list.length + 1)) + "px";
+}
+
 function caEdit(a){
   if(!a) return;
   if(a.target.s && (!cur || cur.s !== a.target.s) && a.conds.some(c => ["a", "b", "lo", "hi"].some(k => c[k] && c[k].k === "draw"))){
@@ -635,12 +753,21 @@ function caEdit(a){
       window.mMore = mMore = function(){ mm(); const l = document.querySelector("#ms_more .mlist"); if(l && !l.querySelector('[data-pg="alerts"]')){
         const b = document.createElement("button"); b.dataset.pg = "alerts"; b.innerHTML = "<span>Alerts<br><small>price and indicator alerts, the log, phone notifications</small></span>›"; b.onclick = () => pgShow("alerts"); l.prepend(b); } };
     }
-    if(typeof drMenu === "function"){           // a drawing's right-click menu: 🔔 Add alert
+    if(typeof drMenu === "function"){           // a drawing's right-click menu: 🔔 Add alert, ✎ its alerts
       const dm = drMenu;
       drMenu = function(d, x, y){ dm(d, x, y); if(!CA_DRAW.includes(d.type)) return; const m = caq("#drMenu"); if(!m || m.querySelector("[data-caa]")) return;
+        const h = m.querySelector(".fh");
         const b = document.createElement("button"); b.dataset.caa = "1"; b.textContent = "🔔 Add alert…"; b.onclick = () => { drUiMenuClose(); caOnDrawing(d); };
-        const h = m.querySelector(".fh"); if(h) h.after(b); else m.prepend(b); };
+        if(h) h.after(b); else m.prepend(b);
+        for(const a of caDrawAlerts(d.id).reverse()){ const e = document.createElement("button"); e.dataset.cae = a.id; e.textContent = "✎ Alert: " + (a.name || a.conds_text.join(" and ")).slice(0, 40);
+          e.onclick = () => { drUiMenuClose(); caDialog({alert: a}); }; b.after(e); }
+        m.style.top = Math.min(parseFloat(m.style.top) || y, innerHeight - m.offsetHeight - 4) + "px"; };
     }
+    if(typeof drUiSel === "function"){          // the selected drawing's bar: 🔔 (with the number of its alerts)
+      const du = drUiSel;
+      drUiSel = function(){ du(); try{ caDselBell(); }catch(e){} };
+    }
+    caPlusWire();
     if(typeof renderIndPick === "function"){    // ƒx: 🔔 on each script on the chart
       const rp = renderIndPick;
       renderIndPick = function(){ rp(); caqa(document, "#indBody .ind[data-pine]").forEach(row => {
@@ -674,9 +801,10 @@ function caCtxMenu(x, y, price){
   let m = caq("#caCtx");
   if(!m){ m = document.createElement("div"); m.id = "caCtx"; document.body.append(m);
     document.addEventListener("pointerdown", ev => { if(!ev.target.closest("#caCtx")) m.classList.add("hide"); }, true); }
-  m.innerHTML = `<button data-a="at">🔔 Add alert at ${esc(fmt(price, cur.tick))}</button><button data-a="dlg">🔔 Add alert…</button>`;
+  if(!cur) return;
+  m.innerHTML = `<button data-a="now">🔔 Alert: price crossing ${esc(fmt(price, cur.tick))}</button><button data-a="at">🔔 Alert at ${esc(fmt(price, cur.tick))}…</button>`;
+  m.querySelector('[data-a="now"]').onclick = () => { m.classList.add("hide"); caInstant(price); };
   m.querySelector('[data-a="at"]').onclick = () => { m.classList.add("hide"); caQuick(price); };
-  m.querySelector('[data-a="dlg"]').onclick = () => { m.classList.add("hide"); caQuick(); };
   m.classList.remove("hide");
   m.style.left = Math.min(x, innerWidth - 230) + "px"; m.style.top = Math.min(y, innerHeight - 90) + "px";
 }

@@ -26,7 +26,8 @@ How values are worked out
 Trigger (TradingView's): once (then "triggered"), once per bar (of the first condition's timeframe), once per bar close
 (evaluated when that bar closes: on the next bar's first tick, or 2 s after its time is up), once per minute.
 
-Files: u/<user>/alerts.json {alerts: [...]}, u/<user>/alerts_log.jsonl (what fired; the last LOG_KEEP kept)."""
+Files: u/<user>/alerts.json {alerts: [...]}, u/<user>/alerts_log.jsonl (what fired; the last LOG_KEEP kept);
+alerts_cfg.json (the server's limit on calculations, v0.38.1)."""
 import asyncio
 import collections
 import datetime as dt
@@ -52,16 +53,79 @@ IST = 19800
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
 
-MAX_ALERTS = 400            # per user (TradingView Premium: 400 price + 400 technical)
-MAX_TECH = 100              # per user: alerts that need bars / Pine (each symbol of a watchlist alert counts)
+# No limit on how many alerts (v0.38.1, owner: "Why can't we have unlimited?"): a price against a number costs one comparison
+# per tick. What costs is a calculation: each distinct (symbol, timeframe, chart type, script + inputs) is a Pine session in
+# Node, ~4 MB with 3,000 bars and about 5 ms of CPU per live update (measured 11 Nov: 200 sessions = 820 MB, a live update of
+# all 200 ~1 s of one core). Alerts with the same calculation share one. So the limit is on calculations, server-wide
+# (every user's), set from the machine's memory unless the admin types one (Alerts page › Server load).
+CALC_MB = 5                 # memory allowed per calculation when working out the automatic limit
 MAX_CONDS = 5               # TradingView: up to 5 in a multi-condition alert
-MAX_WL = 15                 # watchlist alerts per user (TradingView Ultimate: 15)
 MAX_SYMS = 60               # symbols all alerts may keep on Fyers' price socket (100 on Standard, shared with charts)
 LOG_KEEP = 2000
 TAIL = 3                    # values kept per series (the live bar, the one before, and one more for bar close)
 REFRESH_SEC = 600           # the saved candles are checked again this often per series (fixes from Fyers reach alerts)
 CODE_MAX = 200_000
 _now = time.time            # tests swap it
+CFG = "alerts_cfg.json"     # {max_calcs: int | null (automatic)}
+
+
+def ram_mb() -> tuple:
+    """(total, available) memory of this machine in MB (Linux), or (0, 0)."""
+    try:
+        d = {}
+        for line in open("/proc/meminfo"):
+            k, v = line.split(":", 1)
+            d[k] = int(v.split()[0]) // 1024
+        return d.get("MemTotal", 0), d.get("MemAvailable", 0)
+    except Exception:
+        return 0, 0
+
+
+def auto_calcs() -> int:
+    """35% of the machine's memory at CALC_MB each (1 GB: 71, 2 GB: 143, 4 GB: 286), at least 20."""
+    total = ram_mb()[0] or 1024
+    return max(20, int(total * 0.35 / CALC_MB))
+
+
+def node_heap_mb() -> int:
+    """Node's memory ceiling: half the machine's memory, 512 MB to 4 GB."""
+    total = ram_mb()[0] or 1024
+    return max(512, min(4096, total // 2))
+
+
+def max_calcs() -> int:
+    v = store.load(CFG, {}).get("max_calcs")
+    return int(v) if isinstance(v, int) and v > 0 else auto_calcs()
+
+
+def set_max_calcs(v) -> int:
+    """None / 0 / "" = automatic; else 1-5000."""
+    if v in (None, "", 0, "0", "auto"):
+        store.save(CFG, {**store.load(CFG, {}), "max_calcs": None})
+    else:
+        n = int(_num(v, 1, 5000))
+        store.save(CFG, {**store.load(CFG, {}), "max_calcs": n})
+    return max_calcs()
+
+
+def calcs_in_use(exclude: str | None = None) -> set:
+    """Every running calculation (Pine session) of every user, leaving out those only `exclude`'s alert uses."""
+    out = set()
+    for b in list(BOOKS.values()):
+        for k, se in b.sess.items():
+            if se.code and any(r[0] != exclude for r in se.refs):
+                out.add(k)
+    return out
+
+
+def load() -> dict:
+    """The Alerts page's Server load: calculations, Node's memory, the share of one CPU core Pine used in the last minute."""
+    total, avail = ram_mb()
+    now = time.monotonic()
+    busy = sum(t for at, t in RUNNER.busy if now - at <= 60)
+    return {"calcs": len(calcs_in_use()), "max": max_calcs(), "auto": store.load(CFG, {}).get("max_calcs") in (None, 0),
+            "auto_max": auto_calcs(), "node_mb": RUNNER.mem, "node_cap": node_heap_mb(), "cpu": round(busy / 600, 1),
+            "ram": total, "ram_free": avail, "bars": sum(1 for b in BOOKS.values() for se in b.sess.values() if not se.code)}
 
 FREQS = ("once", "bar", "close", "minute")
 OPS = {"cross": "Crossing", "cross_up": "Crossing up", "cross_dn": "Crossing down", "gt": "Greater than", "lt": "Less than",
@@ -320,6 +384,9 @@ class Runner:
         self.need_fn = None             # async (uid, ticker, tf) -> candles (set by the book)
         self.restarts = 0
         self._lock = None
+        self.busy = collections.deque(maxlen=20000)   # (monotonic time, ms Node spent) per request: the CPU meter
+        self.mem = 0                                    # Node's memory (MB) at the last ping
+        self.mem_at = 0.0
 
     def ok(self) -> bool:
         return bool(self.proc and self.proc.returncode is None and self.version)
@@ -339,7 +406,7 @@ class Runner:
             self.started = _now()
             try:
                 self.proc = await asyncio.create_subprocess_exec(
-                    node, "--max-old-space-size=768", str(ROOT / "helper" / "pine_node.mjs"), str(WEB),
+                    node, f"--max-old-space-size={node_heap_mb()}", str(ROOT / "helper" / "pine_node.mjs"), str(WEB),
                     stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
                     limit=32 * 1024 * 1024)
             except Exception as e:
@@ -431,7 +498,11 @@ class Runner:
         self._write(m)
         try:
             await self.proc.stdin.drain()
-            return await asyncio.wait_for(fut, timeout)
+            r = await asyncio.wait_for(fut, timeout)
+            took = ((r.get("out") or {}).get("took") if isinstance(r.get("out"), dict) else None) or 0
+            if took:
+                self.busy.append((time.monotonic(), took))
+            return r
         except asyncio.TimeoutError:
             self.pending.pop(rid, None)
             try:
@@ -442,6 +513,15 @@ class Runner:
 
     def close(self, key: str):
         self._write({"op": "close", "key": key})
+
+    async def ping(self):
+        """Node's memory for the meter (at most every 20 s)."""
+        if not self.ok() or time.monotonic() - self.mem_at < 20:
+            return
+        self.mem_at = time.monotonic()
+        r = await self.call(None, {"op": "ping"}, 10)
+        if r.get("ok"):
+            self.mem = (r.get("out") or {}).get("mem") or self.mem
 
     def stop(self):
         if self.proc and self.proc.returncode is None:
@@ -891,16 +971,43 @@ class Book:
             self.unwatched = [s for s in self.symbols() if s not in on]
         except Exception:
             pass
-        return {"alerts": [self.public(a) for a in self.alerts], "limits": {"alerts": MAX_ALERTS, "tech": MAX_TECH, "conds": MAX_CONDS,
-                "wl": MAX_WL, "syms": MAX_SYMS}, "counts": self.counts(), "runner": {"ok": RUNNER.ok(), "err": RUNNER.err,
+        return {"alerts": [self.public(a) for a in self.alerts], "limits": {"conds": MAX_CONDS, "syms": MAX_SYMS},
+                "load": load(), "counts": self.counts(), "runner": {"ok": RUNNER.ok(), "err": RUNNER.err,
                 "node": RUNNER.version or "", "sessions": len(self.sess)}, "unwatched": self.unwatched,
                 "ind": {k: {"name": v[0], "params": [list(p) for p in v[1]], "outs": v[2]} for k, v in IND.items()},
                 "ops": OPS, "freqs": FREQS}
 
     def counts(self) -> dict:
         live = [a for a in self.alerts if a.get("status") == "active"]
-        return {"all": len(self.alerts), "active": len(live), "tech": sum(len(self.symbols_of(a)) for a in live if is_tech(a)),
-                "wl": sum(1 for a in self.alerts if a["target"].get("wl"))}
+        return {"all": len(self.alerts), "active": len(live), "tech": sum(1 for a in live if is_tech(a)),
+                "wl": sum(1 for a in self.alerts if a["target"].get("wl")), "calcs": len(self._own_calcs())}
+
+    def _own_calcs(self) -> set:
+        return {k for k, se in self.sess.items() if se.code and se.refs}
+
+    def keys_for(self, a: dict) -> set:
+        """The calculations (Pine sessions) this alert needs, as _arm_sym makes them."""
+        out = set()
+        for sym in self.symbols_of(a):
+            for c in a["conds"]:
+                ct = self._ctype_for(a, sym, c["tf"])
+                for role in ("a", "b", "lo", "hi"):
+                    x = c.get(role)
+                    if x and x["k"] in ("pine", "ind"):
+                        out.add(self._code_key(sym, c["tf"], ct, x))
+        return out
+
+    def _check_room(self, a: dict):
+        """Refuse an alert that needs more calculations than the server's limit leaves (shared ones cost nothing)."""
+        need = self.keys_for(a)
+        if not need:
+            return
+        used = calcs_in_use(exclude=a["id"])
+        new = need - used
+        lim = max_calcs()
+        if new and len(used) + len(new) > lim:
+            raise Bad(f"this alert needs {len(new)} more calculation{'s' if len(new) > 1 else ''} and {len(used)} of the server's {lim} "
+                      f"are running: pause or delete some, or raise the limit (Alerts › Server load)")
 
     # ------------------------------------------------------------ symbols
     def watchlists(self) -> dict:
@@ -939,15 +1046,8 @@ class Book:
         if old:
             _keep_libs(b, old)
         a = clean(b, old)
-        others = [x for x in self.alerts if x["id"] != a["id"]]
-        if len(others) >= MAX_ALERTS:
-            raise Bad(f"at most {MAX_ALERTS} alerts: delete some first")
-        if a["target"].get("wl") and sum(1 for x in others if x["target"].get("wl")) >= MAX_WL:
-            raise Bad(f"at most {MAX_WL} watchlist alerts")
-        if a["status"] == "active" and is_tech(a):
-            used = sum(len(self.symbols_of(x)) for x in others if x.get("status") == "active" and is_tech(x))
-            if used + len(self.symbols_of(a)) > MAX_TECH:
-                raise Bad(f"at most {MAX_TECH} technical alerts running at once (each symbol of a watchlist alert counts): pause some first")
+        if a["status"] == "active":
+            self._check_room(a)
         if a["target"].get("wl") and not self.symbols_of(a):
             raise Bad("that watchlist is empty")
         self._disarm(a["id"])
@@ -995,10 +1095,7 @@ class Book:
             a["status"] = "paused"
             self._disarm(aid)
         elif do in ("resume", "restart"):
-            if is_tech(a):
-                used = sum(len(self.symbols_of(x)) for x in self.alerts if x is not a and x.get("status") == "active" and is_tech(x))
-                if used + len(self.symbols_of(a)) > MAX_TECH:
-                    raise Bad(f"at most {MAX_TECH} technical alerts running at once: pause some first")
+            self._check_room(a)
             if a.get("exp") and a["exp"] <= _now():
                 a["exp"] = 0
             a["status"] = "active"
@@ -1615,6 +1712,8 @@ class Book:
                 asyncio.get_running_loop().create_task(self._update(se))
         if n % 4 == 0:
             self._timers(now)
+        if n % 80 == 0:
+            asyncio.get_running_loop().create_task(RUNNER.ping())
         if n % 240 == 0:
             for ser in list(self.series.values()):
                 if ser.loaded and now - ser.at > REFRESH_SEC and not ser.loading:
