@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 11 Nov 2026, version **0.38.1** (alerts like TradingView's, roadmap 21; 0.38.1: no alert-count limits, 🔔+ on the price scale, 🔔 on drawings). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 11 Nov 2026, version **0.39.0** (MT5 trades in the journal, roadmap 8 c1; before it 0.38.x: alerts like TradingView's, roadmap 21). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -298,10 +298,11 @@ owner, his call whether to set a default.
     `set_trail` needs it only with positions open. `M.confirmed` per account.
 - **rt.py:** `paper_ids()` excludes MT5; `mt5_ids()`; `engine(aid)`: an unknown `mt5-...` id -> `mt5_none()` (an empty
   `Mt5Engine`, `none`, never saved), never a paper account; `engine_id(e)`; `account_list()` mode "mt5" + online, currency,
-  ea, server, demo; MT5 rows can't be renamed / archived and don't count against the 20 paper accounts. No journal hooks.
+  ea, server, demo; MT5 rows can't be renamed / archived and don't count against the 20 paper accounts. Journal hooks since
+  v0.39.0 (below).
 - **app.py:** `/api/side` takes `mt5` (admin + step-up); `_eng(write)` refuses an MT5 account unless the session is on MT5
   (403); `/api/mt5acct/confirm`, `/api/mt5acct/resync`; MT5 CSV columns; `/ws` uses `engine_id`. **users.py:** sessions'
-  `side` may be `mt5` (admin). **journal.py:** skips `mode == "mt5"` accounts (roadmap 8 c).
+  `side` may be `mt5` (admin). **journal.py:** MT5 accounts included since v0.39.0 (section below).
 - **Page:** `web/mt5acct.js` (after mt5.js): `mtState` / `mtLine` (each trade at MT5: panel `#posList`, Trades page),
   `mtBanner` (`#mtWarn` in the header: no account, MT5 off, old EA, AllowTrading / Algo Trading off, limits breached), `mtPanel`,
   `mtFoot` (`#mtFoot`: the floors), `mtTicketHint`, `mtConfirm` (`#mtConfDlg`), `mtAccountPage` (wraps `pgAccount`), the
@@ -316,6 +317,51 @@ owner, his call whether to set a default.
   --history`). `tests/fake_mt5.py`: an MT5 Hedge account + the 1.10 protocol + `--ctl` (open / pending / modify / close /
   shift / swap / refuse / trade / comm / jitter, GET /state); tickets unique per run. On re-runs over one data folder the
   login is already confirmed (the flow then skips the dialog) and earlier runs' fake trades vanish (booked "est.").
+
+## MT5 trades in the journal (v0.39.0, roadmap 8 c1)
+
+Asked 11 Nov 2026 (the owner noticed MT5 trades weren't in the journal: left out by design until 8 c). Owner's answers:
+money in $, apart from ₹; session day "can be both" (a setting per MT5 account); lockouts on MT5 "an option with 2FA"; the 2%
+line of "FundingPips' day's starting balance".
+- **rt.py:** MT5 engines get `journal_hook` / `journal_guard` / `journal_lock` like paper / live ones.
+- **mt5acct.py:** `Mt5Engine._jn` (adds `ccy`, `lots` = MT5 volume, `vstep` to an open position) called from `_adopt` (a
+  position seen: from the app, from MT5, already open), a volume that grew, `_book_out` (the app's position; a history close
+  seen live; a deal replacing an estimate) and `_book_gone` (the estimate). `day_start_balance(day)` = the balance at that
+  broker day's midnight (today: `self.day["start_bal"]`; else balance − every deal's pr + c + sw + fee since that midnight, srv
+  time). `balance_at(ts)` = balance after a moment (history trades' `balance_after`, for the balance curve).
+- **journal.py:** `is_mt5(aid)` ("mt5-"), `pkey(aid, obj)`: an MT5 trade's key is `P<pid_mt>` (MT5's position id), so a
+  part ("P..p1"), an estimate and the late deal that replaces it (`_record_hist` books it as "P<pid>d<deal>") are one
+  trade; in `ingest_close`, an MT5 record that isn't `est` replaces the trade's `est` close (keeps its init_risk). Trades have
+  `cur` (the account's currency) and `src` "mt5"; `rec.src == "mt5"` = placed in MT5 (`outside`). `keep()`: a record without
+  stops (MT5's history) keeps the trade's. Settings `mt5: {aid: {day: broker|ist, block}}` (`mt5_cfg`, `set_mt5`;
+  default broker, block False). `day_of(e, aid, ts)` (IST from the reset hour for "ist", else the engine's day) is used
+  everywhere a session day was `e.trading_day()` (`day_now(urt, aid)` for app.py). `mt5_base(e, aid, day)` = FundingPips'
+  day-start balance (of the broker day an IST session starts in), else the size. `sync` covers MT5 engines (not `none`),
+  registers `Journal.rows[aid] = e.row` (MT5 rows for `_planned`, jreplay's `_row`), and `_mt5_redate` puts every MT5 trade
+  on its day and base (and `balance_after` from `balance_at`) each time. `today_state`: an MT5 account with block off has its
+  lockouts `on: False`, `mt5_off: True`. `money(x, cur)`. View: MT5 accounts with `cur`, `mt5` cfg, `server`, `dd_base`,
+  `broker_day`. CSV: a Currency column, money headers without ₹, "MT5" in Placed in.
+- **app.py:** `/api/journal/mt5` {acct, day} / {acct, block} (block needs `_stepped`, either way; security log "Journal
+  lockouts on MT5 on/off"); journal routes use `journal.day_now`; `jreplay.note_order` for MT5 too.
+- **jreplay.py:** `_row(t)` takes the MT5 engine's row first; `view` returns `cur`. **jshots.py:** `_money(x, signed, cur)`,
+  "MT5's candles" in the footer.
+- **Page:** journal.js: `jCur()` (the view's currency: `JN.cur`, else the side: MT5 -> the MT5 account's currency, else INR;
+  reset when the side changes), `jCurList()`, `jSym`, `jMoney(n, signed, cur)` (default `jCur()`; every `t.<money>` passes
+  `t.cur`), `jModeTag` / `jModeWord` (MT5 badge `.jt-mt5`). `jFiltered` keeps only the view's currency; the filters' Money
+  switch `#jfCur` (only with 2+ currencies); account / contract lists of that currency; Today card in the account's currency
+  (`M`), its base `acc.dd_base` (MT5) / `s.base`; Settings card `#jnMt5Set` (`[data-mtday]`, `[data-mtblock]` via `stepUp`).
+  The header pill `#pJLock` is shorter ("· off" + its tip) so the MT5 top bar stays on one line at 1500 px. jinsights.js:
+  `jiCurSeg` (Review `#jiRvCur`, Gemini `#jiAiCur`), `jiCurAccts`, `jiShortMoney(v, cur)`, Gemini's header per currency.
+  replay.js: `rsx` in `RP.d.cur`; `rpKeyOf` uses `pid_mt` on MT5 accounts.
+- **Tests:** `tests/mt5acct_test.py` (162: the journal part replaces "the journal leaves MT5 out"), `tests/mt5journal_flow.js`
+  (35, browser). On re-runs over one data folder, fake_mt5's "history" trades get new tickets each run, so the journal piles
+  up copies (the curve's start moves): a fresh folder for a clean read. **Not seen on a real MT5 / FundingPips yet.**
+- **Known, not from this release:** on the Live side with an MT5 bridge connected, the feed pill ("Live MT5") plus the data
+  budget pill can push the clock onto a second line at 1500 px; `live_flow.js`'s header check then fails when the journal's
+  lockout pill isn't showing (it passes when it is). Seen in v0.39.0's runs on data shared with the MT5 tests.
+- **Judgement calls made (owner can change):** the lockouts' switch on MT5 starts **off**; the Indian day starts at 06:00 IST
+  (the Fyers accounts' reset hour); with the Indian day the 2% base is the day-start balance of the broker day the session
+  starts in; Reps count across ₹ and $ accounts (not money).
 
 ## ƒx search and the Settings page (v0.35.0, roadmap 18 and 19)
 
@@ -414,6 +460,12 @@ owner, his call whether to set a default.
   FundingPips (10 Nov): no hedging even in Hedge mode; his 21182752 is Phase 1 of the 2-Step; news: ForexFactory (owner).
 
 ## Next job
+
+**v0.39.0 (11 Nov), MT5 trades in the journal (8 c1):** the owner updates the server and opens the Journal on the MT5 side:
+his FundingPips demo's trades (the last 90 days of MT5's history, and anything open) should be there in $, with the MT5
+badge, and ₹ Fyers | $ MT5 in the filters. Then Journal › Settings › MT5 accounts: pick the session day, and turn the
+lockouts on if he wants them to refuse MT5 orders (2FA). Check the Today card's 2% room against FundingPips' dashboard
+(its base is the day-start balance). Next for the journal: 8 c2 / 4b, only with the owner's yes.
 
 **v0.38.0 (11 Nov), alerts:** the owner updates the server, then: (1) the Alerts page shows no "Node.js isn't installed"
 warning (if it does: `journalctl -u fyers-update -n 50` shows why install.sh's Node step failed; `/opt/ftm-node/bin/node

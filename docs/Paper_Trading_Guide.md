@@ -189,7 +189,8 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
   kept for the news guard (later). FundingPips' dashboard stays the official figure.
 - **The Account page** of an MT5 account: MT5's figures, the EA and whether the app can change trades, the limits and their
   form, the commission learned per symbol, trailing defaults, and **Read MT5's history again**.
-- **Not yet:** the journal for MT5 accounts (roadmap 8 c, with the prop-firm journal), copy trades between MT5 accounts (8 d).
+- **The journal** (v0.39.0): every MT5 trade goes into the Journal like a paper or live one, in $ (see Journal below).
+- **Not yet:** the prop-firm parts of the journal (phases, payouts: roadmap 8 c2 / 4b), copy trades between MT5 accounts (8 d).
 - **The EA's switch:** its input **AllowTrading** = false makes it refuse every change (the app then only shows the account).
   MT5's **Algo Trading** button must be on too. An EA older than 1.10: the account shows, its trades don't. Placing orders
   needs 1.20.
@@ -228,14 +229,15 @@ The top bar has **Chart · Trades · History · Journal · Book · Account · �
 
 The Octagon trade journal, inside the app and saved on the server (per user, every device).
 
-- **Trades arrive on their own.** Every paper and live trade of every account: it appears when it opens and is completed when
-  it closes (a live position closed in parts is one trade). Trades from before the journal (each account's history and the
+- **Trades arrive on their own.** Every paper, live and MT5 trade of every account: it appears when it opens and is completed
+  when it closes (a live position closed in parts is one trade). Trades from before the journal (each account's history and the
   archives of resets and Paper ↔ Live switches) were taken in once, and count as claimed reps.
 - **Money and R are net.** ₹ is after every charge, R = net ₹ ÷ the net risk at the first stop, exactly as History shows them.
   So a "2R win" for the 99 Club is 2R after charges, and the target in R (Pillar 8) is the net ₹ at your take-profit ÷ that
   risk. (Octagon worked R out from points before charges.)
 - **A session** is one trading day of one account (IST; the day starts at the reset hour in that account's rules, 06:00 by
-  default). Times of day are Indian buckets (opening hour, morning, midday, afternoon, after NSE close, evening, night).
+  default; MT5 accounts: see below). Times of day are Indian buckets (opening hour, morning, midday, afternoon, after NSE
+  close, evening, night).
 - **The audit:** open a trade, **Audit this trade**: the 8 pillars, word for word (Direction & regime with the Pillar 1 checks,
   market regime, bias and KE; Wait state; Execution and what went wrong; numbers running; payout pressure; Zen Temple;
   Target), setup tags, plan and review. The octagon at the top follows every click. A Zen Temple breach makes Execution wrong.
@@ -249,15 +251,34 @@ The Octagon trade journal, inside the app and saved on the server (per user, eve
   fully audited, still open, removed), regime, setup tags (any of / all of), search. They're saved with your settings.
 - **Remove from journal** takes a trade out of the stats, reps and sessions (it stays in History); Octagon › Removed brings it back.
 
-**Lockouts refuse new orders** (Journal › Settings, a switch each, all on at first):
+**MT5 accounts in the journal** (v0.39.0, roadmap 8 c1):
+- **Every MT5 trade arrives on its own:** placed from the app or in MT5 itself (marked "placed in MT5"), and MT5's own history
+  (the last 90 days) taken in once. One MT5 position is one journal trade, however many parts it closed in. Each has the MT5
+  badge.
+- **Money in $** (the account's currency), net of commission and swap; R = net $ ÷ the net risk at the first stop. A trade from
+  MT5's history has no stop known, so no R.
+- **₹ and $ are never added together.** The filters have a **Money** switch, **₹ Fyers | $ MT5** (only once you have MT5
+  trades): the list, stats, balance curve, Insights, Review and Copy for Gemini show one currency at a time. On the MT5
+  side the journal opens in $, otherwise in ₹. Reps and the pillars still count across all your accounts.
+- **The session day, per MT5 account** (Journal › Settings › MT5 accounts): **the broker's day** (FundingPips' daily reset,
+  03:30 IST in winter / 02:30 in US summer; the default) or **the Indian day** (IST, from 06:00 like your Fyers accounts).
+- **The 2% line** of an MT5 account is 2% of **FundingPips' day-start balance**: the balance at the broker's midnight, worked
+  out from MT5's own deals (with the Indian day: the day-start balance of the broker day the session starts in).
+- **Lockouts on MT5 are a switch per account, off at first** (Journal › Settings › MT5 accounts › "Lockouts refuse new orders
+  on this account"). Turning it on or off asks for a fresh 2FA code and is noted in the security log. Off: the 2% line, the
+  99 Club break and session over still show on the Today card and in the audit, but new MT5 orders aren't refused. On: they
+  are, each by its own switch below.
+- **The Today card** of an MT5 account: $, its session day, and the room before the 2% line of the day-start balance.
+
+**Lockouts refuse new orders** (Journal › Settings, a switch each, all on at first; MT5 accounts only with their own switch on):
 - **2% trailing drawdown** (Pillar 4): the day's closed trades (net) fall 2% of the account size below the session's peak →
   no new orders until the next trading day. Open P&L doesn't count (as in Octagon).
 - **The 99 Club break** (Pillar 5): 3 wins in a row, or 3 wins of 2R or more → no new orders for 20 minutes.
 - **Session over** (Pillar 5): a trade marked "my mind was running numbers", or Hold to end today's session → no new orders
   until the next trading day.
 - **Cancel waiting entry orders when a lockout starts** (Live: at Fyers too).
-While locked, the ticket's preview says why, PLACE is off, and a red pill in the top bar names the lockout (amber "not
-blocking" when its switch is off). Closing, BE, trailing and the stops of open trades are never blocked. The numbers (2%,
+While locked, the ticket's preview says why, PLACE is off, and a red pill in the top bar names the lockout (amber with
+"· off" when it isn't blocking: its tip says why). Closing, BE, trailing and the stops of open trades are never blocked. The numbers (2%,
 20 minutes, 3 wins, 2R, the 2.5R stretched-target flag, the 5% block, the rep milestone) are in Journal › Settings, with the
 text of each pillar and the Pillar 1 checks (Original puts your text back).
 
@@ -348,7 +369,7 @@ contract; side; setup; exit reason; account. Everything net of charges. Sharpe a
 last week / a review's week / one trade, as text for your Gemini notebook: each session's equity and lockouts, then every
 trade with all 8 pillars and why each held or broke, your plan and reflections; optionally starting with your Octagon rules.
 
-**Settings › Export and backup:** **Download CSV** (every trade with its pillars, for a spreadsheet); **Download backup**
+**Settings › Export and backup:** **Download CSV** (every trade with its pillars, for a spreadsheet; v0.39.0: a **Currency** column, INR or USD, and the money columns named Gross / Charges / Net without ₹); **Download backup**
 (a zip with the whole journal and all its pictures); **Restore from a backup** adds whatever the journal doesn't have and
 never changes or removes anything already there.
 
@@ -809,7 +830,7 @@ When BE-T has already moved the stop to break-even, a Trail SL of N R behind the
 
 ## Not yet
 
-- MT5 accounts in the journal (roadmap 8 c, with the prop-firm journal); copy trades between MT5 accounts (8 d, later).
+- The prop-firm parts of the journal (phases, payouts, account chains: roadmap 8 c2 with 4b); copy trades between MT5 accounts (8 d, later).
 - Footprint / delta (order flow): waiting for the order-flow check (Monday 2 Nov).
 - Comparing the charges the app counts with what Fyers actually deducted (live).
 - Prop-firm journals in the same journal (waiting for the owner's yes).

@@ -1133,7 +1133,7 @@ async def paper_place(request: Request):
     await _prefetch_margin(engine, b)
     u, r = _urt(request)
     aid = next((k for k, v in r.engines.items() if v is engine), "")
-    if b.get("setup") and getattr(engine, "mode", "") != "mt5":     # (MT5 accounts: no journal yet, roadmap 8 c)
+    if b.get("setup"):                                 # (MT5 accounts too since v0.39.0: the journal, roadmap 8 c1)
         jreplay.note_order(u["uid"], aid, b)          # the chart it came from, for the trade replay (v0.29.0)
     try:
         plan = engine.place(b)
@@ -1616,7 +1616,7 @@ async def journal_trade(request: Request):
     try:
         t0 = j.d["trades"].get(_jkey(b)) or {}
         e = r.engines.get(t0.get("acct", ""))
-        before = j.lock_reason(t0["acct"], e.trading_day()) if e else None
+        before = j.lock_reason(t0["acct"], journal.day_now(r, t0["acct"])) if e else None
         t = j.annotate(_jkey(b), b)
     except (KeyError, ValueError) as e:
         return _err(str(e).strip("'\""))
@@ -1716,7 +1716,7 @@ async def journal_settings(request: Request):
     u, r = _urt(request)
     b = await _body(request)
     j = journal.get(u["uid"])
-    before = {aid: j.lock_reason(aid, e.trading_day()) for aid, e in r.engines.items()}
+    before = {aid: j.lock_reason(aid, journal.day_now(r, aid)) for aid in r.engines}
     try:
         j.set_settings(b)
     except (ValueError, TypeError, IndexError) as e:
@@ -1724,6 +1724,33 @@ async def journal_settings(request: Request):
     for aid in r.engines:                                  # a rule change can start or end a lockout
         journal.check_lock(r, aid, before.get(aid))
         _engine_changed(r, aid, None)
+    return {"ok": True, "j": j.view(r)}
+
+
+@app.post("/api/journal/mt5")
+async def journal_mt5(request: Request):
+    """An MT5 account's journal settings (roadmap 8 c1, v0.39.0): {acct, day: "broker" | "ist"} (its sessions: the broker's
+    day or the Indian day) and {acct, block: bool} (its lockouts refuse new MT5 orders: a fresh 2FA code, either way)."""
+    _same_origin(request)
+    u, r = _urt(request)
+    b = await _body(request)
+    aid = str(b.get("acct") or "")
+    e = r.engines.get(aid)
+    if not journal.is_mt5(aid) or e is None or getattr(e, "none", False):
+        return _err("no such MT5 account")
+    j = journal.get(u["uid"])
+    if "block" in b and bool(b["block"]) != j.mt5_cfg(aid)["block"]:
+        _stepped(request)
+    before = j.lock_reason(aid, journal.day_now(r, aid))
+    try:
+        cfg = j.set_mt5(aid, {k: b[k] for k in ("day", "block") if k in b})
+    except ValueError as ex:
+        return _err(ex)
+    j.sync(r)                                          # (the session day changed: its trades move to their new sessions)
+    if "block" in b:
+        users.audit(u["uid"], "Journal lockouts on MT5 " + ("on" if cfg["block"] else "off"), f"{aid}")
+    journal.check_lock(r, aid, before)
+    _engine_changed(r, aid, None)
     return {"ok": True, "j": j.view(r)}
 
 
@@ -1737,8 +1764,8 @@ async def journal_end(request: Request):
     e = _eng(request, b)
     aid = next((k for k, v in r.engines.items() if v is e), "")
     j = journal.get(u["uid"])
-    before = j.lock_reason(aid, e.trading_day())
-    j.end_session(aid, e.trading_day())
+    before = j.lock_reason(aid, journal.day_now(r, aid))
+    j.end_session(aid, journal.day_now(r, aid))
     journal.check_lock(r, aid, before)
     _engine_changed(r, aid, "Journal: session ended for today")
     return {"ok": True, "j": j.view(r)}

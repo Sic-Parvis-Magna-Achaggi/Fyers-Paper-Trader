@@ -229,6 +229,30 @@ class Mt5Engine(Paper):
                     for d in self.deals.values() if _f(d.get("ts")) >= m)
         return round(self.balance() - moved, 2)
 
+    def day_start_balance(self, day: str):
+        """FundingPips' starting balance of a broker day (the journal's 2% line, v0.39.0): the balance at that day's
+        midnight, i.e. today's balance minus everything MT5 booked since (from MT5's own deals)."""
+        if day == self.day.get("date") and self.day.get("start_bal") is not None:
+            return float(self.day["start_bal"])
+        try:
+            m = dt.datetime.strptime(str(day), "%Y-%m-%d").replace(tzinfo=dt.timezone.utc).timestamp()
+        except ValueError:
+            return None
+        moved = sum(_f(d.get("pr")) + _f(d.get("c")) + _f(d.get("sw")) + _f(d.get("fee"))
+                    for d in self.deals.values() if _f(d.get("ts")) >= m)
+        return round(self.balance() - moved, 2)
+
+    def balance_at(self, ts: float):
+        """The balance just after a moment (UTC): today's balance minus what MT5 booked after it (the journal's
+        balance curve for trades from MT5's history, v0.39.0)."""
+        try:
+            srv = self._clock().to_srv(float(ts))
+        except Exception:
+            return None
+        moved = sum(_f(d.get("pr")) + _f(d.get("c")) + _f(d.get("sw")) + _f(d.get("fee"))
+                    for d in self.deals.values() if _f(d.get("ts")) > srv + 0.5)
+        return round(self.balance() - moved, 2)
+
     def roll_day(self):
         today = self.trading_day()
         if self.day.get("date") != today:
@@ -673,6 +697,7 @@ class Mt5Engine(Paper):
                 pos["paid"] = round(pos["comm_in"] - _f(pos.get("swap")), 2)
                 pos["parts"] = int(pos.get("parts") or 0) + 1
             self._note_close(rec)
+            self._jn("close", rec)
             return
         ins = [x for x in self.deals.values() if x["pid"] == d["pid"] and x["en"] == ENTRY_IN]
         self.booked.add(d["t"])
@@ -682,6 +707,23 @@ class Mt5Engine(Paper):
         self.history.append(rec)
         if self.M["first_seen"] and d["tu"] >= float(self.M["first_seen"]) - 5 and not est:
             self._note_close(rec)                  # (closed in MT5 while the app watched, before it saw the position)
+            self._jn("close", rec)
+        elif est is not None:
+            self._jn("close", rec)                 # MT5's deal replaces the estimate in the journal too
+
+    def _jn(self, kind, obj):
+        """The journal (roadmap 8 c1, v0.39.0): an open position carries its volume in lots and the account's currency."""
+        if self.none:
+            return
+        if kind == "open":
+            obj = {**obj, "ccy": self.ccy()}
+            try:
+                row = self.row(obj["s"])
+                obj["lots"] = round(self.vol(row, obj.get("max_qty") or obj.get("qty") or 0), 8)
+                obj["vstep"] = float(row.get("vstep") or 0.01)
+            except Refused:
+                pass
+        super()._jn(kind, obj)
 
     def _note_close(self, rec: dict):
         self.event(f"Closed {rec['sym']} {rec['lots']:g} lot @ {rec['exit']:g} ({rec['reason']}): net {rec['net']:,.2f} {self.ccy()} "
@@ -803,9 +845,12 @@ class Mt5Engine(Paper):
                     self.event(f"{name} #{tk}: MT5 shows {vol:g} lot, the app had {self.vol(row, pos['qty']):g} - taking MT5's", "warn")
                     if n > pos["qty"]:
                         pos["avg"] = po
+                    grew = n > pos["qty"]
                     pos["qty"], pos["max_qty"] = n, max(pos.get("max_qty", n), n)
                     pos.pop("qty_diff", None)
                     changed = True
+                    if grew:
+                        self._jn("open", pos)
             else:
                 pos.pop("qty_diff", None)
             pend = self._cmd_for(tk, "MOD")
@@ -867,6 +912,7 @@ class Mt5Engine(Paper):
         what = "Already open in MT5" if first else ("Opened in MT5" if outside else "Opened (from the app)")
         self.event(f"{what}: {'LONG' if side > 0 else 'SHORT'} {row['u']} {vol:g} lot @ {po:g} (#{tk})"
                    + (f", SL {sl:g}" if sl else ", no SL") + (f", TP {tp:g}" if tp else ""), "info" if sl else "warn")
+        self._jn("open", pos)
         return pos
 
     def _ea_trailed(self, pos, row, sl):
@@ -942,6 +988,7 @@ class Mt5Engine(Paper):
         self._symbols_changed()
         self.event(f"{row['u']} #{pos['ticket']}: gone from MT5 without a closing deal - booked at {px:g} as an estimate "
                    "(MT5's deal replaces it when it arrives)", "warn")
+        self._jn("close", rec)
 
     # ------------------------------------------------------------ pending orders
     def _take_orders(self, rows: list) -> bool:

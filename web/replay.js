@@ -49,7 +49,8 @@ if(!window.FTM_REPLAY && window.FTM_CELL == null){
     const w = document.getElementById("rpWrap"); if(w) w.remove();
     document.body.classList.remove("rpOn");
   };
-  window.rpKeyOf = h => (typeof ACCT !== "undefined" && ACCT ? ACCT : "") + ":" + rpBase(h.id);
+  window.rpKeyOf = h => { const a = typeof ACCT !== "undefined" && ACCT ? ACCT : "";   // (an MT5 trade: MT5's position id, v0.39.0)
+    return a + ":" + (h.pid_mt && a.startsWith("mt5-") ? "P" + h.pid_mt : rpBase(h.id)); };
   addEventListener("message", e => {
     if(e.origin !== location.origin || !e.data || typeof e.data !== "object") return;
     if(e.data.rp === "close") rpClose();
@@ -68,7 +69,8 @@ if(window.FTM_REPLAY){
   const T0 = () => RP.d && RP.d.trade;
   const tickOf = () => (cur && cur.tick) || ((RP.d && RP.d.row) || {}).tick || 0.05;
   const istStr = (t, sec) => t == null ? "–" : new Date((t + IST) * 1000).toLocaleString("en-GB", {timeZone: "UTC", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", ...(sec ? {second: "2-digit"} : {})});
-  const rsx = n => n == null || isNaN(n) ? "–" : (n > 0 ? "+" : n < 0 ? "−" : "") + "₹" + Math.abs(n).toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  const rsx = n => { const c = (RP.d && RP.d.cur) || "INR", y = {INR: "₹", USD: "$", EUR: "€", GBP: "£"}[c] || c + " ";   // (MT5 trades: $, v0.39.0)
+    return n == null || isNaN(n) ? "–" : (n > 0 ? "+" : n < 0 ? "−" : "") + y + Math.abs(n).toLocaleString(c === "INR" ? "en-IN" : "en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2}); };
   const rr = r => r == null || isNaN(r) ? "" : ` (${r > 0 ? "+" : ""}${(+r).toFixed(2)}R)`;
   const dur = s => { s = Math.max(0, Math.round(s)); const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m ${s % 60}s`; };
   const post = m => { try{ parent.postMessage(m, location.origin); }catch(e){} };

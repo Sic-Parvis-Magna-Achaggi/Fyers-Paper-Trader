@@ -87,6 +87,15 @@
 .jt-side.buy{color:var(--up);background:color-mix(in srgb,var(--up) 14%,transparent)}
 .jt-side.sell{color:var(--down);background:color-mix(in srgb,var(--down) 14%,transparent)}
 .jt-live{font-size:10px;margin-left:6px;padding:1px 5px;border-radius:4px;background:var(--down);color:#fff;font-weight:700}
+/* MT5 accounts (v0.39.0): their badge, the ₹ | $ switch in the filters, their settings */
+.jt-mt5{font-size:10px;margin-left:6px;padding:1px 5px;border-radius:4px;background:var(--mt5,#8b5cf6);color:#fff;font-weight:700}
+.jn-mt5w{color:var(--mt5,#8b5cf6)}
+.jn-curf .seg button{padding:4px 10px;font-size:12px;white-space:nowrap}
+.jn-curf .seg button.on{background:var(--accent);color:#fff}
+.jn-mt5row{padding:10px 0;border-top:1px solid var(--line)}
+.jn-mt5row:first-of-type{border-top:0}
+.jn-mt5name{margin-bottom:6px}
+.jn-mt5row select{width:100%;max-width:380px;margin-bottom:4px}
 .jt-sub{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .jt-rep{color:var(--jgold);font-weight:600}
 .jt-rep.open{color:var(--muted)}

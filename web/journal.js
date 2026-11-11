@@ -33,11 +33,31 @@ const J_REASON = {sl: "stop", tp: "target", be: "break-even stop", "trail sl": "
 /* ------------------------------------------------------------------ small helpers */
 function jEsc(s){ return String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c])); }
 const jp2 = n => String(n).padStart(2, "0");
-function jMoney(n, signed = true){
+/* Money: ₹ for Fyers accounts, the account's own currency ($) for MT5 accounts (v0.39.0), never added together: the page
+   shows one currency at a time (jCur), and a trade's own figures in its own currency. */
+const J_CSYM = {INR: "₹", USD: "$", EUR: "€", GBP: "£", JPY: "¥"};
+function jSym(cur){ cur = cur || "INR"; return J_CSYM[cur] || cur + " "; }
+function jMoney(n, signed = true, cur){
   if(n == null || !isFinite(n)) return "—";
-  const a = Math.abs(n).toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2});
-  return `${n < 0 ? "−" : signed && n > 0 ? "+" : ""}₹${a}`;
+  cur = cur || jCur();
+  const a = Math.abs(n).toLocaleString(cur === "INR" ? "en-IN" : "en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  return `${n < 0 ? "−" : signed && n > 0 ? "+" : ""}${jSym(cur)}${a}`;
 }
+function jCurList(){
+  const d = JN.d; if(!d) return ["INR"];
+  const set = new Set(d.trades.map(t => t.cur || "INR"));
+  for(const a of d.accounts || []) if(!a.archived) set.add(a.cur || "INR");
+  return [...set].sort((a, b) => (a === "INR" ? -1 : b === "INR" ? 1 : a.localeCompare(b)));
+}
+function jCur(){
+  const list = jCurList(), side = typeof sideNow === "function" ? sideNow() : "paper";
+  if(JN.curSide !== side){ JN.curSide = side; JN.cur = null; }            // (the page's side picks the first currency)
+  if(JN.cur && list.includes(JN.cur)) return JN.cur;
+  const mt = (JN.d && JN.d.accounts || []).find(a => a.mode === "mt5" && !a.archived);
+  return side === "mt5" && mt && list.includes(mt.cur) ? mt.cur : list.includes("INR") ? "INR" : list[0];
+}
+function jModeTag(mode){ return mode === "live" ? '<span class="jt-live">LIVE</span>' : mode === "mt5" ? '<span class="jt-mt5">MT5</span>' : ""; }
+function jModeWord(mode){ return mode === "live" ? '<b class="down">Live</b>' : mode === "mt5" ? '<b class="jn-mt5w">MT5</b>' : "Paper"; }
 function jR(r){ return r == null || !isFinite(r) ? "—" : `${r >= 0 ? "+" : "−"}${Math.abs(r).toFixed(2)}R`; }
 function jBias(b){ return b == null ? "—" : (b > 0 ? "+" : b < 0 ? "−" : "") + Math.abs(b).toFixed(2); }
 function jDayKey(ts){ return new Date((ts + 19800) * 1000).toISOString().slice(0, 10); }             // IST date
@@ -167,16 +187,20 @@ function jAcctName(id){ const a = ((JN.d && JN.d.accounts) || []).find(x => x.id
 function jnFilters(){
   const el = jq("#jnFilters"), f = jF(), d = JN.d;
   const opt = (pairs, v) => pairs.map(([k, l]) => `<option value="${jEsc(k)}"${k === v ? " selected" : ""}>${jEsc(l)}</option>`).join("");
-  const syms = [...new Set(d.trades.map(t => t.s))].sort().map(s => [s, jShort(s)]);
+  const cur = jCur(), curs = jCurList();
+  const syms = [...new Set(d.trades.filter(t => (t.cur || "INR") === cur).map(t => t.s))].sort().map(s => [s, jShort(s)]);
   const used = new Set(d.trades.map(t => t.acct));
-  const accts = d.accounts.filter(a => !a.archived || used.has(a.id)).map(a => [a.id, a.name + (a.mode === "live" ? " · LIVE" : "") + (a.archived ? " (archived)" : "")]);
+  const accts = d.accounts.filter(a => (!a.archived || used.has(a.id)) && (a.cur || "INR") === cur)
+    .map(a => [a.id, (a.mode === "mt5" ? "MT5 " : "") + a.name + (a.mode === "live" ? " · LIVE" : "") + (a.archived ? " (archived)" : "")]);
+  if(f.acct && !accts.some(a => a[0] === f.acct)){ jPrefSet("acct", ""); f.acct = ""; }
   const regimes = [...d.oct.regime.map(v => [v, v]), ["__none", "Not recorded"]], tags = [...jTags().map(x => [x.name.toLowerCase(), `${x.name} (${x.n})`]), ["__none", "No tag"]];
   const msBtn = (kind, sel, all, list) => { const n = sel.length, name = v => (list.find(x => x[0] === v) || [v, v])[1];
     return n ? (n === 1 ? name(sel[0]) : `${n} ${kind === "regime" ? "regimes" : "tags · " + (f.tagMode === "all" ? "all of" : "any of")}`) : all; };
-  if(!el.dataset.built || el.dataset.sig !== JSON.stringify([syms, accts, tags.length])){
-    el.dataset.built = "1"; el.dataset.sig = JSON.stringify([syms, accts, tags.length]);
+  if(!el.dataset.built || el.dataset.sig !== JSON.stringify([syms, accts, tags.length, cur, curs])){
+    el.dataset.built = "1"; el.dataset.sig = JSON.stringify([syms, accts, tags.length, cur, curs]);
     el.innerHTML = `<button type="button" class="jn-ftog" id="jnFtog"><span>Filters</span><b id="jnFsum"></b><i>▾</i></button>
       <div class="jn-fields">
+        ${curs.length > 1 ? `<div class="jn-curf"><label>Money</label><span class="seg" id="jfCur" title="Fyers accounts in ₹, MT5 accounts in their own currency: never added together">${curs.map(c => `<button type="button" data-c="${jEsc(c)}" class="${c === cur ? "on" : ""}">${jEsc(jSym(c).trim())} ${c === "INR" ? "Fyers" : "MT5"}</button>`).join("")}</span></div>` : ""}
         <div><label>Period</label><select id="jfPeriod">${opt(J_PERIODS, f.period)}</select></div>
         <div class="jf-custom${f.period === "custom" ? "" : " hide"}"><label>From</label><input type="date" id="jfFrom" value="${jEsc(f.from)}"></div>
         <div class="jf-custom${f.period === "custom" ? "" : " hide"}"><label>To</label><input type="date" id="jfTo" value="${jEsc(f.to)}"></div>
@@ -189,6 +213,7 @@ function jnFilters(){
         <div class="jf-q"><label>Search</label><input type="text" id="jfQ" placeholder="Contract, notes, tags…" value="${jEsc(JN.q || "")}"></div>
       </div>`;
     jq("#jnFtog").onclick = () => el.classList.toggle("open");
+    jqa("#jfCur [data-c]").forEach(b => b.onclick = () => { JN.cur = b.dataset.c; jnFilters(); jnTrades(); });
     const on = (id, k) => jq(id).onchange = e => { jPrefSet(k, e.target.value); if(k === "period") jqa(".jf-custom").forEach(x => x.classList.toggle("hide", e.target.value !== "custom")); jnTrades(); jnFilterSum(); };
     on("#jfPeriod", "period"); on("#jfFrom", "from"); on("#jfTo", "to"); on("#jfAcct", "acct"); on("#jfSym", "sym"); on("#jfSide", "side"); on("#jfOct", "oct");
     jq("#jfQ").oninput = e => { JN.q = e.target.value; clearTimeout(JN.qT); JN.qT = setTimeout(() => { jnTrades(); jnFilterSum(); }, 200); };
@@ -216,7 +241,8 @@ function jnMsList(kind){
 }
 document.addEventListener("click", () => jqa(".jn-pop").forEach(p => p.classList.add("hide")));
 function jnFilterSum(){
-  const f = jF(), bits = [], r = jPeriodRange(f.period, f);
+  const f = jF(), bits = [], r = jPeriodRange(f.period, f), cur = jCur();
+  if(jCurList().length > 1) bits.push(cur === "INR" ? "₹ Fyers" : jSym(cur).trim() + " MT5");
   bits.push(!r ? "All time" : (f.period === "custom" ? "" : (J_PERIODS.find(p => p[0] === f.period) || ["", ""])[1] + " · ") + (r.from === r.to ? jFmtDay(r.from) : `${jFmtDay(r.from)} – ${jFmtDay(r.to)}`));
   if(f.acct) bits.push(jAcctName(f.acct) || "deleted account");
   if(f.sym) bits.push(jShort(f.sym));
@@ -226,13 +252,16 @@ function jnFilterSum(){
   if(f.tag.length) bits.push(f.tag.length + (f.tag.length === 1 ? " tag" : " tags"));
   if(JN.q) bits.push(`“${JN.q}”`);
   const s = jq("#jnFsum"); if(s) s.textContent = bits.join(" · ");
-  const n = jq("#jnNote"); if(n) n.textContent = "Dated by close time, IST. Money and R are net of all charges.";
+  const n = jq("#jnNote"); if(n) n.textContent = cur === "INR" ? "Dated by close time, IST. Money and R are net of all charges."
+    : `Dated by close time, IST. Money (${jSym(cur).trim()}) and R are net of commission and swap.`;
 }
 function jFiltered(o = {}){
   const f = jF(), r = jPeriodRange(f.period, f), q = (f.q || "").toLowerCase().trim();
   if(o.ignoreOct && f.oct !== "removed") f.oct = "";
   const hasTag = (t, v) => v === "__none" ? !(t.setup || []).length : (t.setup || []).some(g => g.toLowerCase() === v);
+  const cur = jCur();
   return JN.d.trades.filter(t => {
+    if((t.cur || "INR") !== cur) return false;                      // (₹ and $ never in one view)
     if(f.oct === "removed") return t.hidden;
     if(t.hidden) return false;
     const a = t.audit, dk = jDayKey(t.status === "closed" && t.closed ? t.closed : t.opened);
@@ -327,7 +356,7 @@ function jnTrades(){
   jq("#jnHid").innerHTML = JN.d.hidden_n && f.oct !== "removed" ? `${JN.d.hidden_n} removed from the journal · <a href="#" id="jnShowHid">show</a>` : "";
   const sh = jq("#jnShowHid"); if(sh) sh.onclick = e => { e.preventDefault(); jPrefSet("oct", "removed"); jnFilters(); const o = jq("#jfOct"); if(o) o.value = "removed"; jnTrades(); };
   jq("#jnList").innerHTML = items.length ? items.map(jCard).join("")
-    : `<div class="empty">${JN.d.trades.length ? "No trades in this period or filter." : "No trades yet. Every paper and live trade comes here on its own: place one from the chart."}</div>`;
+    : `<div class="empty">${JN.d.trades.length ? "No trades in this period or filter." : "No trades yet. Every paper, live and MT5 trade comes here on its own: place one from the chart."}</div>`;
   jnBindClaim();
 }
 function jCard(t){
@@ -341,10 +370,10 @@ function jCard(t){
   return `<div class="jn-trade ${cl}${open ? " expanded" : ""}${t.hidden ? " hid" : ""}" data-id="${jEsc(t.id)}">
     <div class="jt-row" data-act="toggle" data-id="${jEsc(t.id)}" role="button" tabindex="0" aria-expanded="${open}">
       ${jSeal(jStates(a), 32, {center: nb ? String(nb) : "", note: a.clean ? "Clean octagon" : nb + " pillar(s) broken"})}
-      <div class="jt-main"><b>${jEsc(jShort(t.s))}</b><span class="jt-side ${t.side > 0 ? "buy" : "sell"}">${t.side > 0 ? "Buy" : "Sell"} ${t.lots ?? ""}</span>${t.mode === "live" ? '<span class="jt-live">LIVE</span>' : ""}
+      <div class="jt-main"><b>${jEsc(jShort(t.s))}</b><span class="jt-side ${t.side > 0 ? "buy" : "sell"}">${t.side > 0 ? "Buy" : "Sell"} ${t.lots ?? ""}</span>${jModeTag(t.mode)}
         <div class="jt-sub">${t.rep ? `<span class="jt-rep${t.claimedAt ? "" : " open"}" title="${t.claimedAt ? "Claimed" : "Waiting to be claimed on the Reps card"}">Rep ${t.rep}${t.claimedAt ? "" : " ○"}</span> · ` : ""}${jEsc(when)} · ${jEsc(t.acct_name)}${(t.shots || []).length ? ` · <span class="jt-pics" title="Pictures">📷 ${t.shots.length}</span>` : ""}</div></div>
       <div class="jt-px"><div class="mono">${px}</div><div class="jt-sub">${dur}${t.tod ? " · " + jEsc(t.tod) : ""}</div></div>
-      <div class="jt-net mono ${t.net > 0 ? "up" : t.net < 0 ? "down" : ""}">${m.closed ? jMoney(t.net) : "Open"}<small class="${t.r == null ? "muted" : t.r >= 0 ? "up" : "down"}">${t.r == null ? "" : jR(t.r)}</small></div>
+      <div class="jt-net mono ${t.net > 0 ? "up" : t.net < 0 ? "down" : ""}">${m.closed ? jMoney(t.net, true, t.cur) : "Open"}<small class="${t.r == null ? "muted" : t.r >= 0 ? "up" : "down"}">${t.r == null ? "" : jR(t.r)}</small></div>
       <span class="jt-chev">›</span>
     </div>
     ${open ? `<div class="jt-detail">
@@ -355,12 +384,12 @@ function jCard(t){
         ${fact("Closed (IST)", m.closed ? `<span class="mono">${jEsc(jWhen(t.closed, true))}</span>` : "Still open")}
         ${fact("Prices", `<span class="mono">${px}</span>${(t.entries || []).length > 1 ? ` <span class="muted">(${t.entries.length} entries)</span>` : ""}`)}
         ${fact("First stop · last stop · target", `<span class="mono">${jPx(t.first_sl)} · ${jPx(t.sl)} · ${jPx(t.tp)}</span>`)}
-        ${fact("Risk at the first stop", t.init_risk ? `<span class="mono">${jMoney(t.init_risk, false)}</span> <span class="muted">net</span>` : "—")}
+        ${fact("Risk at the first stop", t.init_risk ? `<span class="mono">${jMoney(t.init_risk, false, t.cur)}</span> <span class="muted">net</span>` : "—")}
         ${fact("Planned", t.planned_r != null ? `<span class="mono">${t.planned_r.toFixed(2)}R</span>` : "—")}
-        ${fact("Gross · charges · net", m.closed ? `<span class="mono">${jMoney(t.gross)} · ${jMoney(t.charges, false)} · ${jMoney(t.net)}</span>` : "—")}
+        ${fact("Gross · charges · net", m.closed ? `<span class="mono">${jMoney(t.gross, true, t.cur)} · ${jMoney(t.charges, false, t.cur)} · ${jMoney(t.net, true, t.cur)}</span>` : "—")}
         ${fact("Size · product", `${t.lots ?? "—"} lot${t.lots === 1 ? "" : "s"} <span class="muted">(qty ${t.qty ?? "—"})</span> · ${jEsc(({INTRADAY: "Intraday", MARGIN: "Carry", CNC: "Delivery"})[t.product] || t.product || "")}`)}
         ${fact("Exit", m.closed ? jEsc(J_REASON[t.reason] || t.reason || "—") + (t.parts_n > 1 ? ` <span class="muted">(${t.parts_n} parts)</span>` : "") : "—")}
-        ${fact("Account", `${jEsc(t.acct_name)} · ${t.mode === "live" ? '<b class="down">Live</b>' : "Paper"}`)}
+        ${fact("Account", `${jEsc(t.acct_name)} · ${jModeWord(t.mode)}${t.outside ? ` <span class="muted">· placed in ${t.mode === "mt5" ? "MT5" : "Fyers"}</span>` : ""}`)}
         ${t.best != null ? fact("Best · worst price", `<span class="mono">${jPx(t.best)} · ${jPx(t.worst)}</span>`) : ""}
         ${(() => { const p1 = (JN.d.p1 || []); return p1.length ? fact("Pillar 1 checks", `<span class="jt-checks">${p1.map(([k, l]) => `<span class="${(t.p1Checks || []).includes(k) ? "up" : "muted"}">${(t.p1Checks || []).includes(k) ? "✓" : "○"} ${jEsc(l)}</span>`).join("<br>")}</span>`) : ""; })()}
       </div>
@@ -429,12 +458,12 @@ function jnReps(){
     if(r <= before){ cells.push(`<i class="pre" title="Rep ${r} · before this journal"></i>`); continue; }
     const t = byRep.get(r); if(!t){ cells.push("<i></i>"); continue; }
     counts[t.q]++;
-    cells.push(`<i class="${t.q}${t.claimedAt ? "" : " unclaimed"}${t.id === JN.flash ? " just" : ""}" title="${jEsc(`Rep ${r} · ${t.acct_name} · ${jWhen(t.opened)} · ${jMoney(t.net)} · ${({held: "no pillar broken", broken: "pillar broken", unaudited: "not audited"})[t.q]}${t.claimedAt ? "" : " · waiting to be claimed"}`)}"></i>`);
+    cells.push(`<i class="${t.q}${t.claimedAt ? "" : " unclaimed"}${t.id === JN.flash ? " just" : ""}" title="${jEsc(`Rep ${r} · ${t.acct_name} · ${jWhen(t.opened)} · ${jMoney(t.net, true, t.cur)} · ${({held: "no pillar broken", broken: "pillar broken", unaudited: "not audited"})[t.q]}${t.claimedAt ? "" : " · waiting to be claimed"}`)}"></i>`);
   }
   const waiting = list.filter(t => !t.claimedAt);
   const claim = waiting.length ? (() => { const t = waiting[0];
     return `<div class="jn-claimw"><button type="button" class="jn-claim" id="jnClaim" data-id="${jEsc(t.id)}" aria-label="Hold to claim rep ${t.rep}"><span class="jn-claimfill"></span><span class="jn-claimtxt">Hold to claim rep <b>${t.rep}</b></span></button>
-      <div class="jn-claimsub">${jEsc(jShort(t.s))} ${t.side > 0 ? "buy" : "sell"} · ${jEsc(jWhen(t.opened))} · <span class="${t.net > 0 ? "up" : t.net < 0 ? "down" : ""}">${jMoney(t.net)}</span> · ${({held: "no pillar broken", broken: "a pillar broke", unaudited: "not audited"})[t.q]}${waiting.length > 1 ? ` · ${waiting.length - 1} more waiting` : ""}</div></div>`; })() : "";
+      <div class="jn-claimsub">${jEsc(jShort(t.s))} ${t.side > 0 ? "buy" : "sell"} · ${jEsc(jWhen(t.opened))} · <span class="${t.net > 0 ? "up" : t.net < 0 ? "down" : ""}">${jMoney(t.net, true, t.cur)}</span> · ${({held: "no pillar broken", broken: "a pillar broke", unaudited: "not audited"})[t.q]}${waiting.length > 1 ? ` · ${waiting.length - 1} more waiting` : ""}</div></div>`; })() : "";
   el.classList.toggle("milestone", reached);
   const last = Math.floor(total / B) * B, lt = byRep.get(last);
   el.innerHTML = `<div class="jn-ch"><h3>Reps</h3><span class="muted">Block ${start}–${end}</span></div>
@@ -469,10 +498,11 @@ async function jnClaim(id){
 
 /* ------------------------------------------------------------------ Today: the session's lockouts (pillars 4, 5), practice */
 function jnTodayAcct(){
-  const f = jF().acct, accts = JN.d.accounts.filter(a => !a.archived && JN.d.today[a.id]);
-  if(f && JN.d.today[f]) return f;
-  if(JN.todayAcct && JN.d.today[JN.todayAcct]) return JN.todayAcct;
-  if(typeof ACCT !== "undefined" && ACCT && JN.d.today[ACCT]) return ACCT;
+  const cur = jCur(), inCur = id => { const a = JN.d.accounts.find(x => x.id === id); return a && (a.cur || "INR") === cur && JN.d.today[id]; };
+  const f = jF().acct, accts = JN.d.accounts.filter(a => !a.archived && JN.d.today[a.id] && (a.cur || "INR") === cur);
+  if(f && inCur(f)) return f;
+  if(JN.todayAcct && inCur(JN.todayAcct)) return JN.todayAcct;
+  if(typeof ACCT !== "undefined" && ACCT && inCur(ACCT)) return ACCT;
   return accts.length ? accts[0].id : "";
 }
 function jPracticeStreak(){
@@ -486,40 +516,42 @@ function jnToday(){
   const el = jq("#jnToday"); if(!el) return;
   const aid = jnTodayAcct(), st = JN.d.today[aid], acc = JN.d.accounts.find(a => a.id === aid), R = JN.d.rules;
   if(!st){ el.innerHTML = `<div class="jn-ch"><h3>Today</h3></div><div class="muted">No open account.</div>`; return; }
-  const s = st.session, limit = acc ? acc.size * R.dd_pct / 100 : 0, now = Date.now() / 1000;
+  const cur = acc && acc.cur || "INR", M = (n, sg = true) => jMoney(n, sg, cur), mt = acc && acc.mode === "mt5";
+  const base = s0 => s0 ? s0.base : acc ? (mt && acc.dd_base ? acc.dd_base : acc.size) : 0;
+  const s = st.session, limit = base(s) * R.dd_pct / 100, now = Date.now() / 1000;
   const todays = JN.d.trades.filter(t => t.skey === `${aid}|${st.day}` && !t.hidden);
   const states = todays.length ? jAggregate(todays.map(t => t.audit)) : jStates(null), broken = states.filter(x => x === "fail").length;
   let cls = "ok", head;
   const lk = st.lock;
-  if(lk){ cls = lk.kind === "afk" ? "afk" : "lock"; head = jEsc(lk.text) + (lk.on ? "" : ` <span class="muted">(not blocking: its switch is off)</span>`); }
+  if(lk){ cls = lk.kind === "afk" ? "afk" : "lock"; head = jEsc(lk.text) + (lk.on ? "" : lk.mt5_off ? ` <span class="muted">(not blocking: lockouts are off for this MT5 account, Journal › Settings)</span>` : ` <span class="muted">(not blocking: its switch is off)</span>`); }
   else if(!s) head = "Fresh session. Click only when patient.";
-  else head = `Clear. ${jMoney(Math.max(0, limit - s.dd), false)} of room before the ${R.dd_pct}% line.`;
+  else head = `Clear. ${M(Math.max(0, limit - s.dd), false)} of room before the ${R.dd_pct}% line${mt ? ` (of ${M(base(s), false)}, FundingPips' day-start balance)` : ""}.`;
   const dd = s ? s.dd : 0, ddPct = limit ? dd / limit * 100 : 0;
   const heat = p => p >= 75 ? "var(--jfail)" : p >= 50 ? "var(--jwarn)" : "var(--jpass)";
   const mrow = (label, value, pct, color) => `<div class="jn-mrow"><span>${label}</span><b>${value}</b>${pct === undefined ? "" : jMeter(pct, color)}</div>`;
-  const live = JN.d.accounts.filter(a => !a.archived && JN.d.today[a.id]);
-  const chips = live.length > 1 ? `<div class="jn-chips">${live.map(a => `<button class="${a.id === aid ? "on" : ""}" data-ta="${jEsc(a.id)}">${jEsc(a.name)}${a.mode === "live" ? " · LIVE" : ""}</button>`).join("")}</div>` : "";
+  const live = JN.d.accounts.filter(a => !a.archived && JN.d.today[a.id] && (a.cur || "INR") === cur);
+  const chips = live.length > 1 ? `<div class="jn-chips">${live.map(a => `<button class="${a.id === aid ? "on" : ""}" data-ta="${jEsc(a.id)}">${a.mode === "mt5" ? "MT5 " : ""}${jEsc(a.name)}${a.mode === "live" ? " · LIVE" : ""}</button>`).join("")}</div>` : "";
   const done = !!JN.d.practice[jTodayKey()], streak = jPracticeStreak();
   const snapA = typeof P !== "undefined" && P.snap && typeof ACCT !== "undefined" && aid === ACCT ? P.snap.acct : null;
   const showAll = el.classList.contains("show-all");
-  el.innerHTML = `<div class="jn-ch"><h3>Today</h3><span class="muted">${acc && acc.mode === "live" ? '<b class="down">Live</b>' : "Paper"}</span></div>
-    <div class="jn-tsub">${jEsc(acc ? acc.name : "")} · trading day ${jEsc(jFmtDay(st.day))}</div>
+  el.innerHTML = `<div class="jn-ch"><h3>Today</h3><span class="muted">${jModeWord(acc && acc.mode)}</span></div>
+    <div class="jn-tsub">${mt ? "MT5 " : ""}${jEsc(acc ? acc.name : "")} · trading day ${jEsc(jFmtDay(st.day))}${mt ? ` <span class="muted">(${acc.mt5 && acc.mt5.day === "ist" ? "Indian day, from 06:00 IST" : "the broker's day"})</span>` : ""}</div>
     ${chips}
     <div class="jn-tseal">${jSeal(states, 92, {center: todays.length ? (broken ? String(broken) : "") : "", note: "Today's octagon"})}
       <div><div class="jn-sess ${cls}">${head}</div>
         <div class="muted jn-small" style="margin-top:8px">${todays.length ? `${todays.length} trade${todays.length === 1 ? "" : "s"} today${broken ? ` · ${broken} pillar${broken === 1 ? "" : "s"} broken` : " · octagon held"}` : "Each side of the octagon is a pillar; it lights up as you trade."}</div></div></div>
-    ${mrow("Session P&amp;L (net, closed)", s ? `<span class="${s.cum > 0 ? "up" : s.cum < 0 ? "down" : ""}">${jMoney(s.cum)}</span>` : "—")}
-    ${snapA ? mrow("Day room (your risk rules)", snapA.day_room == null ? "off" : `<span class="${snapA.day_room < 0 ? "down" : ""}">${jMoney(snapA.day_room, false)}</span>`) : ""}
+    ${mrow("Session P&amp;L (net, closed)", s ? `<span class="${s.cum > 0 ? "up" : s.cum < 0 ? "down" : ""}">${M(s.cum)}</span>` : "—")}
+    ${snapA ? mrow("Day room (your risk rules)", snapA.day_room == null ? "off" : `<span class="${snapA.day_room < 0 ? "down" : ""}">${M(snapA.day_room, false)}</span>`) : ""}
     <button class="ghost jn-tog" id="jnTodayTog">${showAll ? "Hide limits" : "Show limits and practice"}</button>
     <div class="jn-tmore">
-      ${mrow(`Off the peak · ${R.dd_pct}% line`, `${jMoney(dd, false)} / ${jMoney(limit, false)}`, ddPct, heat(ddPct))}
+      ${mrow(`Off the peak · ${R.dd_pct}% line`, `${M(dd, false)} / ${M(limit, false)}`, ddPct, heat(ddPct))}
       ${s && s.winTimes.length ? mrow("Wins in a row", `${s.streak} of ${R.win_streak}`, s.streak / R.win_streak * 100, "var(--jwarn)")
         + mrow(`Wins of ${R.multi_r}R or more`, `${s.multi} of ${R.win_streak}`, s.multi / R.win_streak * 100, "var(--jwarn)")
         : mrow("99 Club", `<span class="muted" style="font-weight:500">starts at your first win</span>`)}
       <div class="jn-practice"><div class="jn-mantra">${jEsc(JN.d.mantra)}</div>
         <label class="jn-flag"><input type="checkbox" id="jnPractice"${done ? " checked" : ""}> Ground-state practice done today${streak ? ` <span class="muted">· ${streak}-day streak</span>` : ""}</label></div>
       ${st.ended || (lk && lk.kind === "end") ? "" : `<button class="jn-endbtn" id="jnEnd" data-acct="${jEsc(aid)}" title="Hold: ends today's session for this account${R.block_end ? " (new orders refused until the next trading day)" : ""}"><span class="jn-claimfill"></span><span>Hold to end today's session</span></button>`}
-      <div class="muted jn-small">From the trades in the journal (closed trades, net of charges; open P&amp;L doesn't count). ${R.block_dd || R.block_afk || R.block_end ? "Lockouts refuse new orders: switches in Journal › Settings." : "Lockouts are shown only (switches off)."}</div>
+      <div class="muted jn-small">From the trades in the journal (closed trades, net of charges; open P&amp;L doesn't count). ${mt && !(acc.mt5 && acc.mt5.block) ? "Lockouts are shown only on this MT5 account (its switch is off: Journal › Settings)." : R.block_dd || R.block_afk || R.block_end ? "Lockouts refuse new orders: switches in Journal › Settings." : "Lockouts are shown only (switches off)."}</div>
     </div>`;
   el.querySelectorAll("[data-ta]").forEach(b => b.onclick = () => { JN.todayAcct = b.dataset.ta; jnToday(); });
   jq("#jnTodayTog").onclick = () => { el.classList.toggle("show-all"); jnToday(); };
@@ -532,16 +564,16 @@ function jnToday(){
 }
 function jnGoal(){
   const el = jq("#jnGoal"); if(!el) return;
-  const aid = jnTodayAcct(), acc = JN.d.accounts.find(a => a.id === aid), R = JN.d.rules;
+  const aid = jnTodayAcct(), acc = JN.d.accounts.find(a => a.id === aid), R = JN.d.rules, M = (n, sg = true) => jMoney(n, sg, acc && acc.cur);
   if(!acc || acc.balance == null || !acc.size){ el.classList.add("hide"); return; }
   const net = acc.balance - acc.size, pct = net / acc.size * 100, lo = Math.floor(pct / R.block_pct + 1e-9) * R.block_pct, hi = lo + R.block_pct;
   const prog = (pct - lo) / R.block_pct * 100, toGo = hi / 100 * acc.size - net, sg = v => `${v >= 0 ? "+" : "−"}${Math.abs(v)}`;
   el.classList.remove("hide");
   el.innerHTML = `<div class="jn-gitem"><div class="jn-gtop"><span>${R.block_pct}% execution block · Pillar 6</span><span class="muted">${jEsc(acc.name)}</span></div>
-    <div class="jn-gbig"><span class="${pct > 0 ? "up" : pct < 0 ? "down" : ""}">${pct >= 0 ? "+" : "−"}${Math.abs(pct).toFixed(2)}%</span><small>${jMoney(Math.max(0, toGo), false)} to go</small></div>
+    <div class="jn-gbig"><span class="${pct > 0 ? "up" : pct < 0 ? "down" : ""}">${pct >= 0 ? "+" : "−"}${Math.abs(pct).toFixed(2)}%</span><small>${M(Math.max(0, toGo), false)} to go</small></div>
     <div class="jn-track"><i class="fill" style="width:${Math.max(0, Math.min(100, prog)).toFixed(1)}%"></i><i class="knob" style="left:${Math.max(0, Math.min(100, prog)).toFixed(1)}%"></i></div>
     <div class="jn-tends"><span>${sg(lo)}%</span><span>${sg(hi)}%</span></div>
-    <div class="muted jn-small">Block ${sg(lo)}% → ${sg(hi)}% · ${jMoney(net)} on ${jMoney(acc.size, false)} (balance ${jMoney(acc.balance, false)}). Reps, not payout dates.</div></div>`;
+    <div class="muted jn-small">Block ${sg(lo)}% → ${sg(hi)}% · ${M(net)} on ${M(acc.size, false)} (balance ${M(acc.balance, false)}). Reps, not payout dates.</div></div>`;
 }
 
 /* ------------------------------------------------------------------ the audit form (Octagon's New / Edit, for one trade) */
@@ -558,7 +590,7 @@ function jnForm(id){
   m.classList.remove("hide");
   m.innerHTML = `<div class="jn-mbox" role="dialog" aria-label="Audit">
     <div class="jn-mhead"><b>${jEsc(jShort(t.s))} <span class="jt-side ${t.side > 0 ? "buy" : "sell"}">${t.side > 0 ? "Buy" : "Sell"} ${t.lots ?? ""}</span></b>
-      <span class="muted">${t.rep ? "Rep " + t.rep + " · " : ""}${jEsc(jWhen(t.opened))} · ${jEsc(t.acct_name)} · ${t.status === "closed" ? `<span class="${t.net > 0 ? "up" : t.net < 0 ? "down" : ""}">${jMoney(t.net)} ${jR(t.r)}</span>` : "open"}</span>
+      <span class="muted">${t.rep ? "Rep " + t.rep + " · " : ""}${jEsc(jWhen(t.opened))} · ${jEsc(t.acct_name)} · ${t.status === "closed" ? `<span class="${t.net > 0 ? "up" : t.net < 0 ? "down" : ""}">${jMoney(t.net, true, t.cur)} ${jR(t.r)}</span>` : "open"}</span>
       <span class="sp"></span><button class="ghost" id="jnClose" aria-label="Close">✕</button></div>
     <div class="jn-mgrid">
       <div class="jn-mleft">
@@ -685,7 +717,7 @@ function jnOctAuto(){
   for(let n = 1; n <= 8; n++){ const st = a.P["p" + n].state; jq("#jps_" + n).innerHTML = `<span class="jb jb-${J_STATE_TONE[st]}">${({pass: "✓ held", fail: "✗ broken", warn: "⚠ check", na: "—", off: "doesn't apply"})[st]}</span>`; }
   const bad = x => `<span class="down">⛔ ${jEsc(x)}</span>`;
   jq("#jauto_4").innerHTML = !s ? `<span class="muted">Checked against the session.</span>` : a.P.p4.state === "fail" ? bad(a.P.p4.note)
-    : `<span class="up">Held.</span> <span class="muted">Session ${jEsc(jFmtDay(s.day))}: peak ${jMoney(s.peak)}, ${jMoney(s.dd, false)} off peak of ${jMoney(s.limit, false)} allowed (${R.dd_pct}% of ${jMoney(s.base, false)}).</span>`;
+    : `<span class="up">Held.</span> <span class="muted">Session ${jEsc(jFmtDay(s.day))}: peak ${jMoney(s.peak, true, s.cur)}, ${jMoney(s.dd, false, s.cur)} off peak of ${jMoney(s.limit, false, s.cur)} allowed (${R.dd_pct}% of ${jMoney(s.base, false, s.cur)}${(s.cur || "INR") !== "INR" ? ", FundingPips' day-start balance" : ""}).</span>`;
   jq("#jauto_5").innerHTML = !s ? `<span class="muted">Checked against the session.</span>` : a.P.p5.state === "fail" ? bad(a.P.p5.note)
     : a.P.p5.state === "off" ? `<span class="muted">Doesn't apply yet — no wins in this session, so there's no run to protect. It starts counting from your first win.</span>`
     : `<span class="up">Held.</span> <span class="muted">Session now: win streak ${s.streak}/${R.win_streak}, wins ≥${R.multi_r}R ${s.multi}/${R.win_streak}.</span>`;
@@ -740,15 +772,15 @@ function jnTagBind(){
 
 /* ------------------------------------------------------------------ Settings: Octagon rules, lockout switches, the pillars' text */
 function jnSettings(){
-  const body = jq("#jnBody"), R = JN.d.rules;
+  const body = jq("#jnBody"), R = JN.d.rules, mts = (JN.d.accounts || []).filter(a => a.mode === "mt5" && a.mt5);
   const num = (k, label, step, hint) => `<div><label for="jr_${k}">${label}</label><input type="number" step="${step}" min="0" id="jr_${k}" data-rule="${k}" class="mono" value="${R[k]}">${hint ? `<div class="muted jn-xs">${hint}</div>` : ""}</div>`;
   const sw = (k, label, hint) => `<label class="jn-sw"><input type="checkbox" data-rule="${k}"${R[k] ? " checked" : ""}><span><b>${label}</b><br><span class="muted jn-small">${hint}</span></span></label>`;
   body.innerHTML = `<div class="jn-setgrid">
     <div class="jn-card"><h3>Octagon rules</h3>
-      <div class="jn-row">${num("dd_pct", "Trailing drawdown %", "0.1", "of the account size, from the session's peak (Pillar 4)")}${num("afk_min", "Break minutes", "1", "after the 99 Club (Pillar 5)")}${num("win_streak", "Wins before a break", "1")}</div>
+      <div class="jn-row">${num("dd_pct", "Trailing drawdown %", "0.1", "of the account size (MT5: FundingPips' day-start balance), from the session's peak (Pillar 4)")}${num("afk_min", "Break minutes", "1", "after the 99 Club (Pillar 5)")}${num("win_streak", "Wins before a break", "1")}</div>
       <div class="jn-row">${num("multi_r", "Multi-R win from (net R)", "0.1")}${num("stretch_r", "Flag target above (net R)", "0.1", "Pillar 8")}${num("block_pct", "Execution block %", "0.5", "Pillar 6")}</div>
       <div class="jn-row">${num("rep_block", "Rep milestone every", "1")}${num("reps_before", "Reps done before this journal", "1")}</div>
-      <p class="muted jn-small">Every closed trade is one rep, counted across all your accounts in the order you took them. A session is one trading day per account (IST; the day starts at the reset hour in your account's rules, 06:00 by default). R and ₹ are net of every charge, so a "2R win" is 2R after charges.</p>
+      <p class="muted jn-small">Every closed trade is one rep, counted across all your accounts in the order you took them. A session is one trading day per account (IST; the day starts at the reset hour in your account's rules, 06:00 by default; MT5 accounts: the broker's day or the Indian day, below). R and money are net of every charge, so a "2R win" is 2R after charges.</p>
       <div class="jn-sst" id="jnRulesSt"></div>
     </div>
     <div class="jn-card"><h3>Lockouts refuse new orders</h3>
@@ -756,8 +788,14 @@ function jnSettings(){
       ${sw("block_afk", "During the 99 Club break (Pillar 5)", `${R.win_streak} wins in a row, or ${R.win_streak} wins of ${R.multi_r}R or more: no new orders for ${R.afk_min} minutes.`)}
       ${sw("block_end", "After the session ends (Pillar 5)", "A trade marked \"mind running numbers\", or Hold to end today's session on the Today card: no new orders until the next trading day.")}
       ${sw("cancel_pending", "Cancel waiting entry orders when a lockout starts", "Limit and stop entries still waiting at that moment are cancelled (Live: at Fyers too). Stops and targets of open trades stay.")}
-      <p class="muted jn-small">Closing, trailing, BE and the stops of open trades are never blocked. Each switch applies to all your accounts. Off = the lockout still shows on the Today card and in the audit.</p>
+      <p class="muted jn-small">Closing, trailing, BE and the stops of open trades are never blocked. Each switch applies to all your accounts${mts.length ? " (MT5 accounts only with their own switch on, below)" : ""}. Off = the lockout still shows on the Today card and in the audit.</p>
     </div>
+    ${mts.length ? `<div class="jn-card" id="jnMt5Set"><h3>MT5 accounts</h3>
+      ${mts.map(a => `<div class="jn-mt5row" data-acct="${jEsc(a.id)}"><div class="jn-mt5name"><b>MT5 ${jEsc(a.name)}</b> <span class="muted">${jEsc(a.server || "")} · ${jEsc(a.cur || "USD")}</span></div>
+        <label>Session day</label><select data-mtday><option value="broker"${a.mt5.day === "broker" ? " selected" : ""}>The broker's day (FundingPips' daily reset)</option><option value="ist"${a.mt5.day === "ist" ? " selected" : ""}>The Indian day (IST, from 06:00)</option></select>
+        <label class="jn-sw"><input type="checkbox" data-mtblock${a.mt5.block ? " checked" : ""}><span><b>Lockouts refuse new orders on this account</b><br><span class="muted jn-small">The 2% line, the 99 Club break and session over, each with its switch above. Changing this asks for a fresh 2FA code. Off: shown on the Today card and in the audit only.</span></span></label></div>`).join("")}
+      <p class="muted jn-small">Money in the account's currency ($), net of commission and swap; never added to ₹ (pick ₹ or $ in the filters). The 2% line is of FundingPips' day-start balance: the balance at the broker's midnight, from MT5's own deals.</p>
+      <div class="jn-sst" id="jnMt5St"></div></div>` : ""}
     <div class="jn-card jn-wide"><h3>The 8 pillars</h3>
       <p class="muted jn-small">Your text, word for word. Edit any pillar; "Original" puts your original text back.</p>
       <div id="jnPilEd">${jPillars().map(p => `<div class="jn-pled" data-n="${p.n}"><div class="jn-row"><div style="flex:3"><label>${p.n} · Title</label><input type="text" data-k="title" value="${jEsc(p.title)}"></div><div><label>Short name</label><input type="text" data-k="short" value="${jEsc(p.short)}"></div></div>
@@ -779,6 +817,14 @@ function jnSettings(){
     d.querySelector("[data-rm]").onclick = () => d.remove(); jq("#jnP1Ed").append(d); d.querySelector("input").focus(); };
   jq("#jnP1Save").onclick = () => save({p1: p1rows()});
   jq("#jnP1Orig").onclick = () => save({p1: null});
+  const mtSave = async (b, two) => { const st = jq("#jnMt5St");
+    const j = two && typeof stepUp === "function" ? await stepUp(() => api("/api/journal/mt5", {body: b})) : await japi("/api/journal/mt5", b);
+    if(j && j.ok){ jnMerge(j.j); jToast("Saved"); } else if(j && j.error && j.error !== "cancelled"){ jToast(j.error); if(st) st.textContent = j.error; }
+    jnSettings(); };
+  body.querySelectorAll(".jn-mt5row").forEach(r => {
+    r.querySelector("[data-mtday]").onchange = e => mtSave({acct: r.dataset.acct, day: e.target.value});
+    r.querySelector("[data-mtblock]").onchange = e => mtSave({acct: r.dataset.acct, block: e.target.checked}, true);
+  });
 }
 
 /* ------------------------------------------------------------------ the lock on the ticket and in the header */
@@ -790,7 +836,10 @@ function jnLockPill(){
   if(!lk){ el.classList.add("hide"); return; }
   el.classList.remove("hide");
   el.classList.toggle("off", !lk.on);
-  el.innerHTML = `<span class="dot ${lk.on ? "bad" : "warn"}"></span><span>${lk.kind === "afk" ? `99 Club break until ${jHM(lk.until)}` : lk.kind === "dd" ? "2% lockout" : "Session over"}${lk.on ? "" : " (not blocking)"}</span>`;
+  const what = lk.kind === "afk" ? `99 Club break until ${jHM(lk.until)}` : lk.kind === "dd" ? "2% lockout" : "Session over";
+  el.title = `Your journal: ${what}` + (lk.on ? " - new orders refused (Journal › Settings)" : lk.mt5_off
+    ? " - not blocking: lockouts are off for this MT5 account (Journal › Settings)" : " - not blocking: its switch is off (Journal › Settings)");
+  el.innerHTML = `<span class="dot ${lk.on ? "bad" : "warn"}"></span><span>${what}${lk.on ? "" : '<small class="jn-nb"> · off</small>'}</span>`;   // (short: the top bar stays on one line)
 }
 
 /* ------------------------------------------------------------------ hooks into the page */

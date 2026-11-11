@@ -1,5 +1,54 @@
 # Changelog
 
+## v0.39.0 — 11 Nov 2026 — MT5 trades in the journal
+
+Added
+- **MT5 trades in the Journal** (roadmap 8 c1; owner: "the journal is not recording mt5 trades" — they were left out by design
+  until this step). Every trade of every MT5 account arrives on its own, like paper and live ones: placed from the app or in MT5
+  itself (marked "placed in MT5"), and MT5's own history (the last 90 days) taken in once. One MT5 position is one journal
+  trade, however many parts it closed in (a part, a position booked as an estimate and the late MT5 deal that replaces it).
+  The 8 pillars, reps, tags, plan, review, Insights, the weekly Review, Copy for Gemini, CSV and ▶ On chart all work for them.
+- **Money in $, never added to ₹** (owner: "yes"): MT5 trades are in the account's currency, net of commission and swap. The
+  filters have a **Money** switch, **₹ Fyers | $ MT5** (shown once there are MT5 trades): the list, stats, balance curve,
+  Insights, Review and Copy for Gemini show one currency at a time; the MT5 side opens the journal in $. The MT5 badge on
+  each MT5 trade. A history trade's balance after it is worked out from MT5's deals, so the $ balance curve starts at the
+  real balance.
+- **The session day per MT5 account** (owner: "can be both"): Journal › Settings › MT5 accounts: the broker's day (FundingPips'
+  daily reset; the default) or the Indian day (IST, from 06:00 like the Fyers accounts). Changing it moves the trades to their
+  new sessions.
+- **The 2% line of FundingPips' day-start balance** (owner: "day's starting balance from Fundingpips"): the balance at the
+  broker's midnight, from MT5's own deals (with the Indian day: of the broker day the session starts in). The Today card
+  shows the room before it in $.
+- **The lockouts on an MT5 account are a switch** (owner: "Keep it as an option with 2FA"): Journal › Settings › MT5 accounts
+  › Lockouts refuse new orders on this account, **off at first**; turning it on or off asks for a fresh 2FA code and goes in
+  the security log. On: the 2% line, the 99 Club break and session over refuse new MT5 orders (each with its own switch);
+  closing, BE, trailing and stops never. Off: shown on the Today card and in the audit only.
+- Route `POST /api/journal/mt5` ({acct, day} / {acct, block}).
+
+Changed
+- The journal's CSV: a **Currency** column (INR / USD); the money columns are named Gross, Charges, Net, Risk at first stop
+  (net), without ₹; Placed in says MT5 for trades placed there.
+- The top bar's journal lockout pill is shorter: "2% lockout · off" when it isn't blocking (the reason in its tip), so the MT5
+  top bar stays on one line at 1500 px.
+- Server pictures and the replay show an MT5 trade's money in $ (the replay's running net, the picture's net / charges).
+
+Tests
+- `tests/mt5acct_test.py` (162): "the journal leaves MT5 out" replaced by the journal's MT5 checks: every history trade in
+  the journal in USD, nets equal to MT5's, an estimate replaced by MT5's late deal (one trade, not two), open positions with
+  MT5's volume, the broker's day and the day-start balance as the base, the Indian day (and back), the lockouts' switch (off:
+  shown only; on: refused through the engine's guard, the ticket's lock; the other MT5 account not blocked), a trade from MT5
+  arriving open and then closed with MT5's net and R, the balance after each history trade.
+- New `tests/mt5journal_flow.js` (35, browser, fake MT5): a trade placed and closed in MT5 reaching the Journal; $ only with
+  the MT5 badge; ₹ Fyers | $ MT5; Today; Insights, Review, Copy for Gemini; the session day; the lockouts' switch (2FA; the
+  server refuses it without a fresh code from another login; a new MT5 order refused only with it on; the header pill; the
+  security log); CSV; the replay's data for an MT5 trade; the phone. Passed on consecutive runs.
+- `tests/journal_flow.js` counts the ₹ trades the page shows (MT5 trades in the same test data are in the $ view) and checks
+  the shorter "· off" pill; `tests/jreview_test.py` checks the new CSV headers. `routes_check.py` has the new route.
+- Re-run: `journal_test` (58), `jreview_test` (25), `replay_test` (42), `jshots_test` (52), `mt5_test` (52), `trail_rr_test`
+  (27), `squareoff_test`, `live_account_test`, `routes_check.py`, and the browser flows listed in the release notes.
+- **Not tested on a real MT5 / FundingPips** (the fake terminal plays the EA): the owner's real history in the journal and
+  the day-start balance against FundingPips' dashboard.
+
 ## v0.38.1 — 11 Nov 2026 — Alerts: no limit on how many; 🔔+ on the price scale; 🔔 on drawings
 
 Changed

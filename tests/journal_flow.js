@@ -60,7 +60,7 @@ let br;
   await pg.click('#nav button[data-pg="journal"]');
   await pg.waitForSelector(".jn-trade", { timeout: 10000 });
   let n = await pg.$$eval(".jn-trade", x => x.length);
-  ok(n === jd.trades.filter(t => !t.hidden).length, `the Journal page lists every trade (${n})`);
+  ok(n === jd.trades.filter(t => !t.hidden && (t.cur || "INR") === "INR").length, `the Journal page lists every trade (${n})`);
   const reps = await pg.textContent("#jnReps");
   ok(/Hold to claim rep/.test(reps) && /Reps/.test(reps), "Reps card: a new rep waits to be claimed");
   const jl = await pg.evaluate(() => P.snap.jlock), todayTxt = await pg.textContent("#jnToday");
@@ -155,7 +155,7 @@ let br;
   // ---- a waiting order is cancelled when the session is ended by hand
   const lim = await pg.evaluate(async () => { const l = last[cur.s]; return (await papi("place", {s: cur.s, side: 1, type: "limit", price: Math.round(l.ltp - 200), sl: Math.round(l.ltp - 230), mode: "lots", lots: 1, product: "MARGIN"})).ok; });
   ok(lim && await pg.evaluate(() => P.snap.orders.length === 1), "switch off: orders go through again (a limit order waits)");
-  ok(/not blocking/.test(await pg.textContent("#pJLock")), "the header still shows it, as not blocking");
+  ok(await pg.evaluate(() => { const e = document.querySelector("#pJLock"); return /· off/.test(e.textContent) && e.classList.contains("off") && /not blocking/.test(e.title); }), "the header still shows it, as not blocking (· off, said in full in its tip)");
   await pg.click('#jnSub button[data-v="trades"]'); await pg.waitForTimeout(400);
   if(!(await pg.isVisible("#jnEnd"))) await pg.click("#jnTodayTog");
   await pg.$eval("#jnEnd", el => el.scrollIntoView({block: "center"})); await pg.waitForTimeout(200);

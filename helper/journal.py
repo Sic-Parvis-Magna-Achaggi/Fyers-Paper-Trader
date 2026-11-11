@@ -9,6 +9,12 @@ lockout and the 99 Club break; with their switches on they refuse new orders lik
 Money and R are the app's net figures: net ₹ after every charge, R = net / the net risk at the first stop
 (Octagon worked R out from points before charges).
 
+MT5 accounts (roadmap 8 c1, v0.39.0; owner's answers, 11 Nov 2026): their trades are in the account's currency ($, `cur`),
+never added to ₹ (the page shows one currency at a time); net of commission and swap. Per MT5 account (settings "mt5"):
+the session day is the broker's (default) or the Indian day; the 2% line is of FundingPips' day-start balance (the
+balance at the broker's midnight); the lockouts refuse new MT5 orders only with that account's switch on ("block",
+changed with a fresh 2FA code).
+
 File: u/<user>/journal.json = {v, trades: {key: trade}, settings: {rules, pillars, p1}, practice, reviews, ended,
 hidden, synced}. key = "<account>:<position id>" (a live position closed in parts is one trade)."""
 import copy
@@ -65,6 +71,30 @@ DEFAULT_RULES = {
 }
 BOOL_RULES = ("block_dd", "block_afk", "block_end", "cancel_pending")
 TEXT_MAX = 8000
+MT5_ID = "mt5-"            # MT5 accounts' ids (helper/mt5acct.py PREFIX)
+MT5_DEFAULT = {"day": "broker", "block": False}
+CUR_SYM = {"INR": "₹", "USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥"}
+
+
+def is_mt5(aid) -> bool:
+    return str(aid or "").startswith(MT5_ID)
+
+
+def pkey(aid, obj: dict) -> str:
+    """The journal's id of a position: its parts ("P...p1") are one trade; an MT5 position is MT5's position id
+    (its parts, an estimate and the deal that replaces it, MT5's history: all one trade)."""
+    if is_mt5(aid) and obj.get("pid_mt"):
+        try:
+            return f"P{int(obj['pid_mt'])}"
+        except (TypeError, ValueError):
+            pass
+    return base_id(obj["id"])
+
+
+def money(x, cur: str = "INR") -> str:
+    sym = CUR_SYM.get(str(cur or "INR").upper())
+    a = f"{abs(float(x)):,.2f}"
+    return (sym + a) if sym else f"{a} {cur}"
 
 J: dict = {}               # uid -> Journal
 _loop = None               # the helper's event loop (set by rt.start): order cancels run there
@@ -208,7 +238,7 @@ def session_engine(lst: list, R: dict) -> dict:
     return {"acct": lst[0].get("acct", ""), "day": lst[0].get("day", ""), "base": base, "limit": round(limit, 2),
             "cum": round(cum, 2), "peak": round(peak, 2), "dd": round(peak - cum, 2), "maxDd": round(max_dd, 2),
             "ddLockAt": dd_lock, "lockouts": lockouts, "winTimes": win_times, "termAt": min(nr) if nr else None,
-            "streak": streak, "multi": multi, "count": len(lst), "closed": len(closes), "cur": lst[0].get("cur", "INR")}
+            "streak": streak, "multi": multi, "count": len(lst), "closed": len(closes), "cur": lst[0].get("cur") or "INR"}
 
 
 def audit_trade(t: dict, s: dict | None, R: dict, faults: list) -> dict:
@@ -339,6 +369,28 @@ class Journal:
                         "edited": bool(o)})
         return out
 
+    def mt5_cfg(self, aid: str) -> dict:
+        """An MT5 account's journal settings: the session day ("broker" / "ist") and whether its lockouts block."""
+        c = (self.d["settings"].get("mt5") or {}).get(aid) or {}
+        return {"day": c.get("day") if c.get("day") in ("broker", "ist") else MT5_DEFAULT["day"],
+                "block": bool(c.get("block", MT5_DEFAULT["block"]))}
+
+    def set_mt5(self, aid: str, b: dict) -> dict:
+        if not is_mt5(aid):
+            raise ValueError("not an MT5 account")
+        with self.lock:
+            st = self.d["settings"].setdefault("mt5", {})
+            cur = {**self.mt5_cfg(aid)}
+            if "day" in b:
+                if b["day"] not in ("broker", "ist"):
+                    raise ValueError("session day: broker or ist")
+                cur["day"] = b["day"]
+            if "block" in b:
+                cur["block"] = bool(b["block"])
+            st[aid] = cur
+            self._changed()
+            return cur
+
     def p1(self) -> list:
         v = self.d["settings"].get("p1")
         return v if isinstance(v, list) and v else [list(x) for x in P1_CHECKS]
@@ -409,8 +461,10 @@ class Journal:
 
     # -------------------------------------------------------- trades from the engines
     def _new(self, key, aid, acct_name, mode, e_base, src) -> dict:
-        t = {"id": key, "acct": aid, "acct_name": acct_name, "mode": mode, "cur": "INR", "src": "fyers",
-             "pid": base_id(src["id"]), "s": src["s"], "side": src["side"], "product": src.get("product", ""),
+        mt = is_mt5(aid)
+        t = {"id": key, "acct": aid, "acct_name": acct_name, "mode": mode,
+             "cur": (src.get("ccy") or "USD").upper() if mt else "INR", "src": "mt5" if mt else "fyers",
+             "pid": pkey(aid, src), "s": src["s"], "side": src["side"], "product": src.get("product", ""),
              "lot": src.get("lot") or 1, "lots": None, "qty": None, "entries": [], "avg": None, "exit": None,
              "opened": src.get("opened"), "closed": None, "reason": "", "first_sl": src.get("first_sl"),
              "sl": src.get("sl"), "tp": src.get("tp"), "basis": src.get("basis", "self"), "ref": src.get("ref"),
@@ -421,13 +475,15 @@ class Journal:
         t.update(copy.deepcopy(ANN_DEFAULTS))
         return t
 
-    @staticmethod
-    def _planned(t):
+    rows: dict = {}          # MT5 account id -> its engine's row(symbol) (MT5 symbols aren't in Fyers' list)
+
+    def _planned(self, t):
         """The target in net R: net ₹ at the take-profit (all charges) / net risk at the first stop."""
         try:
             if t.get("tp") is None or not t.get("init_risk") or t.get("basis") not in (None, "self"):
                 return None
-            row = symbols.get(t["s"])
+            rf = Journal.rows.get(t.get("acct")) if is_mt5(t.get("acct")) else None
+            row = rf(t["s"]) if rf else symbols.get(t["s"])
             if not row:
                 return None
             qty = t.get("qty") or 0
@@ -438,25 +494,38 @@ class Journal:
         except Exception:
             return None
 
-    def ingest_close(self, aid, acct_name, mode, e_base, rec: dict, still_open: bool = False, backfill=False) -> bool:
+    def ingest_close(self, aid, acct_name, mode, e_base, rec: dict, still_open: bool = False, backfill=False,
+                     day: str | None = None, base: float | None = None) -> bool:
         """A closed position (or a part of one) from the engine's history. Returns True if it was new."""
-        key = f"{aid}:{base_id(rec['id'])}"
+        key = f"{aid}:{pkey(aid, rec)}"
         with self.lock:
             t = self.d["trades"].get(key)
+            was = None                                   # an MT5 estimate this record replaces
             if t and rec["id"] in t["parts"]:
-                return False
+                old = next((c for c in t["closes"] if c["id"] == rec["id"]), None)
+                if not (old and old.get("est") and not rec.get("est")):
+                    return False
+                was = old
+            elif t and is_mt5(aid) and not rec.get("est"):
+                was = next((c for c in t["closes"] if c.get("est")), None)   # (MT5's late deal, under its own id)
+            if was is not None:
+                t["closes"] = [c for c in t["closes"] if c is not was]
+                t["parts"] = [x for x in t["parts"] if x != was["id"]]
             if not t:
                 t = self._new(key, aid, acct_name, mode, e_base, rec)
                 if backfill:
                     t["claimedAt"] = t["created"]       # trades from before the journal count as claimed (Octagon)
                 self.d["trades"][key] = t
             t["parts"].append(rec["id"])
-            if rec.get("src") == "fyers":                # placed in Fyers, not from the app (v0.33.0)
+            if rec.get("src") in ("fyers", "mt5"):       # placed in Fyers (v0.33.0) / in MT5 itself (v0.39.0), not the app
                 t["outside"] = True
+            risk = rec.get("init_risk") or (was or {}).get("init_risk")
             t["closes"].append({"id": rec["id"], "t": rec.get("closed"), "qty": rec.get("qty"), "exit": rec.get("exit"),
                                 "net": rec.get("net"), "gross": rec.get("gross"),
-                                "charges": (rec.get("charges") or {}).get("total"), "init_risk": rec.get("init_risk"),
-                                "reason": rec.get("reason", ""), "bal": rec.get("balance_after"), "lots": rec.get("lots")})
+                                "charges": (rec.get("charges") or {}).get("total"), "init_risk": risk,
+                                "reason": rec.get("reason", ""), "bal": rec.get("balance_after"), "lots": rec.get("lots"),
+                                "est": bool(rec.get("est"))})
+            keep = lambda k: rec.get(k) if rec.get(k) is not None else t.get(k)   # (MT5's history knows no stops)
             cl = sorted(t["closes"], key=lambda c: c.get("t") or 0)
             q = sum(c.get("qty") or 0 for c in cl)
             t.update(
@@ -464,14 +533,16 @@ class Journal:
                 entries=rec.get("entries") or t["entries"], avg=rec.get("avg"), opened=rec.get("opened") or t["opened"],
                 exit=round(sum((c.get("exit") or 0) * (c.get("qty") or 0) for c in cl) / q, 6) if q else rec.get("exit"),
                 closed=cl[-1].get("t"), reason=cl[-1].get("reason", ""),
-                first_sl=rec.get("first_sl", t.get("first_sl")), sl=rec.get("sl"), tp=rec.get("tp"),
+                first_sl=keep("first_sl"), sl=keep("sl"), tp=keep("tp"),
                 basis=rec.get("basis", t.get("basis")), ref=rec.get("ref"),
                 gross=round(sum(c.get("gross") or 0 for c in cl), 2),
                 charges=round(sum(c.get("charges") or 0 for c in cl), 2),
                 net=round(sum(c.get("net") or 0 for c in cl), 2),
                 init_risk=round(sum(c.get("init_risk") or 0 for c in cl), 2),
-                balance_after=cl[-1].get("bal"), day=rec.get("day") or t["day"],
-                status="open" if still_open else "closed", updated=iso())
+                balance_after=cl[-1].get("bal") if cl[-1].get("bal") is not None else t.get("balance_after"),
+                day=day or rec.get("day") or t["day"], status="open" if still_open else "closed", updated=iso())
+            if base is not None:
+                t["base"] = base
             t["r"] = round(t["net"] / t["init_risk"], 2) if t["init_risk"] else None
             if rec.get("path"):                          # the stop's path (v0.29.0): the longest record of it
                 if len(rec["path"]) >= len(t.get("path") or []):
@@ -482,9 +553,9 @@ class Journal:
             t["planned_r"] = self._planned(t)
             return True
 
-    def upsert_open(self, aid, acct_name, mode, e_base, pos: dict, day: str) -> None:
+    def upsert_open(self, aid, acct_name, mode, e_base, pos: dict, day: str, base: float | None = None) -> None:
         """An open position (just filled, added to, or still running)."""
-        key = f"{aid}:{base_id(pos['id'])}"
+        key = f"{aid}:{pkey(aid, pos)}"
         with self.lock:
             t = self.d["trades"].get(key)
             if not t:
@@ -497,9 +568,12 @@ class Journal:
                 t["open_qty"] = pos.get("qty")
                 return
             lot = t.get("lot") or 1
+            if base is not None:
+                t["base"] = base
             t.update(entries=[{"t": e["t"], "qty": e["qty"], "price": e["price"]} for e in pos.get("entries") or []],
                      avg=pos.get("avg"), qty=pos.get("max_qty") or pos.get("qty"), opened=pos.get("opened"),
-                     lots=(pos.get("max_qty") or pos.get("qty") or 0) // lot if lot else None,
+                     lots=pos["lots"] if pos.get("lots") is not None else
+                     ((pos.get("max_qty") or pos.get("qty") or 0) // lot if lot else None),
                      first_sl=pos.get("first_sl"), sl=pos.get("sl"), tp=pos.get("tp"), init_risk=pos.get("init_risk"),
                      best=pos.get("best"), worst=pos.get("worst"), status="open", open_qty=pos.get("qty"),
                      day=t.get("day") or day)
@@ -507,17 +581,85 @@ class Journal:
                 t["path"] = copy.deepcopy(pos["path"])
             t["planned_r"] = self._planned(t)
 
+    # -------------------------------------------------------- MT5 accounts' sessions (v0.39.0)
+    def day_of(self, e, aid: str, ts=None) -> str:
+        """The session day of a time for an account: its engine's trading day, or for an MT5 account set to the
+        Indian day, the IST date from the reset hour (06:00, as the Fyers accounts)."""
+        if is_mt5(aid) and self.mt5_cfg(aid)["day"] == "ist":
+            h = int((e.rules.get("reset_hour", 6) if e else 6) or 0)
+            return (ist(ts if ts is not None else now()) - dt.timedelta(hours=h)).strftime("%Y-%m-%d")
+        return e.trading_day(ts) if e else ""
+
+    def mt5_base(self, e, aid: str, day: str) -> float:
+        """The 2% line's base for an MT5 session (owner, 11 Nov 2026): FundingPips' day-start balance, i.e. the
+        balance at the broker's midnight of the session's (first) broker day; the starting size if MT5 hasn't said."""
+        size = float((e.rules.get("size") if e else 0) or 0)
+        if not e or not hasattr(e, "day_start_balance") or not day:
+            return size
+        bday = day
+        if self.mt5_cfg(aid)["day"] == "ist":
+            h = int(e.rules.get("reset_hour", 6) or 0)
+            try:
+                start = dt.datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=IST) + dt.timedelta(hours=h)
+                bday = e.trading_day(start.timestamp())
+            except ValueError:
+                return size
+        try:
+            b = e.day_start_balance(bday)
+        except Exception:
+            b = None
+        return round(float(b), 2) if b else size
+
+    def _mt5_redate(self, e, aid: str, bases: dict) -> bool:
+        """Every journal trade of an MT5 account on its session day and base (after the day setting changed, or MT5's
+        deals arrived): closed trades by their close, open ones by their opening."""
+        ch = False
+        for t in self.d["trades"].values():
+            if t["acct"] != aid:
+                continue
+            ts = t.get("closed") if t["status"] == "closed" and t.get("closed") else t.get("opened")
+            if ts is None:
+                continue
+            d = self.day_of(e, aid, ts)
+            if d not in bases:
+                bases[d] = self.mt5_base(e, aid, d)
+            b = bases[d]
+            if t.get("day") != d or abs(float(t.get("base") or 0) - b) > 0.005:
+                t["day"], t["base"] = d, b
+                ch = True
+            if t["status"] == "closed" and t.get("balance_after") is None and t.get("closed") and hasattr(e, "balance_at"):
+                ba = e.balance_at(t["closed"])               # (MT5's history: the balance after it, from MT5's deals)
+                if ba is not None:
+                    t["balance_after"] = ba
+                    ch = True
+        return ch
+
     def sync(self, urt, full: bool = False) -> bool:
         """Bring every account's trades in: the engines' history and open positions; with `full` (the first time,
-        and on start-up) also the archived accounts and the archives of earlier ledgers (resets, Paper <-> Live)."""
+        and on start-up) also the archived accounts and the archives of earlier ledgers (resets, Paper <-> Live).
+        MT5 accounts (v0.39.0) only while their engine is there (the admin's)."""
         changed = False
         backfill = not self.d["synced"]
         with self.lock:
-            accts = {a["id"]: a for a in urt.accounts() if a.get("mode") != "mt5"}   # (MT5 accounts: roadmap 8 c)
+            accts = {a["id"]: a for a in urt.accounts()}
             for aid, a in accts.items():
                 e = urt.engines.get(aid)
+                mt = is_mt5(aid)
+                if mt and (e is None or getattr(e, "none", False)):
+                    continue
                 name, mode = a.get("name", ""), a.get("mode", "paper")
                 size = float((e.rules["size"] if e else a.get("capital")) or 0)
+                bases: dict = {}
+
+                def dayb(ts, e=e, aid=aid, bases=bases):
+                    if not mt:
+                        return None, None
+                    d = self.day_of(e, aid, ts)
+                    if d not in bases:
+                        bases[d] = self.mt5_base(e, aid, d)
+                    return d, bases[d]
+                if mt:
+                    Journal.rows[aid] = e.row
                 recs = []
                 if full or not self.d["synced"]:
                     folder = str(store.path(f"u/{urt.uid}/a/{aid}/x").parent)
@@ -527,20 +669,26 @@ class Journal:
                         recs += [(r, mode) for r in store.load(f"u/{urt.uid}/a/{aid}/paper_trades.json", [])]
                 if e:
                     recs += [(r, e.mode) for r in e.history]
-                open_ids = {base_id(p["id"]) for p in (e.positions if e else [])}
+                open_ids = {pkey(aid, p) for p in (e.positions if e else [])}
                 for r, md in recs:
                     if not isinstance(r, dict) or "id" not in r or "s" not in r:
                         continue
-                    if self.ingest_close(aid, name, md, size, r, base_id(r["id"]) in open_ids, backfill):
+                    d, b = dayb(r.get("closed"))
+                    if self.ingest_close(aid, name, md, size, r, pkey(aid, r) in open_ids, backfill, d, b):
                         changed = True
                 if e:
                     for p in e.positions:
-                        self.upsert_open(aid, name, e.mode, size, p, e.trading_day(p.get("opened")))
+                        if mt:
+                            p = {**p, "ccy": e.ccy(), "lots": e.pos_view(p).get("lots")}
+                        d, b = dayb(p.get("opened"))
+                        self.upsert_open(aid, name, e.mode, size, p, d or e.trading_day(p.get("opened")), b)
                     # an open journal trade whose position is gone without a close (e.g. an account reset)
                     for t in self.d["trades"].values():
                         if t["acct"] == aid and t["status"] == "open" and t["pid"] not in open_ids:
                             t["status"] = "closed" if t["closes"] else "removed"
                             changed = True
+                if mt and self._mt5_redate(e, aid, bases):
+                    changed = True
             if not self.d["synced"]:
                 self.d["synced"] = True
                 changed = True
@@ -574,7 +722,9 @@ class Journal:
     def today_state(self, aid: str, day: str) -> dict:
         """Today's session of one account and what it locks."""
         by_id, sessions = self.computed()
-        R = self.rules()
+        R = dict(self.rules())
+        if is_mt5(aid) and not self.mt5_cfg(aid)["block"]:      # an MT5 account's lockouts block only with its switch
+            R.update(block_dd=False, block_afk=False, block_end=False)
         s = sessions.get(f"{aid}|{day}")
         t_now = now()
         lock = None
@@ -587,13 +737,15 @@ class Journal:
                     "text": f"Session ended at {hm(ended)}. Walk away with the 99 coins."}
         elif s and s["ddLockAt"] is not None:
             lock = {"kind": "dd", "on": R["block_dd"], "until": None,
-                    "text": f"Locked out at {hm(s['ddLockAt'])}: equity fell ₹{s['limit']:,.2f} from the session peak. Platform off, zero debate."}
+                    "text": f"Locked out at {hm(s['ddLockAt'])}: equity fell {money(s['limit'], s.get('cur'))} from the session peak. Platform off, zero debate."}
         elif s:
             lo = [l for l in s["lockouts"] if t_now < l["to"]]
             if lo:
                 lo = lo[-1]
                 lock = {"kind": "afk", "on": R["block_afk"], "until": lo["to"],
                         "text": f"Step away until {hm(lo['to'])} — {int((lo['to'] - t_now) // 60) + 1} min left after {lo['why']}."}
+        if lock and is_mt5(aid) and not self.mt5_cfg(aid)["block"]:
+            lock["mt5_off"] = True             # (shown only: this MT5 account's switch is off)
         return {"acct": aid, "day": day, "session": s, "lock": lock, "ended": ended}
 
     def lock_reason(self, aid: str, day: str) -> str | None:
@@ -747,9 +899,9 @@ class Journal:
 
         def when(ts):
             return ist(ts).strftime("%Y-%m-%d %H:%M:%S") if ts else ""
-        head = ["Rep", "Account", "Mode", "Contract", "Side", "Lots", "Qty", "Product", "Opened (IST)", "Closed (IST)",
-                "Entry (avg)", "Exit (avg)", "First stop", "Last stop", "Target", "Gross ₹", "Charges ₹", "Net ₹",
-                "Risk at first stop ₹ (net)", "R (net)", "Planned R", "Held (s)", "Time of day", "Exit reason", "Status",
+        head = ["Rep", "Account", "Mode", "Contract", "Side", "Lots", "Qty", "Product", "Currency", "Opened (IST)", "Closed (IST)",
+                "Entry (avg)", "Exit (avg)", "First stop", "Last stop", "Target", "Gross", "Charges", "Net",
+                "Risk at first stop (net)", "R (net)", "Planned R", "Held (s)", "Time of day", "Exit reason", "Status",
                 "Removed from journal"] + [f"P{p['n']} {p['title']}" for p in pil] + [
                 "Clean octagon", "Breaches", "Direction", "Pillar 1 checks", "Wait state", "Execution", "Execution faults",
                 "Zen Temple", "Target", "Mind running numbers", "Payout pressure", "Market regime", "Bias", "KE", "Setup",
@@ -766,7 +918,7 @@ class Journal:
                 w.writerow([
                     reps["num"].get(t["id"], ""), names.get(t["acct"]) or t.get("acct_name", ""), t.get("mode", ""),
                     t["s"], "BUY" if t["side"] > 0 else "SELL", t.get("lots") or "", t.get("qty") or "", t.get("product", ""),
-                    when(t.get("opened")), when(t.get("closed")) if closed else "", t.get("avg") or "", t.get("exit") if closed else "",
+                    t.get("cur") or "INR", when(t.get("opened")), when(t.get("closed")) if closed else "", t.get("avg") or "", t.get("exit") if closed else "",
                     t.get("first_sl") if t.get("first_sl") is not None else "", t.get("sl") if t.get("sl") is not None else "",
                     t.get("tp") if t.get("tp") is not None else "", t.get("gross") if closed else "",
                     t.get("charges") if closed else "", t.get("net") if closed else "", t.get("init_risk") or "",
@@ -781,7 +933,7 @@ class Journal:
                     t.get("regime", ""), "" if t.get("bias") is None else t["bias"], "" if t.get("ke") is None else t["ke"],
                     ", ".join(t.get("setup") or []), t.get("notes", ""), t.get("review", ""), t.get("rvRight", ""),
                     t.get("rvWrong", ""), "Yes" if t.get("claimedAt") else "", len(t.get("shots") or []), t["id"],
-                    "Fyers" if t.get("outside") else "app"])
+                    ("MT5" if is_mt5(t["acct"]) else "Fyers") if t.get("outside") else "app"])
         return "\ufeff" + out.getvalue()
 
     def backup_zip(self, path: str) -> dict:
@@ -948,7 +1100,8 @@ class Journal:
         a pillar on one trade can change the others of its session)."""
         by_id, sessions = self.computed()
         reps = self.reps(by_id)
-        names = {a["id"]: a for a in urt.accounts() if a.get("mode") != "mt5"}
+        names = {a["id"]: a for a in urt.accounts()
+                 if not is_mt5(a["id"]) or not getattr(urt.engines.get(a["id"]), "none", True)}
         trades = []
         hid = set(self.d["hidden"])
         with self.lock:
@@ -973,10 +1126,14 @@ class Journal:
         today = {}
         for aid, a in names.items():
             e = urt.engines.get(aid)
-            day = e.trading_day() if e else ""
-            accts.append({"id": aid, "name": a.get("name", ""), "mode": a.get("mode", "paper"),
-                          "archived": bool(a.get("archived")), "size": float((e.rules["size"] if e else a.get("capital")) or 0),
-                          "balance": e.balance() if e else None, "day": day})
+            day = self.day_of(e, aid) if e else ""
+            row = {"id": aid, "name": a.get("name", ""), "mode": a.get("mode", "paper"),
+                   "archived": bool(a.get("archived")), "size": float((e.rules["size"] if e else a.get("capital")) or 0),
+                   "balance": e.balance() if e else None, "day": day, "cur": "INR"}
+            if is_mt5(aid):
+                row.update(cur=e.ccy() if e else "USD", mt5=self.mt5_cfg(aid), server=(e.info.get("server") if e else "") or "",
+                           dd_base=self.mt5_base(e, aid, day) if e else None, broker_day=e.trading_day() if e else "")
+            accts.append(row)
             if e:
                 today[aid] = self.today_state(aid, day)
         if only is not None:
@@ -1021,13 +1178,19 @@ def _cancel_pending(urt, aid: str):
         go()
 
 
+def day_now(urt, aid: str) -> str:
+    """Today's session day of an account (its engine's trading day; an MT5 account's as set in the journal)."""
+    e = urt.engines.get(aid)
+    return get(urt.uid).day_of(e, aid) if e else ""
+
+
 def check_lock(urt, aid: str, before: str | None):
     """After something that can start a lockout: if one started (and it blocks), cancel waiting orders."""
     e = urt.engines.get(aid)
     if not e:
         return
     j = get(urt.uid)
-    now_r = j.lock_reason(aid, e.trading_day())
+    now_r = j.lock_reason(aid, j.day_of(e, aid))
     if now_r and not before and j.rules()["cancel_pending"]:
         _cancel_pending(urt, aid)
 
@@ -1042,17 +1205,23 @@ def on_trade(urt, aid: str, kind: str, obj: dict):
         if not e:
             return
         a = next((x for x in urt.accounts() if x["id"] == aid), {})
-        day = e.trading_day()
+        day = j.day_of(e, aid)
         before = j.lock_reason(aid, day)
         size = float(e.rules["size"] or 0)
-        key = f"{aid}:{base_id(obj['id'])}"
+        key = f"{aid}:{pkey(aid, obj)}"
         was = j.d["trades"].get(key)
         was_status = was["status"] if was else None
+        mt = is_mt5(aid)
+        if mt:
+            Journal.rows[aid] = e.row
         if kind == "close":
-            still = any(base_id(p["id"]) == base_id(obj["id"]) and p["id"] != obj["id"] for p in e.positions)
-            j.ingest_close(aid, a.get("name", ""), e.mode, size, obj, still)
+            still = any(pkey(aid, p) == pkey(aid, obj) and p["id"] != obj["id"] for p in e.positions)
+            d = j.day_of(e, aid, obj.get("closed")) if mt else None
+            j.ingest_close(aid, a.get("name", ""), e.mode, size, obj, still, day=d,
+                           base=j.mt5_base(e, aid, d) if mt else None)
         else:
-            j.upsert_open(aid, a.get("name", ""), e.mode, size, obj, e.trading_day(obj.get("opened")))
+            d = j.day_of(e, aid, obj.get("opened"))
+            j.upsert_open(aid, a.get("name", ""), e.mode, size, obj, d, base=j.mt5_base(e, aid, d) if mt else None)
         j.save()
         t = j.d["trades"].get(key)
         ph = None
@@ -1083,7 +1252,8 @@ def guard(urt, aid: str) -> str | None:
         e = urt.engines.get(aid)
         if not e:
             return None
-        return get(urt.uid).lock_reason(aid, e.trading_day())
+        j = get(urt.uid)
+        return j.lock_reason(aid, j.day_of(e, aid))
     except Exception as ex:
         log.exception("journal guard: %s", ex)
         return None
@@ -1095,7 +1265,8 @@ def lock_state(urt, aid: str) -> dict | None:
         e = urt.engines.get(aid)
         if not e:
             return None
-        lk = get(urt.uid).today_state(aid, e.trading_day())["lock"]
+        j = get(urt.uid)
+        lk = j.today_state(aid, j.day_of(e, aid))["lock"]
         return lk
     except Exception:
         return None

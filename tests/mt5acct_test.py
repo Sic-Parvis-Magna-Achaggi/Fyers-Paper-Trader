@@ -9,10 +9,12 @@ reason; a refused change (backoff, the warning), a lost result (no tag run twice
 app's stop passed before MT5 took it -> a market close; pending orders moved and cancelled; a part closed in MT5; a position
 gone without a deal (estimate, then replaced); commission learned and its change flagged; FundingPips' floors from the
 broker's midnight balance and the typed size; a second terminal (its own ticks, its own account); restart (nothing booked
-twice); placing refused (b2); paper accounts still refuse MT5 symbols; the journal leaves MT5 out (8 c).
+twice); placing refused (b2); paper accounts still refuse MT5 symbols; v0.39.0: MT5 trades in the journal ($, the broker's or
+the Indian day, the 2% line from FundingPips' day-start balance, the lockouts' switch per account).
 
   python3 tests/mt5acct_test.py"""
 import asyncio
+import datetime as dt
 import os
 import shutil
 import sys
@@ -30,6 +32,7 @@ logging.basicConfig(level=logging.WARNING)
 
 from helper import journal, mt5, mt5acct, rt, store, symbols, users  # noqa: E402
 from helper.paper import Paper, Refused  # noqa: E402
+from helper.mt5acct import _f  # noqa: E402
 import fake_mt5  # noqa: E402
 
 OK = FAIL = 0
@@ -640,10 +643,115 @@ async def main():
     await calls(eb, 1)
     ok("a non-admin's terminal: prices only, no account", not rb.mt5_ids() and not any(a.get("mode") == "mt5" for a in rb.accounts()))
 
-    print("the journal leaves MT5 accounts out (roadmap 8 c)")
+    print("v0.39.0: MT5 trades in the journal (roadmap 8 c1)")
     j = journal.get("adm")
     j.sync(r, full=True)
-    ok("no MT5 trade in the journal", not any(t["acct"].startswith("mt5-") for t in j.d["trades"].values()))
+    aid = "mt5-21182752"
+    jt = {k: t for k, t in j.d["trades"].items() if t["acct"] == aid and t["status"] != "removed"}
+    hist_ids = {journal.pkey(aid, h) for h in e.history}
+    ok("every MT5 trade in its history is in the journal", hist_ids and all(f"{aid}:{x}" in j.d["trades"] for x in hist_ids),
+       sorted(hist_ids - {k.split(":", 1)[1] for k in jt}))
+    ok("... in $ (USD), marked MT5", jt and all(t["cur"] == "USD" and t["src"] == "mt5" and t["mode"] == "mt5" for t in jt.values()),
+       {t["cur"] for t in jt.values()})
+    bad = []
+    for k, t in jt.items():
+        if t["status"] != "closed":
+            continue
+        hs = [h for h in e.history if f"{aid}:{journal.pkey(aid, h)}" == k]
+        if abs(sum(h["net"] for h in hs) - t["net"]) > 0.005:
+            bad.append((k, t["net"], [h["net"] for h in hs]))
+    ok("each closed trade's net = MT5's own (profit, commission, swap), parts added up (one trade per MT5 position)", not bad, bad)
+    split = [k for k in jt if "d" in k.split(":", 1)[1]]
+    ok("a part closed in MT5 + the late deal of the rest: one journal trade, not two", not split, split)
+    est_left = [(k, c["id"]) for k, t in jt.items() for c in t["closes"] if c.get("est")
+                and not any(h["id"] == c["id"] and h.get("est") for h in e.history)]
+    ok("an estimate (position gone without a deal) is replaced by MT5's deal in the journal too", not est_left, est_left)
+    opens = [t for t in jt.values() if t["status"] == "open"]
+    ok("open MT5 positions are open journal trades, lots = MT5's volume (0.1, not 10 steps)",
+       len(opens) == len(e.positions) and all(t["lots"] is not None and t["lots"] < 50 and abs(t["lots"] - round(t["lots"], 2)) < 1e-9
+                                              for t in opens), [(t["s"], t["lots"]) for t in opens])
+    ok("a trade placed in MT5 itself is marked as such", any(t.get("outside") for t in jt.values()))
+    nob = [k for k, t in jt.items() if t["status"] == "closed" and t.get("balance_after") is None]
+    ok("every closed MT5 trade has the balance after it (MT5's history: from MT5's deals), for the balance curve", not nob, nob[:3])
+    w = next((t for t in jt.values() if t.get("closed") and t["closed"] == min(x["closed"] for x in jt.values() if x.get("closed"))), None)
+    ok("... the first one: the first deposit + its net", w and abs(w["balance_after"] - (5000 + w["net"])) < 0.02, w and (w["balance_after"], w["net"]))
+    wrong_day = [(k, t["day"]) for k, t in jt.items() if t["status"] == "closed" and t["day"] != e.trading_day(t["closed"])]
+    ok("the session day: the broker's by default (a closed trade on its close's broker day)", not wrong_day, wrong_day[:3])
+    wrong_base = [(k, t["base"], e.day_start_balance(t["day"])) for k, t in jt.items()
+                  if abs(t["base"] - (e.day_start_balance(t["day"]) or e.rules["size"])) > 0.005]
+    ok("the 2% line's base: FundingPips' day-start balance of that broker day", not wrong_base, wrong_base[:3])
+    ok("... today's = the balance at the broker's midnight", abs(e.day_start_balance(e.trading_day()) - e.day["start_bal"]) < 0.005)
+    old_days = sorted({t["day"] for t in jt.values()})
+    if len(old_days) > 1:
+        d0 = old_days[0]
+        later = sum(_f(x.get("pr")) + _f(x.get("c")) + _f(x.get("sw")) + _f(x.get("fee")) for x in e.deals.values()
+                    if _f(x.get("ts")) >= dt.datetime.strptime(d0, "%Y-%m-%d").replace(tzinfo=dt.timezone.utc).timestamp())
+        ok("an older day's base = today's balance minus everything MT5 booked since that day's midnight",
+           abs(e.day_start_balance(d0) - round(e.balance() - later, 2)) < 0.005, (d0, e.day_start_balance(d0)))
+    v = j.view(r)
+    va = next((a for a in v["accounts"] if a["id"] == aid), None)
+    ok("the page gets the MT5 account: $, its settings (broker day, lockouts not blocking), today's base",
+       va and va["cur"] == "USD" and va["mode"] == "mt5" and va["mt5"] == {"day": "broker", "block": False}
+       and abs(va["dd_base"] - e.day["start_bal"]) < 0.005 and aid in v["today"], va)
+    ok("... and the empty MT5 placeholder never", not any(a["id"] == "mt5-none" for a in v["accounts"]))
+    csv = j.csv_text(r)
+    ok("CSV: a Currency column (USD for MT5) and 'MT5' for trades placed there", "Currency" in csv.splitlines()[0]
+       and ",USD," in csv and ",MT5\r\n" in csv, csv.splitlines()[0][:200])
+
+    print("v0.39.0: the Indian day instead of the broker's")
+    j.set_mt5(aid, {"day": "ist"})
+    j.sync(r)
+    jt = {k: t for k, t in j.d["trades"].items() if t["acct"] == aid and t["status"] != "removed"}
+    ist_day = lambda ts: (dt.datetime.fromtimestamp(ts, journal.IST) - dt.timedelta(hours=6)).strftime("%Y-%m-%d")
+    wrong = [(k, t["day"]) for k, t in jt.items() if t["day"] != ist_day(t["closed"] if t["status"] == "closed" else t["opened"])]
+    ok("every MT5 trade moves to its IST day (from 06:00, like the Fyers accounts)", not wrong, wrong[:3])
+    ok("today's session day follows the setting", j.day_of(e, aid) == ist_day(journal.now()))
+    wrong_base = [(k, t["base"]) for k, t in jt.items()
+                  if abs(t["base"] - j.mt5_base(e, aid, t["day"])) > 0.005]
+    ok("... the base stays FundingPips' day-start balance (of the broker day the IST session starts in)", not wrong_base, wrong_base[:3])
+    j.set_mt5(aid, {"day": "broker"})
+    j.sync(r)
+    ok("back to the broker's day", all(t["day"] == e.trading_day(t["closed"] if t["status"] == "closed" else t["opened"])
+                                      for t in j.d["trades"].values() if t["acct"] == aid and t["status"] != "removed"))
+
+    print("v0.39.0: the lockouts on an MT5 account (a switch, off by default)")
+    j.set_settings({"rules": {"dd_pct": 0.001}})          # (today's kill-switch closes were losses: the 2% line is passed)
+    st = j.today_state(aid, j.day_of(e, aid))
+    ok("today's MT5 session: the trailing-drawdown lockout is worked out ($ text)", st["lock"] and st["lock"]["kind"] == "dd"
+       and "$" in st["lock"]["text"] and "₹" not in st["lock"]["text"], st["lock"])
+    ok("... with the account's switch off it doesn't block (shown only)", st["lock"]["mt5_off"] and not st["lock"]["on"]
+       and journal.guard(r, aid) is None and e.journal_guard() is None)
+    j.set_mt5(aid, {"block": True})
+    g = journal.guard(r, aid)
+    ok("switch on: new MT5 orders are refused by the journal (Pillar 4)", g and "Blocked by your journal (Pillar 4)" in g, g)
+    ok("... through the engine's own guard too", "Blocked by your journal" in str(Paper.guard_new(e, {"s": "MT5:XAUUSD", "side": 1,
+                                                                                                         "product": "MT5"})))
+    ok("... and the ticket sees the lock", (e.snapshot().get("jlock") or {}).get("kind") == "dd")
+    ok("the other MT5 account isn't blocked by this one's session", journal.guard(r, "mt5-21182753") is None)
+    j.set_mt5(aid, {"block": False})
+    j.set_settings({"rules": {"dd_pct": 2.0}})
+    ok("switch off again: not blocked", journal.guard(r, aid) is None)
+    try:
+        j.set_mt5(r.paper_ids()[0], {"day": "ist"})
+        ok("MT5 settings refused for a paper account", False)
+    except ValueError:
+        ok("MT5 settings refused for a paper account", True)
+
+    print("v0.39.0: a trade from MT5 arrives in the journal as it happens")
+    n0 = len([t for t in j.d["trades"].values() if t["acct"] == aid])
+    bid, ask = ea.quote("XAUUSD")
+    tk9 = ea.open("XAUUSD", 1, 0.02, sl=round(bid - 6, 2), tp=round(bid + 12, 2))
+    await calls(ea, 2)
+    t9 = j.d["trades"].get(f"{aid}:P{tk9}")
+    ok("opened in MT5 -> an open journal trade at once (0.02 lot, its 1R risk, $)", t9 and t9["status"] == "open" and t9["lots"] == 0.02
+       and t9["init_risk"] > 0 and t9["cur"] == "USD" and len([t for t in j.d["trades"].values() if t["acct"] == aid]) == n0 + 1, t9)
+    ea.close_pos(tk9)
+    await calls(ea, 2)
+    t9 = j.d["trades"].get(f"{aid}:P{tk9}")
+    h9 = next((h for h in e.history if h.get("ticket") == tk9), None)
+    ok("closed in MT5 -> closed in the journal with MT5's net and R", t9 and h9 and t9["status"] == "closed"
+       and abs(t9["net"] - h9["net"]) < 0.005 and t9["r"] is not None and abs(t9["r"] - round(h9["net"] / t9["init_risk"], 2)) < 0.011,
+       (t9 and t9["net"], h9 and h9["net"]))
 
     print("restart")
     n_hist = len(e.history)

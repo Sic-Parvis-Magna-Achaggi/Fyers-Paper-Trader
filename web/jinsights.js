@@ -26,11 +26,19 @@ function jiQuad(t){ return JI_QUADS[`${jiOutcome(t)}|${jiProcess(t.audit)}`] || 
 function jiPct(v, d = 1){ return v == null || !isFinite(v) ? "—" : `${v >= 0 ? "" : "−"}${Math.abs(v * 100).toFixed(d)}%`; }
 function jiRatio(v, d = 2){ return v == null || Number.isNaN(v) ? "—" : v === Infinity ? "∞" : v.toFixed(d); }
 function jiSpan(sec){ if(!sec) return "—"; const d = sec / 86400; return d >= 1 ? `${d.toFixed(d < 10 ? 1 : 0)} days` : jDur(Math.round(sec)); }
-function jiShortMoney(v){
+function jiShortMoney(v, cur){
   if(v == null || !isFinite(v)) return "—";
-  const a = Math.abs(v), s = v > 0 ? "+" : v < 0 ? "−" : "";
+  cur = cur || jCur();
+  const a = Math.abs(v), s = v > 0 ? "+" : v < 0 ? "−" : "", y = jSym(cur);
+  if(cur !== "INR") return a < 1000 ? `${s}${y}${Math.round(a)}` : a < 1e6 ? `${s}${y}${(a / 1000).toFixed(a >= 10000 ? 0 : 1)}k` : `${s}${y}${(a / 1e6).toFixed(1)}M`;
   return a < 1000 ? `${s}₹${Math.round(a)}` : a < 100000 ? `${s}₹${(a / 1000).toFixed(a >= 10000 ? 0 : 1)}k` : `${s}₹${(a / 100000).toFixed(a >= 1e6 ? 0 : 1)}L`;
 }
+function jiCurSeg(id){                       // ₹ | $ for the Review and Copy for Gemini (v0.39.0): one currency at a time
+  const curs = jCurList(), cur = jCur();
+  return curs.length > 1 ? `<span class="seg ji-curseg" id="${id}">${curs.map(c => `<button type="button" data-c="${jEsc(c)}" class="${c === cur ? "on" : ""}">${jEsc(jSym(c).trim())} ${c === "INR" ? "Fyers" : "MT5"}</button>`).join("")}</span>` : "";
+}
+function jiCurAccts(){ const cur = jCur(); return JN.d.accounts.filter(a => (!a.archived || JN.d.trades.some(t => t.acct === a.id)) && (a.cur || "INR") === cur); }
+function jiAcctLabel(a){ return (a.mode === "mt5" ? "MT5 " : "") + a.name + (a.mode === "live" ? " · LIVE" : ""); }
 function jiSum(items){ const s = jSummary(items), withR = items.filter(t => t.status === "closed" && t.r != null); s.totalR = withR.reduce((a, t) => a + t.r, 0); return s; }
 function jiClosed(items){ return items.filter(t => t.status === "closed" && t.net != null && t.closed != null); }
 function jiAcctSize(id){ const a = ((JN.d && JN.d.accounts) || []).find(x => x.id === id); return a ? a.size || 0 : 0; }
@@ -235,8 +243,8 @@ function jiInsights(){
 }
 
 /* ------------------------------------------------------------------ the weekly Review and the calendar */
-function jiRvAcct(){ return JI.rv.acct ?? (jF().acct || ""); }
-function jiRvItems(){ const acc = jiRvAcct(); return JN.d.trades.filter(t => !t.hidden && t.status === "closed" && t.net != null && (!acc || t.acct === acc)); }
+function jiRvAcct(){ const a = JI.rv.acct ?? (jF().acct || ""); return a && !jiCurAccts().some(x => x.id === a) ? "" : a; }
+function jiRvItems(){ const acc = jiRvAcct(), cur = jCur(); return JN.d.trades.filter(t => !t.hidden && t.status === "closed" && t.net != null && (t.cur || "INR") === cur && (!acc || t.acct === acc)); }
 function jiIn(all, from, to){ return all.filter(t => { const k = jiCloseDay(t); return k >= from && k <= to; }); }
 function jiWeekStats(all, start){
   const end = jAddDays(start, 6), items = jiIn(all, start, end), s = jiSum(items);
@@ -250,14 +258,15 @@ function jiReview(){
   const body = jq("#jnBody"); if(!body || !JN.d) return;
   const mode = JI.rv.mode || (jPref().rvMode === "month" ? "month" : "week");
   JI.rv.mode = mode;
-  const accts = JN.d.accounts.filter(a => !a.archived || JN.d.trades.some(t => t.acct === a.id));
-  const head = `<div class="ji-rvhead"><span class="seg" id="jiRvMode"><button data-v="week" class="${mode === "week" ? "on" : ""}">Week</button><button data-v="month" class="${mode === "month" ? "on" : ""}">Calendar</button></span>
+  const accts = jiCurAccts();
+  const head = `<div class="ji-rvhead">${jiCurSeg("jiRvCur")}<span class="seg" id="jiRvMode"><button data-v="week" class="${mode === "week" ? "on" : ""}">Week</button><button data-v="month" class="${mode === "month" ? "on" : ""}">Calendar</button></span>
     <button class="ghost" id="jiRvPrev" aria-label="Earlier">‹</button><b id="jiRvTitle"></b><button class="ghost" id="jiRvNext" aria-label="Later">›</button><button class="ghost" id="jiRvNow"></button>
-    <span class="sp"></span><select id="jiRvAcct"><option value="">All accounts</option>${accts.map(a => `<option value="${jEsc(a.id)}"${a.id === jiRvAcct() ? " selected" : ""}>${jEsc(a.name)}${a.mode === "live" ? " · LIVE" : ""}</option>`).join("")}</select></div>
+    <span class="sp"></span><select id="jiRvAcct"><option value="">All accounts</option>${accts.map(a => `<option value="${jEsc(a.id)}"${a.id === jiRvAcct() ? " selected" : ""}>${jEsc(jiAcctLabel(a))}</option>`).join("")}</select></div>
     <p class="muted jn-small" id="jiRvSub"></p><div id="jiRvBody"></div>`;
   const draft = jq("#jiRvWell") ? {week: JI.rv.week, well: jq("#jiRvWell").value, broke: jq("#jiRvBroke").value, focus: jq("#jiRvFocus").value} : null;
   body.innerHTML = head;
   jqa("#jiRvMode button").forEach(b => b.onclick = () => { JI.rv.mode = b.dataset.v; jPrefSet("rvMode", b.dataset.v); jiReview(); });
+  jqa("#jiRvCur [data-c]").forEach(b => b.onclick = () => { JN.cur = b.dataset.c; JI.rv.acct = ""; jiReview(); });
   jq("#jiRvAcct").onchange = e => { JI.rv.acct = e.target.value; jiReview(); };
   jq("#jiRvPrev").onclick = () => jiRvMove(-1); jq("#jiRvNext").onclick = () => jiRvMove(1);
   jq("#jiRvNow").onclick = () => { JI.rv.week = null; JI.rv.month = null; jiReview(); };
@@ -345,7 +354,7 @@ function jiRvTrades(cur){
     return `<div class="ji-rvt"><div><b>${jEsc(jShort(t.s))}</b> <span class="jt-side ${t.side > 0 ? "buy" : "sell"}">${t.side > 0 ? "Buy" : "Sell"} ${t.lots ?? ""}</span> ${q ? `<span class="jb jb-${q.tone === "calm" ? "calm" : q.tone}">${q.name}</span>` : ""}
         <div class="jt-sub">${t.rep ? `Rep ${t.rep} · ` : ""}${jEsc(jWhen(t.opened))} · ${jEsc(t.acct_name)}${(t.shots || []).length ? ` · 📷 ${t.shots.length}` : ""}</div>
         ${t.audit.breaches.length ? `<div class="jn-badges">${t.audit.breaches.map(b => `<span class="jb jb-bad">${b.p.slice(1)} · ${jEsc(jPillar(Number(b.p.slice(1))).short)}</span>`).join("")}</div>` : ""}</div>
-      <div class="ji-rvtr"><b class="mono ${t.net > 0 ? "up" : t.net < 0 ? "down" : ""}">${jMoney(t.net)}</b><div class="jt-sub">${t.r == null ? "" : jR(t.r)}</div>
+      <div class="ji-rvtr"><b class="mono ${t.net > 0 ? "up" : t.net < 0 ? "down" : ""}">${jMoney(t.net, true, t.cur)}</b><div class="jt-sub">${t.r == null ? "" : jR(t.r)}</div>
         <button class="${refl ? "" : "primary"}" data-walk="${i}" data-ids="${ids}" data-label="${jEsc(F[0])}">${refl ? "✓ Reflected · open" : "Look back & reflect"}</button></div>
       ${t.rvRight ? `<p><span class="up">Right:</span> ${jEsc(t.rvRight)}</p>` : ""}${t.rvWrong ? `<p><span class="down">Wrong:</span> ${jEsc(t.rvWrong)}</p>` : ""}${t.review ? `<p><span class="ji-gold">Lesson:</span> ${jEsc(t.review)}</p>` : ""}</div>`; }).join("");
   const done = list.filter(t => t.rvRight || t.rvWrong || t.review).length;
@@ -377,7 +386,7 @@ function jiRvSummary(over){
     `No pillar broken: ${c.held}/${c.audited} audited reps · Clean octagon ${c.clean}/${s.closed}`,
     leak && leak.count ? `Biggest leak: P${leak.n} ${jPillar(leak.n).title} — ${leak.count} break${leak.count === 1 ? "" : "s"}, ${jMoney(leak.net)}` : "No pillar broken",
     c.lock ? `Lockouts: ${JN.d.rules.dd_pct}% hit ${c.lock.ddHit}${c.lock.ddIgnored ? ` (${c.lock.ddIgnored} ignored)` : ""} · 99 Club breaks ${c.lock.afk}${c.lock.afkIgnored ? ` (${c.lock.afkIgnored} ignored)` : ""}` : "",
-    `Practice: ${c.practice}/7 days`, "(₹ and R net of all charges)"];
+    `Practice: ${c.practice}/7 days`, jCur() === "INR" ? "(₹ and R net of all charges)" : `(${jSym(jCur()).trim()} and R net of commission and swap)`];
   const lf = (JN.d.reviews[jAddDays(wk, -7)] || {}).focus;
   if(lf) L.push("", `Last week's focus: ${lf}${rv.focusKept ? ` → ${{held: "held", partly: "partly held", missed: "missed"}[rv.focusKept]}` : ""}`);
   if(rv.well) L.push("", `✅ Went well: ${rv.well}`);
@@ -465,7 +474,7 @@ function jiWalkRender(){
         <div class="ji-wblock">${q ? `<span class="jb jb-${q.tone === "calm" ? "calm" : q.tone} ji-verdict">${q.name}</span><p class="muted jn-small">${jEsc(q.what)}</p>` : `<span class="jb jb-none ji-verdict">Octagon not recorded</span><p class="muted jn-small">Audit its pillars to judge the process.</p>`}</div>
         <div class="ji-wblock"><h4>The trade</h4><div class="jn-facts ji-wfacts">
           ${t.rep ? fact("Rep", `${t.rep} · ${jEsc(t.acct_name)}`) : ""}
-          ${fact("Result", `<span class="${t.net > 0 ? "up" : t.net < 0 ? "down" : ""}">${jMoney(t.net)}</span>${t.r != null ? " · " + jR(t.r) : ""}`)}
+          ${fact("Result", `<span class="${t.net > 0 ? "up" : t.net < 0 ? "down" : ""}">${jMoney(t.net, true, t.cur)}</span>${t.r != null ? " · " + jR(t.r) : ""}`)}
           ${fact("Entry → exit", `<span class="mono">${jPx(t.avg)} → ${jPx(t.exit)}</span>`)}
           ${fact("First stop · target", `<span class="mono">${jPx(t.first_sl)} · ${jPx(t.tp)}</span>${t.planned_r != null ? ` (${t.planned_r.toFixed(1)}R)` : ""}`)}
           ${t.closed && t.opened ? fact("Held", jDur(t.closed - t.opened)) : ""}${t.regime ? fact("Regime", jEsc(t.regime)) : ""}
@@ -503,7 +512,7 @@ function jiAiOpen(scope, tradeId){
   let m = jq("#jiAi");
   if(!m){ m = document.createElement("div"); m.id = "jiAi"; m.className = "jn-modal"; document.body.append(m); m.onclick = e => { if(e.target === m) jiAiClose(); }; }
   m.classList.remove("hide");
-  const accts = JN.d.accounts.filter(a => !a.archived || JN.d.trades.some(t => t.acct === a.id));
+  const accts = jiCurAccts();
   const scopes = [["today", "Today"], ["yesterday", "Yesterday"], ["thisweek", "This week"], ["lastweek", "Last week"]];
   if(JI.ai.week) scopes.push([scope, `Week of ${jiWeekLabel(JI.ai.week)}`]);
   if(tradeId) scopes.push(["trade", "This trade"]);
@@ -511,12 +520,14 @@ function jiAiOpen(scope, tradeId){
   m.innerHTML = `<div class="jn-mbox ji-aibox" role="dialog" aria-label="Copy for Gemini">
     <div class="jn-mhead"><b>Copy for Gemini</b><span class="muted">your trades with all 8 pillars, as text for a psychology chat</span><span class="sp"></span><button class="ghost" id="jiAiX" aria-label="Close">✕</button></div>
     <div class="ji-aiopts"><div><label for="jiAiScope">Trades</label><select id="jiAiScope">${scopes.map(([v, l]) => `<option value="${jEsc(v)}"${v === def ? " selected" : ""}>${jEsc(l)}</option>`).join("")}</select></div>
-      <div><label for="jiAiAcct">Account</label><select id="jiAiAcct"><option value="">All accounts</option>${accts.map(a => `<option value="${jEsc(a.id)}"${a.id === aDef ? " selected" : ""}>${jEsc(a.name)}${a.mode === "live" ? " · LIVE" : ""}</option>`).join("")}</select></div>
+      <div><label for="jiAiAcct">Account</label><select id="jiAiAcct"><option value="">All accounts</option>${accts.map(a => `<option value="${jEsc(a.id)}"${a.id === aDef ? " selected" : ""}>${jEsc(jiAcctLabel(a))}</option>`).join("")}</select></div>
+      ${jiCurSeg("jiAiCur") ? `<div><label>Money</label>${jiCurSeg("jiAiCur")}</div>` : ""}
       <label class="jn-flag"><input type="checkbox" id="jiAiRules"${jPref().aiRules ? " checked" : ""}> Start with my Octagon rules (for a new chat)</label></div>
     <textarea id="jiAiText" class="mono" rows="18" readonly></textarea>
     <div class="jn-mfoot"><span class="muted jn-small" id="jiAiCount"></span><span class="sp"></span><button id="jiAiClose">Close</button><button class="primary" id="jiAiCopy">Copy</button></div></div>`;
   const upd = () => { const txt = jiAiText(); jq("#jiAiText").value = txt.text; jq("#jiAiCount").textContent = `${txt.n} trade${txt.n === 1 ? "" : "s"} · ${txt.text.length.toLocaleString("en-IN")} characters`; };
   ["#jiAiScope", "#jiAiAcct"].forEach(s => jq(s).onchange = upd);
+  jqa("#jiAiCur [data-c]").forEach(b => b.onclick = () => { JN.cur = b.dataset.c; jiAiOpen(scope, tradeId); if(PG.page === "journal") jnRender(); });
   jq("#jiAiRules").onchange = e => { jPrefSet("aiRules", e.target.checked); upd(); };
   jq("#jiAiX").onclick = jq("#jiAiClose").onclick = jiAiClose;
   jq("#jiAiCopy").onclick = async () => { if(await jiCopy(jq("#jiAiText").value, "Copied: paste it into your Gemini notebook")) jq("#jiAiCount").textContent = "✓ Copied — paste it into your Gemini notebook."; else { jq("#jiAiText").focus(); jq("#jiAiText").select(); } };
@@ -532,16 +543,17 @@ function jiAiTrades(){
   if(scope === "today"){ from = to = today; label = `today, ${jFmtDay(today)}`; }
   else if(scope === "yesterday"){ from = to = jAddDays(today, -1); label = `yesterday, ${jFmtDay(from)}`; }
   else { const st = scope === "thisweek" ? jiWeekStart(today) : scope === "lastweek" ? jAddDays(jiWeekStart(today), -7) : scope.slice(5); from = st; to = jAddDays(st, 6); label = `the week of ${jiWeekLabel(st)}`; }
-  const list = JN.d.trades.filter(t => !t.hidden && t.day && t.day >= from && t.day <= to && (!acc || t.acct === acc));
+  const cur = jCur();
+  const list = JN.d.trades.filter(t => !t.hidden && t.day && t.day >= from && t.day <= to && (t.cur || "INR") === cur && (!acc || t.acct === acc));
   return {label, list, from, to};
 }
 function jiAiTrade(t, k, total){
   const a = t.audit, q = t.status === "closed" ? jiQuad(t) : null, L = [], tm = ts => ts ? jWhen(ts, true).slice(-8) : "—";
-  L.push(`### Trade ${k} of ${total}${t.rep ? ` — Rep ${t.rep}` : ""} · ${jShort(t.s)} ${t.side > 0 ? "BUY" : "SELL"} ${t.lots ?? ""} lot${t.lots === 1 ? "" : "s"}${t.mode === "live" ? " · LIVE" : " · paper"}`);
+  L.push(`### Trade ${k} of ${total}${t.rep ? ` — Rep ${t.rep}` : ""} · ${jShort(t.s)} ${t.side > 0 ? "BUY" : "SELL"} ${t.lots ?? ""} lot${t.lots === 1 ? "" : "s"}${t.mode === "live" ? " · LIVE" : t.mode === "mt5" ? " · MT5 (FundingPips)" : " · paper"}`);
   L.push(`- Opened ${tm(t.opened)} → ${t.status === "closed" ? `closed ${tm(t.closed)}` : "still open"} IST${t.status === "closed" && t.opened ? ` · held ${jDur(t.closed - t.opened)}` : ""}${t.tod ? ` · ${t.tod}` : ""}`);
   L.push(`- Entry ${jPx(t.avg)} → exit ${t.status === "closed" ? jPx(t.exit) : "—"} · first stop ${jPx(t.first_sl)}${t.sl != null && t.sl !== t.first_sl ? ` (last stop ${jPx(t.sl)})` : ""} · target ${jPx(t.tp)}${t.planned_r != null ? ` (planned ${t.planned_r.toFixed(1)}R)` : ""}`);
-  if(t.init_risk) L.push(`- Risk at the first stop ${jMoney(t.init_risk, false)} net of charges`);
-  if(t.status === "closed") L.push(`- P&L: gross ${jMoney(t.gross)} · charges ${jMoney(t.charges, false)} · net ${jMoney(t.net)}${t.r != null ? ` = ${jR(t.r)}` : ""}${t.reason ? ` · exit: ${J_REASON[t.reason] || t.reason}` : ""}`);
+  if(t.init_risk) L.push(`- Risk at the first stop ${jMoney(t.init_risk, false, t.cur)} net of charges`);
+  if(t.status === "closed") L.push(`- P&L: gross ${jMoney(t.gross, true, t.cur)} · charges ${jMoney(t.charges, false, t.cur)} · net ${jMoney(t.net, true, t.cur)}${t.r != null ? ` = ${jR(t.r)}` : ""}${t.reason ? ` · exit: ${J_REASON[t.reason] || t.reason}` : ""}`);
   if((t.setup || []).length) L.push(`- Setup: ${t.setup.join(", ")}`);
   if(q) L.push(`- Outcome × process: ${q.name} — ${q.what}`);
   L.push("- Octagon:");
@@ -573,14 +585,15 @@ function jiAiText(){
     out.push("# My Octagon framework", ...jPillars().map(p => `${p.n}. ${p.title}: ${p.rule}`), `Daily practice: “${JN.d.mantra}”`,
       `My numbers: ${R.dd_pct}% trailing drawdown lockout, ${R.win_streak} wins in a row (or ${R.win_streak} wins of ${R.multi_r}R+) → ${R.afk_min}-minute break, targets above ${R.stretch_r}R are flagged as stretched, ${R.block_pct}% execution blocks. Every closed trade is one rep; I work in blocks of ${R.rep_block} reps.`, "");
   }
-  out.push(`# My trades — ${label}`, "Exported from my trading journal (Indian markets via Fyers). Times are IST. Money (₹) and R are net of every charge — brokerage, exchange fees, STT, stamp duty, GST. R = net result ÷ the net risk at the first stop. Rep numbers count every trade I've taken across all accounts.");
+  out.push(`# My trades — ${label}`, jCur() === "INR" ? "Exported from my trading journal (Indian markets via Fyers). Times are IST. Money (₹) and R are net of every charge — brokerage, exchange fees, STT, stamp duty, GST. R = net result ÷ the net risk at the first stop. Rep numbers count every trade I've taken across all accounts."
+    : `Exported from my trading journal (my FundingPips prop account on MT5). Times are IST. Money (${jSym(jCur()).trim()}) and R are net of the broker's commission and swap. R = net result ÷ the net risk at the first stop. Rep numbers count every trade I've taken across all accounts.`);
   if(!items.length){ out.push("", "No trades in this period."); return {text: out.join("\n"), n: 0}; }
   const groups = new Map(); items.forEach(t => { if(!groups.has(t.skey)) groups.set(t.skey, []); groups.get(t.skey).push(t); });
   const one = jq("#jiAiScope").value === "trade";
   for(const [key, g] of groups){
     const s = JN.d.sessions[key], day = key.split("|")[1], st = jiSum(g), acc = JN.d.accounts.find(a => a.id === g[0].acct);
     const dname = new Date(day + "T12:00:00Z").toLocaleDateString("en-GB", {weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC"});
-    out.push("", `## ${dname} · ${g[0].acct_name}${acc ? ` (${acc.mode === "live" ? "live" : "paper"}${acc.size ? `, ${jMoney(acc.size, false)} account` : ""})` : ""}`);
+    out.push("", `## ${dname} · ${g[0].acct_name}${acc ? ` (${acc.mode === "live" ? "live" : acc.mode === "mt5" ? "MT5" : "paper"}${acc.size ? `, ${jMoney(acc.size, false, acc.cur)} account` : ""})` : ""}`);
     if(!one){
       out.push(`- ${st.closed} closed trade${st.closed === 1 ? "" : "s"} · net ${jMoney(st.net)} · ${st.wins} won / ${st.losses} lost${st.avgR != null ? ` · total ${jR(st.totalR)}` : ""}`);
       if(s){

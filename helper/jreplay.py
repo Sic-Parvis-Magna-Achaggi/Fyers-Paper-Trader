@@ -315,7 +315,17 @@ def trade_path(urt, t: dict) -> tuple:
 
 # ---------------------------------------------------------------- money during the replay
 def _row(t: dict) -> dict:
-    return {**(symbols.get(t["s"]) or {}), "prod": t.get("product")}
+    """The trade's contract (MT5 symbols, v0.39.0: from the MT5 account's own engine, as the journal has it)."""
+    row = None
+    if str(t.get("acct", "")).startswith("mt5-"):  # (the engine's row: MT5's learned value of a move and commission)
+        from . import journal
+        rf = journal.Journal.rows.get(t["acct"])
+        try:
+            row = rf(t["s"]) if rf else None
+        except Exception:
+            row = None
+    row = row or symbols.get(t["s"])
+    return {**(row or {}), "prod": t.get("product")}
 
 
 def be_price(urt, t: dict) -> float | None:
@@ -377,5 +387,5 @@ def view(urt, t: dict) -> dict:
     path, psrc = trade_path(urt, t)
     closes = [{k: c.get(k) for k in ("t", "qty", "exit", "net", "reason", "lots")} for c in t.get("closes") or []]
     return {"trade": {**{k: t.get(k) for k in FACTS}, "closes": closes}, "path": path, "path_src": psrc,
-            "be": be_price(urt, t), "row": symbols.get(t["s"]) or None,
+            "be": be_price(urt, t), "row": (_row(t) if _row(t).get("tick") else None), "cur": t.get("cur") or "INR",
             "setup": {"entry": full(uid, rec.get("entry")), "exit": full(uid, rec.get("exit"))}}

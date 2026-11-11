@@ -462,10 +462,11 @@ def _num(x, tick=None) -> str:
     return ("-" if x < 0 else "") + v
 
 
-def _money(x, signed=True) -> str:
+def _money(x, signed=True, cur="INR") -> str:
     if x is None:
         return "–"
-    s = f"₹{abs(x):,.2f}"
+    sym = {"INR": "₹", "USD": "$", "EUR": "€", "GBP": "£"}.get(str(cur or "INR").upper())
+    s = f"{sym}{abs(x):,.2f}" if sym else f"{abs(x):,.2f} {cur}"
     return (("+" if x > 0 else "−" if x < 0 else "") if signed else ("−" if x < 0 else "")) + s
 
 
@@ -727,7 +728,7 @@ def render(t: dict, rows: list, res: str, ph: str, bars: int = 120, note: str = 
     parts = [f"Entry {_num(t.get('avg'), tick)}"]
     if own_sl:
         if t.get("first_sl") is not None:
-            parts.append(f"1st SL {_num(t['first_sl'], tick)}" + (f" (risk {_money(t['init_risk'], False)} net)" if t.get("init_risk") else ""))
+            parts.append(f"1st SL {_num(t['first_sl'], tick)}" + (f" (risk {_money(t['init_risk'], False, t.get('cur'))} net)" if t.get("init_risk") else ""))
         if t.get("tp") is not None:
             parts.append(f"TP {_num(t['tp'], tick)}" + (f" ({t['planned_r']:+.2f}R planned)" if t.get("planned_r") is not None else ""))
     else:
@@ -737,13 +738,16 @@ def render(t: dict, rows: list, res: str, ph: str, bars: int = 120, note: str = 
         net, r = t.get("net"), t.get("r")
         held = (t_close - t_open) if t_close and t_open else None
         hs = "" if held is None else (f"{int(held // 3600)} h {int(held % 3600 // 60)} m" if held >= 3600 else f"{int(held // 60)} m {int(held % 60)} s")
-        line2 = [f"Exit {_num(t.get('exit'), tick)}", f"net {_money(net)}" + (f"  {r:+.2f}R" if r is not None else ""),
-                 f"charges {_money(t.get('charges'), False)}", f"held {hs}" if hs else ""]
+        line2 = [f"Exit {_num(t.get('exit'), tick)}", f"net {_money(net, True, t.get('cur'))}" + (f"  {r:+.2f}R" if r is not None else ""),
+                 f"charges {_money(t.get('charges'), False, t.get('cur'))}", f"held {hs}" if hs else ""]
         d.text((PL, fy + 22), "  ·  ".join(x for x in line2 if x), font=f14,
                fill=C["up"] if (net or 0) > 0 else C["down"] if (net or 0) < 0 else C["text"])
     else:
-        d.text((PL, fy + 22), "₹ figures are net of every charge (entry and exit).", font=f12, fill=C["muted"])
-    foot = "Fyers Trade Manager · drawn on the server from your Fyers candles" + (f" · {note}" if note else "")
+        mt = str(t.get("s", "")).startswith("MT5:")
+        d.text((PL, fy + 22), ("$ figures are net of commission and swap (entry and exit)." if mt else
+                               "₹ figures are net of every charge (entry and exit)."), font=f12, fill=C["muted"])
+    foot = ("Fyers Trade Manager · drawn on the server from " + ("MT5's candles" if str(t.get("s", "")).startswith("MT5:")
+                                                                  else "your Fyers candles") + (f" · {note}" if note else ""))
     d.text((W - 14 - d.textlength(foot, font=f11), H - 18), foot, font=f11, fill=C["muted"])
     out = io.BytesIO()
     img.save(out, "PNG", optimize=True)
@@ -766,7 +770,7 @@ def caption(t: dict, sh: dict) -> str:
         px += f" · TP {_num(t.get('tp'))}"
     lines.append(px)
     if t.get("status") == "closed":
-        lines.append(f"Exit {_num(t.get('exit'))} · net {_money(t.get('net'))}" + (f" · {t['r']:+.2f}R" if t.get("r") is not None else ""))
+        lines.append(f"Exit {_num(t.get('exit'))} · net {_money(t.get('net'), True, t.get('cur'))}" + (f" · {t['r']:+.2f}R" if t.get("r") is not None else ""))
     if sh["kind"] == "upload":
         lines.append("Your picture")
     elif sh["kind"] == "chart":

@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 11 Nov 2026 (v0.38.1: alerts with no count limit, 🔔+ on the price scale, 🔔 on drawings, item 21). This is the one task list for the project.
+Updated 11 Nov 2026 (v0.39.0: MT5 trades in the journal, item 8 c1). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -280,7 +280,22 @@ fallback"):** item 8 is built now, stage by stage. Stage a shipped in **v0.34.0*
          closing from the app ±5 min, evaluation: a warning; the kill switch never blocked); the EA trailing by itself
          (TRAIL lines, OfflineTrailSec 20 s, the same rules, never looser) when it can't reach the app, its moves taken as the
          trail when the link is back. **Not run on a real MT5 yet** (the owner compiles 1.20 and tries it on the demo).
-     - [ ] (c) The journal for prop accounts (joins 4b) and FundingPips' rules.
+     - [ ] (c) The journal for prop accounts (joins 4b) and FundingPips' rules. Split on 11 Nov 2026 (owner asked why MT5
+       trades weren't in the journal: they were left out by design until (c)):
+       - [x] **c1. MT5 trades in the Octagon journal** *(v0.39.0)* (owner, 11 Nov 2026, 22:35). **Not seen on a real MT5 yet.** Every MT5 account's trades
+         arrive like paper / live ones (placed from the app or in MT5 itself; MT5's history filled in), with the 8 pillars,
+         reps, tags, review, Insights, CSV and the replay. The owner's answers:
+         - **Money in $, kept apart from ₹** ("yes"): each trade in its account's currency; the journal shows one currency
+           at a time (₹ | $), never added together. R stays net (commission and swap).
+         - **Session day: both** ("can be both"): a choice per MT5 account in Journal › Settings: the broker's day
+           (FundingPips' daily reset, the default) or the Indian day (IST, from 06:00 like the Fyers accounts).
+         - **Lockouts on MT5: an option with 2FA** ("Keep it as an option with 2FA"): a switch per MT5 account, off until
+           you turn it on; changing it either way asks for a fresh 2FA code. With it on, the 2% line, the 99 Club break
+           and session over refuse new MT5 orders (each still with its own switch); closing, BE, trailing and stops never.
+         - **The 2% line is of FundingPips' day-start balance** ("day's starting balance from Fundingpips"): the balance at
+           the broker's midnight (from MT5's own deals), for the session's broker day.
+       - [ ] c2. The prop-firm parts of 4b (phases, payouts, account chains, the Octagon backup import): still waiting for
+         the owner's yes.
      - [ ] (d) **Copy trades between MT5 accounts, later** (owner, 10 Nov: "in the roadmap, we can also have copy trades for
        a later stage"). FundingPips allows copying between your own FundingPips accounts (and out to an external
        account), not into one from outside; and no hedging across accounts, so copies only ever go the same way. Design
@@ -576,6 +591,10 @@ marked before relying on it.
 
 ## Done
 
+- [x] **v0.39.0** (11 Nov): MT5 trades in the journal (item 8 c1): every MT5 trade (from the app, from MT5, MT5's history) in
+  $, never added to ₹ (₹ Fyers | $ MT5 in the filters, Review, Copy for Gemini); the session day per MT5 account (the broker's or
+  the Indian day); the 2% line of FundingPips' day-start balance; the lockouts on MT5 a switch per account (2FA, off at first);
+  the CSV's Currency column; the replay of MT5 trades.
 - [x] **v0.38.1** (11 Nov): alerts: no limit on how many (the limit is on calculations, server-wide, automatic from the server's memory or set by the admin; alerts sharing one calculation share it; Server load on the Alerts page); 🔔+ on the price scale like TradingView (one click = a crossing alert); 🔔 on a selected drawing's bar with its alerts.
 - [x] **v0.38.0** (11 Nov): alerts like TradingView's (item 21): price, candle, Pine plot / alertcondition() / alert(), built-in indicator, drawing and P&F-signal alerts on the server; TradingView's 13 conditions against a value or another series, each condition on its own timeframe; up to 5 conditions (all / any); once / once per bar / once per bar close / once per minute; expiry; watchlist alerts; every chart type; placeholders; pop-up + sound, phone / desktop push (installable app), Telegram, webhook; the Alerts page (manager, log, notifications); 🔔 lines on the chart that drag; Alt+A, right-click, drawings' and ƒx's 🔔; the phone. Node.js installed on the server for Pine.
 - [x] **v0.37.4** (11 Nov): Pine `plot.style_linebr` / `steplinebr` / `areabr` and a colour of na break the line instead of joining it with a diagonal (owner: Chandelier Exit on XAUUSD differed from TradingView); no price label while a plot's latest value is na.

@@ -98,13 +98,17 @@ class UserRT:
 
     def _open(self, a: dict) -> Paper:
         folder = f"{self.dir}a/{a['id']}/"
-        if a.get("mode") == "mt5":                 # an MT5 account (roadmap 8 b1): the admin's only, no journal yet (8 c)
+        if a.get("mode") == "mt5":                 # an MT5 account (roadmap 8 b1): the admin's only
             if self.role != "admin":
                 return None
             e = Mt5Engine(folder, self.uid, a.get("login") or 0, a.get("name", ""))
             e.siblings = lambda me=e: [x for x in self.engines.values() if isinstance(x, Mt5Engine) and x is not me]
             e.on_change = lambda ev, aid=a["id"]: on_engine_change and on_engine_change(self, aid, ev)
             e.on_symbols = lambda: self.feed._resync()
+            # the journal (roadmap 8 c1, v0.39.0): $ trades, the session day and the lockouts' switch per MT5 account
+            e.journal_hook = lambda kind, obj, aid=a["id"]: journal.on_trade(self, aid, kind, obj)
+            e.journal_guard = lambda aid=a["id"]: journal.guard(self, aid)
+            e.journal_lock = lambda aid=a["id"]: journal.lock_state(self, aid)
             self.engines[a["id"]] = e
             return e
         if a["id"] == LIVE_ID:

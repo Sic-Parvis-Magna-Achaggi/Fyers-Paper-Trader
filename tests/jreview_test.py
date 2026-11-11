@@ -148,11 +148,11 @@ text = J.csv_text(U)
 rows = list(csv.reader(io.StringIO(text.lstrip("﻿"))))
 head = rows[0]
 ok(text.startswith("﻿") and len(rows) == 4, f"CSV: a header and the 3 trades ({len(rows) - 1})")
-need = ["Rep", "Contract", "Net ₹", "R (net)", "P1 " + journal.PILLARS[0]["title"], "Clean octagon", "Did right", "Pictures", "Trade id"]
+need = ["Rep", "Contract", "Currency", "Net", "R (net)", "P1 " + journal.PILLARS[0]["title"], "Clean octagon", "Did right", "Pictures", "Trade id"]
 ok(all(h in head for h in need), "CSV: rep, contract, net ₹, R, each pillar, clean octagon, reflections, pictures, the id")
 r0 = dict(zip(head, rows[1]))
 ok(r0["Trade id"] == keys[0] and r0["Did right"] == "Waited for the close" and r0["Pictures"] == "2" and r0["Side"] == "BUY"
-   and abs(float(r0["Net ₹"]) - J.d["trades"][keys[0]]["net"]) < 0.005, "CSV: the first trade's figures and reflection")
+   and abs(float(r0["Net"]) - J.d["trades"][keys[0]]["net"]) < 0.005, "CSV: the first trade's figures and reflection")
 J.set_hidden(keys[2], True)
 r2 = dict(zip(head, list(csv.reader(io.StringIO(J.csv_text(U).lstrip("﻿"))))[3]))
 ok(r2["Removed from journal"] == "Yes", "CSV: a trade removed from the journal is still listed, flagged")
