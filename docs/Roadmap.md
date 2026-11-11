@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 11 Nov 2026 (v0.39.0: MT5 trades in the journal, item 8 c1). This is the one task list for the project.
+Updated 12 Nov 2026 (v0.39.1: each MT5 trade's candles kept for its replay, item 8 c1b). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -294,6 +294,16 @@ fallback"):** item 8 is built now, stage by stage. Stage a shipped in **v0.34.0*
            and session over refuse new MT5 orders (each still with its own switch); closing, BE, trailing and stops never.
          - **The 2% line is of FundingPips' day-start balance** ("day's starting balance from Fundingpips"): the balance at
            the broker's midnight (from MT5's own deals), for the session's broker day.
+       - [x] **c1b. Keep each MT5 trade's candles for its replay** *(v0.39.1)* (owner, 11 Nov 2026, 23:52: "yes"; asked "What happens to
+         replay charts on history? Will we store data or request data from MT5 if it is not available and store it? What
+         amount of period should we store?"). MT5 keeps only so much history (about 100,000 bars by default: 2-3 months of
+         1-minute candles) and MT5 may be off when a replay is opened, so when an MT5 trade closes the server asks MT5 for
+         the candles around it and keeps them with the journal, as long as the trade is in the journal: 1m / 5m / 15m from a
+         day before the entry to an hour after the exit (▶ Play's forming candles), and the chart's own timeframe from
+         1,500 candles before the entry (indicators' warm-up). About 50-100 KB a trade. Trades from MT5's history (closed
+         in the last 120 days) fetched the same way in the background, newest first; nothing fetched while MT5 is off (it
+         waits). Charts and the replay use them wherever the saved candles lack them. In the journal's backup too. Normal
+         chart candles stay as they are (kept, never deleted).
        - [ ] c2. The prop-firm parts of 4b (phases, payouts, account chains, the Octagon backup import): still waiting for
          the owner's yes.
      - [ ] (d) **Copy trades between MT5 accounts, later** (owner, 10 Nov: "in the roadmap, we can also have copy trades for
@@ -591,6 +601,10 @@ marked before relying on it.
 
 ## Done
 
+- [x] **v0.39.1** (12 Nov): each MT5 trade's candles kept on the server for its replay (item 8 c1b): 1m / 5m / 15m around
+  the trade and the chart's timeframe with its warm-up, fetched from MT5 at the close (MT5's history in the background); charts
+  and the replay use them when MT5 is off or its history has moved on; in the journal's backup. Fixed: an MT5 trade's replay
+  asking for a Fyers login.
 - [x] **v0.39.0** (11 Nov): MT5 trades in the journal (item 8 c1): every MT5 trade (from the app, from MT5, MT5's history) in
   $, never added to ₹ (₹ Fyers | $ MT5 in the filters, Review, Copy for Gemini); the session day per MT5 account (the broker's or
   the Indian day); the 2% line of FundingPips' day-start balance; the lockouts on MT5 a switch per account (2FA, off at first);

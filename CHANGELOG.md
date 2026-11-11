@@ -1,5 +1,45 @@
 # Changelog
 
+## v0.39.1 — 12 Nov 2026 — Each MT5 trade's candles kept for its replay
+
+Added
+- **Each MT5 trade's candles are kept on the server for its replay** (roadmap 8 c1b; owner: "yes", after asking what the
+  replay of MT5 trades uses and how long to keep it). MT5 keeps only so much history (about 100,000 bars by default: 2-3
+  months of 1-minute candles) and may be off when you open a replay. So when an MT5 trade closes, the server asks MT5 for
+  the candles around it and keeps them with the journal, for as long as the trade is in the journal:
+  - 1-, 5- and 15-minute candles from a day before the entry to an hour after the exit (what ▶ Play builds its forming
+    candles from);
+  - the chart the trade was placed from (its recorded timeframe, else 5 minutes): 1,500 candles before the entry for the
+    indicators' warm-up (at most 30 days back; daily charts 400 days), to 30 after the exit.
+  About 50-100 KB a trade. Trades from MT5's own history (closed in the last 120 days) are fetched the same way in the
+  background, newest first, one at a time. Nothing is fetched while MT5 is off: it waits and carries on when MT5 is back.
+- **Charts and the replay use the kept candles** wherever the saved ones lack them: the replay of an MT5 trade works with
+  MT5 off, after MT5's own history has moved past it, and after the MT5 candles were cleared (a change of the broker's
+  clock setting).
+- Each MT5 trade's card says **Replay candles: kept on the server** (1m / 5m / 15m / the chart's timeframe, how many),
+  or that it's waiting for MT5.
+- The journal's **backup** holds the kept candles; **restore** puts back any that are missing.
+
+Fixed
+- **The replay of an MT5 trade said "Log in to Fyers to load the replay's candles"** when Fyers wasn't logged in: an MT5
+  trade's candles come from MT5 or the server, not Fyers.
+- The $ balance curve: the balance after a trade from MT5's history is worked out only once all of MT5's deals have
+  arrived (it could be worked out from part of them and then stay wrong), and from the deals' own times (UTC).
+
+Normal chart candles are unchanged: kept on the server, never deleted.
+
+Tests
+- `tests/mt5acct_test.py` (173): a closed trade's 1m / 5m / 15m and chart candles fetched and kept (windows, warm-up);
+  the page told what's kept; MT5's history trades kept in the background; MT5 off with the saved MT5 candles cleared: the
+  replay's 1-minute candles still served from what was kept (a symbol with nothing kept still says MT5 isn't connected);
+  a trade closing while the fetcher waits to retry others is kept at once; backup and restore of the kept candles.
+- `tests/mt5journal_flow.js` (39): the card's kept candles; ▶ On chart of an MT5 trade with MT5 off loads its candles,
+  also with Fyers logged out; ▶ Play runs from the kept 1-minute candles. Passed on consecutive runs.
+- Re-run: `journal_test` (58), `jreview_test` (25), `replay_test` (42), `jshots_test` (52), `mt5_test` (52),
+  `replay_flow` (48), `journal_flow` (43), `mt5_flow` (44), `routes_check.py`.
+- **Not tested on a real MT5:** how far back FundingPips' MT5 gives 1-minute candles (its Max bars in chart); trades
+  further back than that keep only what MT5 still had (the card says so).
+
 ## v0.39.0 — 11 Nov 2026 — MT5 trades in the journal
 
 Added

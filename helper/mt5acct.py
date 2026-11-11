@@ -245,12 +245,8 @@ class Mt5Engine(Paper):
     def balance_at(self, ts: float):
         """The balance just after a moment (UTC): today's balance minus what MT5 booked after it (the journal's
         balance curve for trades from MT5's history, v0.39.0)."""
-        try:
-            srv = self._clock().to_srv(float(ts))
-        except Exception:
-            return None
         moved = sum(_f(d.get("pr")) + _f(d.get("c")) + _f(d.get("sw")) + _f(d.get("fee"))
-                    for d in self.deals.values() if _f(d.get("ts")) > srv + 0.5)
+                    for d in self.deals.values() if _f(d.get("tu")) > float(ts) + 0.5)
         return round(self.balance() - moved, 2)
 
     def roll_day(self):

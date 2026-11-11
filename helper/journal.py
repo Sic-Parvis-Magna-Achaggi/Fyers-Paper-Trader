@@ -26,7 +26,7 @@ import re
 import threading
 import time
 
-from . import jreplay, jshots, charges, store, symbols
+from . import jcandles, jreplay, jshots, charges, store, symbols
 
 log = logging.getLogger("journal")
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
@@ -627,9 +627,10 @@ class Journal:
             if t.get("day") != d or abs(float(t.get("base") or 0) - b) > 0.005:
                 t["day"], t["base"] = d, b
                 ch = True
-            if t["status"] == "closed" and t.get("balance_after") is None and t.get("closed") and hasattr(e, "balance_at"):
-                ba = e.balance_at(t["closed"])               # (MT5's history: the balance after it, from MT5's deals)
-                if ba is not None:
+            if t["status"] == "closed" and t.get("closed") and hasattr(e, "balance_at") and (e.M or {}).get("caught") \
+                    and not any(c.get("bal") is not None for c in t.get("closes") or []):
+                ba = e.balance_at(t["closed"])               # (MT5's history: the balance after it, from MT5's deals, once
+                if ba is not None and ba != t.get("balance_after"):   # they're all in; worked out again each time)
                     t["balance_after"] = ba
                     ch = True
         return ch
@@ -689,6 +690,8 @@ class Journal:
                             changed = True
                 if mt and self._mt5_redate(e, aid, bases):
                     changed = True
+                if mt:                                   # MT5's history: its trades' replay candles, in the background
+                    jcandles.backfill(urt, [t for t in self.d["trades"].values() if t["acct"] == aid])
             if not self.d["synced"]:
                 self.d["synced"] = True
                 changed = True
@@ -945,14 +948,19 @@ class Journal:
                                 "journal": self.d}, indent=1)
             shots = [(k, dict(s)) for k, t in self.d["trades"].items() for s in t.get("shots") or []]
         n = 0
+        kept = jcandles.files(self.uid)
         with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
             z.writestr("journal.json", data)
+            if kept:                                     # MT5 trades' replay candles (v0.39.1)
+                z.writestr("candles/index.json", _json.dumps({k: jcandles.index(self.uid).get(k) for k, _ in kept}))
+                for k, f in kept:
+                    z.write(f, "candles/" + os.path.basename(f), compress_type=zipfile.ZIP_STORED)
             for k, sh in shots:
                 f = jshots.file_of(self.uid, k, sh)
                 if os.path.exists(f):
                     z.write(f, f"pictures/{jshots._safe(k)}/{os.path.basename(f)}", compress_type=zipfile.ZIP_STORED)
                     n += 1
-        return {"trades": len(self.d["trades"]), "pictures": n}
+        return {"trades": len(self.d["trades"]), "pictures": n, "candles": len(kept)}
 
     def restore(self, path: str) -> dict:
         """Add back from a backup (a .zip from backup_zip, or its journal.json): trades, reviews, practice days and
@@ -981,7 +989,16 @@ class Journal:
         d = d.get("journal") if isinstance(d, dict) and "journal" in d else d
         if not isinstance(d, dict) or not isinstance(d.get("trades"), dict):
             raise ValueError("that file isn't a journal backup (no trades in it)")
-        got = {"trades": 0, "reviews": 0, "practice": 0, "pictures": 0, "skipped": 0}
+        got = {"trades": 0, "reviews": 0, "practice": 0, "pictures": 0, "skipped": 0, "candles": 0}
+        if z and "candles/index.json" in z.namelist():  # MT5 trades' replay candles (v0.39.1): only ones not here
+            try:
+                kidx = _json.loads(z.read("candles/index.json"))
+                for k, entry in (kidx or {}).items():
+                    n = "candles/" + jcandles._fname(k)
+                    if n in z.namelist() and jcandles.restore_file(self.uid, k, z.read(n), entry):
+                        got["candles"] += 1
+            except Exception as ex:
+                log.warning("restore: kept candles: %s", ex)
         added = set()
         with self.lock:
             for k, t in d["trades"].items():
@@ -1121,6 +1138,8 @@ class Journal:
                 row["q"] = rep_quality(a) if a else "unaudited"
                 row["skey"] = session_key(t)
                 row["tod"] = metrics(t)["session"]
+                if is_mt5(t["acct"]):
+                    row["kept"] = jcandles.status(self.uid, t["id"])
                 trades.append(row)
         accts = []
         today = {}
@@ -1238,6 +1257,8 @@ def on_trade(urt, aid: str, kind: str, obj: dict):
                 jshots.phase(urt, key, ph)
             except Exception as ex:
                 log.warning("[%s] journal picture: %s", getattr(urt, "label", "?"), ex)
+        if mt and t and t["status"] == "closed" and was_status != "closed":
+            jcandles.want(urt, key, front=True)          # the trade's candles, kept for its replay (v0.39.1)
         if kind == "close":
             check_lock(urt, aid, before)
         if on_change:

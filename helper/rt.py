@@ -388,6 +388,7 @@ def start(loop):
     global _loop
     _loop = loop
     journal._loop = loop
+    journal.jcandles.loop = loop
     for u in users.all_users():
         if not u["disabled"]:
             r = get(u["uid"])

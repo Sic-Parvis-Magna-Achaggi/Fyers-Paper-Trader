@@ -56,6 +56,13 @@ function jCur(){
   const mt = (JN.d && JN.d.accounts || []).find(a => a.mode === "mt5" && !a.archived);
   return side === "mt5" && mt && list.includes(mt.cur) ? mt.cur : list.includes("INR") ? "INR" : list[0];
 }
+function jKept(t){                       // an MT5 trade's candles kept on the server for its replay (v0.39.1)
+  const k = t.kept, tfn = r => r === "D" ? "1D" : +r >= 60 ? (+r / 60) + "h" : r + "m";
+  if(!k) return '<span class="muted">waiting to be fetched from MT5</span>';
+  const got = Object.entries(k.res || {}).filter(([, n]) => n > 0).sort((a, b) => (a[0] === "D" ? 1e9 : +a[0]) - (b[0] === "D" ? 1e9 : +b[0]));
+  if(!got.length) return `<span class="${k.waiting ? "muted" : "down"}">${k.waiting ? "waiting for MT5" : jEsc(k.err || "not kept")}</span>`;
+  return `kept on the server <span class="muted">(${got.map(([r, n]) => tfn(r) + " " + n.toLocaleString("en-IN")).join(" · ")} candles)</span>${k.err ? ` <span class="muted">· ${jEsc(k.err)}</span>` : ""}`;
+}
 function jModeTag(mode){ return mode === "live" ? '<span class="jt-live">LIVE</span>' : mode === "mt5" ? '<span class="jt-mt5">MT5</span>' : ""; }
 function jModeWord(mode){ return mode === "live" ? '<b class="down">Live</b>' : mode === "mt5" ? '<b class="jn-mt5w">MT5</b>' : "Paper"; }
 function jR(r){ return r == null || !isFinite(r) ? "—" : `${r >= 0 ? "+" : "−"}${Math.abs(r).toFixed(2)}R`; }
@@ -389,6 +396,7 @@ function jCard(t){
         ${fact("Gross · charges · net", m.closed ? `<span class="mono">${jMoney(t.gross, true, t.cur)} · ${jMoney(t.charges, false, t.cur)} · ${jMoney(t.net, true, t.cur)}</span>` : "—")}
         ${fact("Size · product", `${t.lots ?? "—"} lot${t.lots === 1 ? "" : "s"} <span class="muted">(qty ${t.qty ?? "—"})</span> · ${jEsc(({INTRADAY: "Intraday", MARGIN: "Carry", CNC: "Delivery"})[t.product] || t.product || "")}`)}
         ${fact("Exit", m.closed ? jEsc(J_REASON[t.reason] || t.reason || "—") + (t.parts_n > 1 ? ` <span class="muted">(${t.parts_n} parts)</span>` : "") : "—")}
+        ${t.mode === "mt5" && t.status === "closed" ? fact("Replay candles", jKept(t)) : ""}
         ${fact("Account", `${jEsc(t.acct_name)} · ${jModeWord(t.mode)}${t.outside ? ` <span class="muted">· placed in ${t.mode === "mt5" ? "MT5" : "Fyers"}</span>` : ""}`)}
         ${t.best != null ? fact("Best · worst price", `<span class="mono">${jPx(t.best)} · ${jPx(t.worst)}</span>`) : ""}
         ${(() => { const p1 = (JN.d.p1 || []); return p1.length ? fact("Pillar 1 checks", `<span class="jt-checks">${p1.map(([k, l]) => `<span class="${(t.p1Checks || []).includes(k) ? "up" : "muted"}">${(t.p1Checks || []).includes(k) ? "✓" : "○"} ${jEsc(l)}</span>`).join("<br>")}</span>`) : ""; })()}

@@ -269,6 +269,13 @@ The Octagon trade journal, inside the app and saved on the server (per user, eve
   99 Club break and session over still show on the Today card and in the audit, but new MT5 orders aren't refused. On: they
   are, each by its own switch below.
 - **The Today card** of an MT5 account: $, its session day, and the room before the 2% line of the day-start balance.
+- **▶ On chart of an MT5 trade** (v0.39.1): when the trade closes, the server asks MT5 for the candles around it and keeps
+  them with the journal, for as long as the trade is there: 1-, 5- and 15-minute candles from a day before the entry to an
+  hour after the exit, and the chart you placed it from (1,500 candles before the entry, for the indicators). So the
+  replay works with MT5 off and long after MT5's own history (about 2-3 months of 1-minute candles) has moved on, and
+  needs no Fyers login. Trades from MT5's history (the last 120 days) are fetched in the background. The trade's card
+  says **Replay candles: kept on the server**, or that it's waiting for MT5 (nothing is fetched while MT5 is off). About
+  50-100 KB a trade; in the journal's backup.
 
 **Lockouts refuse new orders** (Journal › Settings, a switch each, all on at first; MT5 accounts only with their own switch on):
 - **2% trailing drawdown** (Pillar 4): the day's closed trades (net) fall 2% of the account size below the session's peak →

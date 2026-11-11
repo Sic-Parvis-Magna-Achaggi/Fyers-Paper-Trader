@@ -28,7 +28,8 @@ const AID = "mt5-21182752";
   pg.on("dialog", d => d.dismiss());
   await pg.goto("http://localhost:8766/"); await LOGIN(pg);
   await pg.evaluate(() => api("/api/side", {body: {side: "paper"}}));
-  await pg.evaluate(() => api("/api/journal/settings", {body: {rules: {dd_pct: 2}}}));
+  await pg.evaluate(() => api("/api/journal/settings", {body: {rules: {dd_pct: 2, block_dd: true, block_afk: true, block_end: true}}}));
+  await pg.evaluate(() => typeof jPrefSet === "function" && jPrefSet("curve", "bal"));     // (other suites leave it on P&L)
 
   // ---- the terminal and the MT5 side
   let k = (await pg.evaluate(() => api("/api/mt5/key", {body: {}}))).key;
@@ -151,6 +152,41 @@ const AID = "mt5-21182752";
   ok(rk === "mt5-21182752:P" + tk, `History's ▶ On chart finds the MT5 trade's journal entry (${rk})`);
   const rv = await pg.evaluate(k => api("/api/journal/replay?id=" + encodeURIComponent(k)), rk);
   ok(rv && rv.ok && rv.cur === "USD" && rv.trade && rv.trade.s === "MT5:XAUUSD" && rv.row && rv.row.tick, "the replay's data: USD, the MT5 symbol, its contract row");
+
+  // ---- v0.39.1: the trade's candles kept on the server; its replay with MT5 off (and Fyers logged out)
+  const key9 = "mt5-21182752:P" + tk;
+  await pg.waitForFunction(async k => { const j = await api("/api/journal"); const t = j.j.trades.find(x => x.id === k);
+    return t && t.kept && t.kept.res && t.kept.res["1"] > 0; }, key9, { timeout: 180000, polling: 2000 }).catch(() => {});
+  await pg.evaluate(() => { JN.cur = "USD"; jnLoad(); }); await pg.waitForTimeout(800);
+  await pg.click('#jnSub [data-v="trades"]'); await pg.waitForTimeout(300);
+  await pg.click(`.jt-row[data-id="${key9}"]`).catch(() => {});
+  await pg.waitForTimeout(400);
+  const kt = await pg.evaluate(k => { const e = document.querySelector(`[data-id="${k}"]`), t = JN.d.trades.find(x => x.id === k);
+    return (e ? e.closest(".jn-trade, .jt").textContent : "") || (t ? "Replay candles " + jKept(t).replace(/<[^>]+>/g, "") : ""); }, key9);
+  ok(/Replay candles\s*kept on the server/.test(kt) && /1m [\d,]+/.test(kt), `the trade's card: its candles kept on the server (${(/kept on the server[^)]*\)/.exec(kt) || [""])[0]})`);
+  ea.kill(); ea = null;
+  await pg.waitForTimeout(10000);                                 // (MT5 counts as off after 8 s without a call)
+  await pg.evaluate(k => rpOpen(k), key9);
+  await pg.waitForSelector("#rpWrap iframe", { timeout: 5000 });
+  const fr = () => pg.frames().find(f => /[?&]replay=/.test(f.url()));
+  for(let i = 0; i < 40 && !fr(); i++) await pg.waitForTimeout(250);
+  const F = fr();
+  const ready = async (n = 60) => { for(let i = 0; i < n; i++){ try{ const x = await F.evaluate(() => window.rpTest && rpTest.info()); if(x && !x.loading && x.raw > 0) return x; }catch(e){} await pg.waitForTimeout(500); } return null; };
+  let RI = await ready();
+  ok(RI && RI.s === "MT5:XAUUSD" && RI.raw > 0, `▶ On chart of the MT5 trade with MT5 off: its candles load (${RI && RI.raw} candles, ${RI && RI.tf})`);
+  await F.evaluate(() => { S.fyers = {...(S.fyers || {}), logged_in: false}; loadHistory(); });
+  await pg.waitForTimeout(500);
+  RI = await ready();
+  const fm = await F.evaluate(() => document.querySelector("#chartMsg").textContent);
+  ok(RI && RI.raw > 0 && !/Log in to Fyers/.test(fm), "... also with Fyers logged out (an MT5 trade doesn't need Fyers)");
+  const playBtn = await F.evaluate(() => { try{ return document.querySelector('#rpBar [data-a="play"]') ? "ok" : "no"; }catch(e){ return String(e); } });
+  if(playBtn === "ok"){ await F.click('#rpBar [data-a="play"]');
+    for(let i = 0; i < 30 && !(await F.evaluate(() => rpTest.info().steps)); i++) await pg.waitForTimeout(500); }
+  const pi = await F.evaluate(() => rpTest.info());
+  const toasts = await F.evaluate(() => [...document.querySelectorAll(".toast")].map(t => t.textContent).join(" | ") + " / " + document.querySelector("#chartMsg").textContent);
+  ok(playBtn === "ok" && pi && pi.steps > 0, `▶ Play runs from the kept 1-minute candles (${pi && pi.steps} steps${pi && pi.steps ? "" : "; " + toasts + " " + playBtn})`);
+  await pg.screenshot({ path: SHOT + "mt5journal_replay.png" });
+  await pg.evaluate(() => rpClose());
 
   // ---- the phone
   const ph = await (await br.newContext({ ...devices["Pixel 7"] })).newPage();

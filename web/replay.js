@@ -233,7 +233,7 @@ if(window.FTM_REPLAY){
     if(!tr){ msg.textContent = RP.err || "Loading…"; msg.classList.remove("hide"); return; }
     msg.textContent = "Loading the trade's candles…"; msg.classList.remove("hide");
     const plan = tfPlan(tf); curPlan = plan;
-    if(!(S.fyers || {}).logged_in){ msg.textContent = "Log in to Fyers to load the replay's candles."; return; }
+    if(!(S.fyers || {}).logged_in && !(typeof isMT5 === "function" && isMT5(cur.s))){ msg.textContent = "Log in to Fyers to load the replay's candles."; return; }   // (an MT5 trade's come from MT5 or the server: v0.39.1)
     const warm = histDays(plan) * 86400;
     const from = (tr.opened || 0) - warm;
     let rows;

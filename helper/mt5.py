@@ -65,6 +65,17 @@ class Offline(Exception):
     """No MT5 bridge is connected for this user."""
 
 
+KEPT = None                # callable(uid, symbol, res, since) -> candles kept for journal trades' replays (helper/jcandles.py)
+
+
+def _kept(uid, symbol, res, since) -> list:
+    try:
+        return KEPT(uid, symbol, res, since) if KEPT else []
+    except Exception as e:
+        log.warning("kept candles %s %s: %s", symbol, res, e)
+        return []
+
+
 # ---------------------------------------------------------------- the bridge key
 def _sha(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()
@@ -524,9 +535,10 @@ async def history(uid: str, folder: str, symbol: str, res: str, days: int) -> li
                 jobs.append((want, first))
             if now - fetched > FRESH_SEC:
                 jobs.append((max(first, (last or first) - 3 * _sec(res)), now + 86400))
+        kept = await loop.run_in_executor(None, _kept, uid, symbol, res, want)
         if jobs and not b:
-            if last:
-                jobs = []                                       # the saved candles still serve
+            if last or kept:
+                jobs = []                                       # the saved candles (and trades' kept ones) still serve
             else:
                 raise Offline("MT5 isn't connected: start MT5 on your laptop with the FTM Bridge EA on a chart "
                               "(Settings › MT5 bridge)")
@@ -535,7 +547,7 @@ async def history(uid: str, folder: str, symbol: str, res: str, days: int) -> li
             try:
                 rows = await _fetch(u, b, name, res, frm, to)
             except Exception as e:
-                if older or last:                            # older days or new candles failed: the saved ones still serve
+                if older or last or kept:                    # older days or new candles failed: the saved ones still serve
                     log.warning("[%s] MT5 candles %s %s not fetched: %s", uid, symbol, res, e)
                     continue
                 raise
@@ -560,7 +572,41 @@ async def history(uid: str, folder: str, symbol: str, res: str, days: int) -> li
                 return [list(r) for r in candles._conn(folder).execute(
                     "SELECT t, o, h, l, c, v FROM bars WHERE sym=? AND res=? AND t>=? ORDER BY t",
                     (symbol, res, int(want))).fetchall()]
-        return await loop.run_in_executor(None, read)
+        rows = await loop.run_in_executor(None, read)
+        if kept:                                         # (v0.39.1: candles kept for a journal trade fill any gap)
+            have = {int(r[0]) for r in rows}
+            extra = [list(r) for r in kept if int(r[0]) not in have and r[0] >= want]
+            if extra:
+                rows = sorted(rows + extra, key=lambda r: r[0])
+        return rows
+
+
+async def fetch_range(uid: str, folder: str, symbol: str, res: str, frm: float, to: float) -> list:
+    """MT5's candles for [frm, to) (v0.39.1, for a journal trade's replay): asked from the price terminal and saved with
+    the other candles (the store's cover, i.e. "everything since", isn't changed). Raises Offline with no terminal."""
+    u = user(uid)
+    name = symbol[len(PREFIX):]
+    if not NAME_RE.match(name) or res not in RES_MIN:
+        raise ValueError("bad symbol or resolution")
+    b = u.price_bridge()
+    if not b:
+        raise Offline("MT5 isn't connected")
+    loop = asyncio.get_running_loop()
+    if folder not in _checked:
+        await loop.run_in_executor(None, _store_check, folder)
+    # (no chart lock while MT5 answers: a chart or a replay never waits behind a background fetch, e.g. MT5 just went off)
+    rows = await _fetch(u, b, name, res, frm, to)
+    rows = [r for r in rows if frm <= r[0] < to]
+
+    def save():
+        with candles._lock:
+            c = candles._conn(folder)
+            c.executemany("INSERT OR REPLACE INTO bars VALUES (?,?,?,?,?,?,?,?)",
+                          [(symbol, res, int(r[0]), r[1], r[2], r[3], r[4], r[5]) for r in rows])
+            c.commit()
+    if rows:
+        await loop.run_in_executor(None, save)
+    return [list(r) for r in rows]
 
 
 def _store_check(folder: str):

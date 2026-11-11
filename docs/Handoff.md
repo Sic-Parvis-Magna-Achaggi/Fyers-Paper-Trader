@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 11 Nov 2026, version **0.39.0** (MT5 trades in the journal, roadmap 8 c1; before it 0.38.x: alerts like TradingView's, roadmap 21). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 12 Nov 2026, version **0.39.1** (each MT5 trade's candles kept for its replay, 8 c1b; 0.39.0: MT5 trades in the journal, 8 c1; 0.38.x: alerts, roadmap 21). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -356,6 +356,18 @@ line of "FundingPips' day's starting balance".
 - **Tests:** `tests/mt5acct_test.py` (162: the journal part replaces "the journal leaves MT5 out"), `tests/mt5journal_flow.js`
   (35, browser). On re-runs over one data folder, fake_mt5's "history" trades get new tickets each run, so the journal piles
   up copies (the curve's start moves): a fresh folder for a clean read. **Not seen on a real MT5 / FundingPips yet.**
+- **v0.39.1, kept candles (8 c1b):** `helper/jcandles.py`. `windows(t, tf)`: 1 / 5 / 15 from opened − 1 day to closed + 1 h; the
+  chart's res (`chart_res(tf2)` from jreplay's recorded `chart.tf2`, else 5m) from 1,500 bars before (≤ 30 days; D: 400
+  days) to 30 after. Per user a queue + one asyncio worker (`want(urt, key, front)` -> `_kick`; `_nap` waits on an Event so a
+  new trade wakes it), `capture()` -> `mt5.fetch_range()` (new in mt5.py: HIST for [from, to), saved into candles.db
+  without touching `cover`, **no chart lock**: a chart never waits behind it) -> `u/<uid>/jcandles/<key>.json.gz` +
+  `index.json` {s, at, res: {res: [from, to, n]}, err, tries, next}. Offline -> waits RETRY_OFFLINE 15 s; error -> retry
+  after 600 s, 5 tries. `backfill()` from `Journal.sync` (MT5 trades closed in the last 120 days, newest first);
+  `journal.on_trade` queues a trade at its close (front). `mt5.KEPT = jcandles.rows`: `mt5.history` merges kept candles
+  into what it serves and doesn't raise Offline when kept ones exist. View: `kept` per MT5 trade (`status`); page
+  `jKept(t)` ("Replay candles"). Backup: `candles/` in the zip; restore adds missing ones. replay.js: the Fyers-login
+  check skips MT5 symbols. `Mt5Engine.balance_at` uses deals' `tu` (UTC); `_mt5_redate` recomputes `balance_after` only
+  once `M.caught`. Fake terminal: its balance is a few cents off its deals (tests allow 5 cents).
 - **Known, not from this release:** on the Live side with an MT5 bridge connected, the feed pill ("Live MT5") plus the data
   budget pill can push the clock onto a second line at 1500 px; `live_flow.js`'s header check then fails when the journal's
   lockout pill isn't showing (it passes when it is). Seen in v0.39.0's runs on data shared with the MT5 tests.
@@ -460,6 +472,10 @@ line of "FundingPips' day's starting balance".
   FundingPips (10 Nov): no hedging even in Hedge mode; his 21182752 is Phase 1 of the 2-Step; news: ForexFactory (owner).
 
 ## Next job
+
+**v0.39.1 (12 Nov):** after the update, an MT5 trade's card should say "Replay candles: kept on the server" within a minute
+or two of the server seeing MT5 (older ones fill in the background); ▶ On chart works with MT5 closed. Tell me what the
+card says for a trade from 2-3 months ago (how far FundingPips' MT5 goes back in 1-minute candles).
 
 **v0.39.0 (11 Nov), MT5 trades in the journal (8 c1):** the owner updates the server and opens the Journal on the MT5 side:
 his FundingPips demo's trades (the last 90 days of MT5's history, and anything open) should be there in $, with the MT5

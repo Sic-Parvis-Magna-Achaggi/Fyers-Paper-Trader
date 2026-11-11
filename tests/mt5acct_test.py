@@ -30,7 +30,7 @@ sys.path.insert(0, HERE)
 import logging  # noqa: E402
 logging.basicConfig(level=logging.WARNING)
 
-from helper import journal, mt5, mt5acct, rt, store, symbols, users  # noqa: E402
+from helper import candles, journal, mt5, mt5acct, rt, store, symbols, users  # noqa: E402
 from helper.paper import Paper, Refused  # noqa: E402
 from helper.mt5acct import _f  # noqa: E402
 import fake_mt5  # noqa: E402
@@ -79,6 +79,10 @@ async def main():
     rt.RT["adm"] = r
     r.loop = loop
     r.feed.loop = loop
+    journal.jcandles.loop = loop
+    journal.jcandles.GAP = 0.05
+    journal.jcandles.RETRY_OFFLINE = 0.3
+    logging.getLogger('jcandles').setLevel(logging.INFO)
     mt5acct.MOD_GAP = 0.05                     # (faster pacing for the test; the real one is 2 s - checked below)
 
     print("the account appears the first time its terminal calls")
@@ -674,7 +678,7 @@ async def main():
     nob = [k for k, t in jt.items() if t["status"] == "closed" and t.get("balance_after") is None]
     ok("every closed MT5 trade has the balance after it (MT5's history: from MT5's deals), for the balance curve", not nob, nob[:3])
     w = next((t for t in jt.values() if t.get("closed") and t["closed"] == min(x["closed"] for x in jt.values() if x.get("closed"))), None)
-    ok("... the first one: the first deposit + its net", w and abs(w["balance_after"] - (5000 + w["net"])) < 0.02, w and (w["balance_after"], w["net"]))
+    ok("... the first one: the first deposit + its net (the fake's balance rounds a few cents off its deals)", w and abs(w["balance_after"] - (5000 + w["net"])) < 0.05, w and (w["balance_after"], w["net"]))
     wrong_day = [(k, t["day"]) for k, t in jt.items() if t["status"] == "closed" and t["day"] != e.trading_day(t["closed"])]
     ok("the session day: the broker's by default (a closed trade on its close's broker day)", not wrong_day, wrong_day[:3])
     wrong_base = [(k, t["base"], e.day_start_balance(t["day"])) for k, t in jt.items()
@@ -752,6 +756,78 @@ async def main():
     ok("closed in MT5 -> closed in the journal with MT5's net and R", t9 and h9 and t9["status"] == "closed"
        and abs(t9["net"] - h9["net"]) < 0.005 and t9["r"] is not None and abs(t9["r"] - round(h9["net"] / t9["init_risk"], 2)) < 0.011,
        (t9 and t9["net"], h9 and h9["net"]))
+
+    print("v0.39.1: each MT5 trade's candles kept for its replay")
+    from helper import jcandles
+    ok("chart timeframe -> MT5's: 5m 5, 45m 15, 2h 120, 7m 1, 1D D", [jcandles.chart_res(x) for x in ("5m", "45m", "2h", "7m", "1D")]
+       == ["5", "15", "120", "1", "D"])
+    k9 = f"{aid}:P{tk9}"
+
+    async def pump(cond, n=120):
+        for _ in range(n):
+            if cond():
+                return True
+            await calls(ea, 1)
+        return cond()
+    await pump(lambda: (jcandles.index("adm").get(k9) or {}).get("res", {}).get("1"), 800)
+    e9k = jcandles.index("adm").get(k9) or {}
+    w = jcandles.windows(j.d["trades"][k9], jcandles._trade_tf("adm", k9))
+    ok("closed in MT5 -> its candles fetched from MT5 and kept: 1m / 5m / 15m and the chart's timeframe",
+       all((e9k.get("res") or {}).get(r, [0, 0, 0])[2] > 0 for r in ("1", "5", "15")), {r: v[2] for r, v in (e9k.get("res") or {}).items()})
+    kd = jcandles.load("adm", k9) or {"1": [[0]]}
+    t9o = j.d["trades"][k9]["opened"]
+    ok("... 1m from a day before the entry to after the exit, on the minute", kd.get("1") and kd["1"][0][0] <= t9o - 86000
+       and kd["1"][-1][0] >= j.d["trades"][k9]["closed"] - 60 and all(r[0] % 60 == 0 for r in kd["1"]), (kd.get("1") or [[0]])[0][0])
+    ok("... the chart's timeframe from 1,500 candles before the entry (warm-up)", w["5"][0] <= t9o - 1500 * 300 + 1)
+    v9 = next((x for x in j.view(r)["trades"] if x["id"] == k9), {})
+    ok("the journal tells the page what's kept", (v9.get("kept") or {}).get("res", {}).get("1", 0) > 0, v9.get("kept"))
+    hist_keys = [k for k, t in j.d["trades"].items() if t["acct"] == aid and t["status"] == "closed" and k != k9]
+    await pump(lambda: all(k in jcandles.index("adm") for k in hist_keys), 400)
+    ok("MT5's history and the other closed trades: kept in the background too", all((jcandles.index("adm").get(k) or {}).get("at")
+                                                                                     for k in hist_keys),
+       [k for k in hist_keys if k not in jcandles.index("adm")][:3])
+    n1 = len(kd["1"])
+    with candles._lock:                                   # the saved MT5 candles cleared (e.g. the broker's clock setting)
+        candles._conn(r.dir).execute("DELETE FROM bars WHERE sym LIKE 'MT5:%'")
+        candles._conn(r.dir).execute("DELETE FROM cover WHERE sym LIKE 'MT5:%'")
+        candles._conn(r.dir).commit()
+    u5 = mt5.user("adm")
+    pb = u5.price_bridge
+    u5.price_bridge = lambda: None                        # ... and MT5 off
+    try:
+        days = int((time.time() - t9o) / 86400) + 2
+        rows1 = await mt5.history("adm", r.dir, "MT5:XAUUSD", "1", days)
+        ok(f"MT5 off, nothing saved: the replay's 1m candles still come, from what was kept ({len(rows1)})", len(rows1) >= n1
+           and any(x[0] == kd["1"][0][0] for x in rows1))
+        try:
+            await mt5.history("adm", r.dir, "MT5:EURUSD", "1", 2)
+            ok("a symbol with nothing kept: still 'MT5 isn't connected'", False)
+        except mt5.Offline:
+            ok("a symbol with nothing kept: still 'MT5 isn't connected'", True)
+    finally:
+        u5.price_bridge = pb
+    # a worker asleep after failures (every queued trade waiting to retry) wakes for a trade that just closed
+    for k in hist_keys[:2]:
+        jcandles.index("adm").setdefault(k, {"s": "MT5:XAUUSD", "res": {}})["next"] = time.time() + 600
+        jcandles._Q.setdefault("adm", []).append(k)
+    jcandles._kick("adm")
+    await asyncio.sleep(0.3)
+    bid, ask = ea.quote("XAUUSD")
+    tkw = ea.open("XAUUSD", 1, 0.01, sl=round(bid - 6, 2))
+    await calls(ea, 2)
+    ea.close_pos(tkw)
+    kw = f"{aid}:P{tkw}"
+    await pump(lambda: (jcandles.index("adm").get(kw) or {}).get("res", {}).get("1"), 300)
+    ok("a trade that closes while the fetcher waits to retry others is kept at once", (jcandles.index("adm").get(kw) or {}).get("res", {}).get("1"))
+    for k in hist_keys[:2]:
+        jcandles.index("adm")[k].pop("next", None)
+    zp = os.path.join(D, "jb.zip")
+    info = j.backup_zip(zp)
+    ok("the journal's backup holds the kept candles", info.get("candles", 0) >= 1, info)
+    os.remove(jcandles._path("adm", k9))
+    jcandles.index("adm").pop(k9, None)
+    got = j.restore(zp)
+    ok("restore puts a missing trade's candles back", got.get("candles") == 1 and jcandles.load("adm", k9).get("1"), got)
 
     print("restart")
     n_hist = len(e.history)
