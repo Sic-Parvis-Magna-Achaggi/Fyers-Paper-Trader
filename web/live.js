@@ -259,8 +259,9 @@ function mtSideDialog(){
     <p class="help">On MT5 this page shows your MT5 accounts, kept apart from Fyers: one for each MT5 login whose terminal runs the
       FTM Bridge EA (1.10) on your laptop${n ? ` (${n} so far)` : " (none has called yet)"}. Positions, pending orders, balance and history come
       straight from MT5, in the account's currency, net of commission and swap; trades you place in MT5 itself show too.</p>
-    <p class="help"><b>Moving a stop, BE, BE-T, TRAIL and ✕ change the real trade at the broker</b> (the first change on each account asks
-      for its login once). Placing new orders from here comes in the next step.</p>
+    <p class="help"><b>Every order you place here is real</b>, sent to MT5 with its SL and TP; moving a stop, BE, BE-T, TRAIL and ✕ change
+      the real trade at the broker (the first change on each account asks for its login once). No hedging: an order opposite a
+      trade on the same symbol, in this or another MT5 account, is refused.</p>
     <p class="help">Back to Paper is one click. Each browser or phone switches for itself.</p>
     <div class="err" id="mtsErr"></div>
     <div class="btns"><button class="primary mt5btn" id="mtsGo">Switch to MT5</button><button class="ghost" id="mtsX">Cancel</button></div></div>`;

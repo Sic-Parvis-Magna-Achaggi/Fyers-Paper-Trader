@@ -8,7 +8,8 @@
      - FundingPips' limits under the account figures,
      - the Account page of an MT5 account (MT5's figures, the limits form, the commission learned per symbol),
      - the first change on an account: its login typed once (the server says so with need_login).
-   Placing orders from the app is slice b2: the ticket says so on the MT5 side.
+   v0.37.0 (b2 / b3): placing from the ticket and the chart tool (PLACE says MT5), orders on their way to MT5, the MT5 kill
+   switch (KILL in the top bar, Resume on the Account page), the news guard's events and its settings.
    Uses globals from index.html, paper.js, pages.js, security.js and live.js. */
 "use strict";
 const mtOn = () => !!(P.snap && P.snap.mode === "mt5");
@@ -89,12 +90,45 @@ function mtFoot(){
 function mtTicketHint(){
   const h = $("#tkHint"); if(!h) return;
   if(!h.dataset.orig) h.dataset.orig = h.textContent;
-  h.textContent = mtOn() ? "MT5 side: placing orders from the app comes in the next step. Place trades in MT5 itself: they show here at once, and you manage them here (drag SL / TP, BE, BE-T, TRAIL, ✕) - every change moves the real trade at the broker."
+  h.textContent = mtOn() ? `MT5 ${mtM().login || ""}: press BUY or SELL, drag the SL and TP lines, PLACE. The order goes to MT5 with its real SL and TP; every $ figure is net of commission. Lots are MT5's (0.01 steps).`
     : h.dataset.orig;
+  const amt = document.querySelector('#tkMode [data-v="amt"]'); if(amt) amt.textContent = "Risk " + CUR().trim();
+}
+/* PLACE says where the order goes */
+function mtPlace(){
+  const on = mtOn(), btn = $("#bPlace");
+  if(btn){ btn.classList.toggle("mt5", on); if(on && !/^MT5/.test(btn.textContent)) btn.textContent = "MT5 · " + btn.textContent; }
+  const tp = document.querySelector("#tool .tp");
+  if(tp){ tp.classList.toggle("mt5", on); if(on && !/^MT5/.test(tp.textContent)) tp.textContent = "MT5 " + tp.textContent; }
+}
+/* orders on their way to MT5 (PLACE pressed, MT5 hasn't shown the trade yet) */
+function mtOpening(){
+  const host = $("#posList"); if(!host) return;
+  let d = $("#mtOpening");
+  const ops = mtOn() ? (mtM().opening || []) : [];
+  if(!ops.length){ if(d) d.remove(); return; }
+  if(!d){ d = document.createElement("div"); d.id = "mtOpening"; host.prepend(d); }
+  const h = ops.map(o => `<div class="mtline ${o.unsure ? "warnc" : "muted"}">${o.unsure ? "⚠ MT5 didn't confirm " : o.ticket ? "MT5 placed " : o.sent ? "Placing in MT5: " : "Sending to MT5: "}${esc(o.text)}${o.ticket ? ` (#${o.ticket}) - waiting for it to show` : "…"}</div>`).join("");
+  if(d.dataset.h !== h){ d.dataset.h = h; d.innerHTML = h; }
+}
+/* the MT5 kill switch (top bar) */
+function mtKillBtn(){
+  let b = $("#bKillMt5");
+  if(!b){ const sel = $("#acctSel"); if(!sel) return; b = document.createElement("button"); b.id = "bKillMt5"; b.className = "killbtn hide"; b.textContent = "KILL";
+    b.title = "MT5 kill switch: close every position and cancel every order of this MT5 account, then pause new orders"; b.onclick = mtKill; sel.after(b); }
+  b.classList.toggle("hide", !(mtOn() && !mtM().none));
+  b.classList.toggle("on", !!mtM().halted);
+}
+async function mtKill(){
+  if(!mtOn()) return;
+  if(!confirm(`MT5 KILL SWITCH · account ${mtM().login}\n\nClose every position and cancel every order of this MT5 account at the broker, then pause new orders until you press Resume (Account page).\n\nGo?`)) return;
+  const j = await api("/api/mt5acct/kill", {body: {}});
+  if(j.paper) paperUpdate(j.paper);
+  toast(j.ok ? "Kill switch: closing everything in MT5" : j.error);
 }
 function mtDecorate(){
   document.body.classList.toggle("is-mt5", mtOn());
-  mtBanner(); mtPanel(); mtFoot(); mtPositions(); mtTicketHint();
+  mtBanner(); mtPanel(); mtFoot(); mtPositions(); mtTicketHint(); mtPlace(); mtOpening(); mtKillBtn();
 }
 
 /* ---------------------------------------------------------------- the first change on an account: its login, once */
@@ -135,15 +169,21 @@ const MT5_RULES = [
   ["max_pct", "Max loss limit %", "0 = off. FundingPips 2-Step: 10%"],
   ["max_mode", "Max loss floor", "static: size − max %. trailing: follows the highest balance", [["static", "static"], ["trailing", "trailing"]]],
   ["buffer_pct", "Buffer %", "Kept from each floor, % of size (the guards use it from the next step)"],
-  ["phase", "Phase", "Evaluation or Master (the news guard uses it, later)", [["evaluation", "evaluation"], ["master", "master"]]],
+  ["phase", "Phase", "Master: no opening or closing from the app around high-impact news. Evaluation: a warning only", [["evaluation", "evaluation"], ["master", "master"]]],
+  ["news_on", "News guard (ForexFactory)", "High-impact events on the symbol's currencies", [[true, "on"], [false, "off"]]],
+  ["news_min", "Master: minutes either side", "FundingPips: 5"],
+  ["news_warn_min", "Warn this many minutes before", ""],
   ["comm_default", "Commission until MT5 shows it", "Per lot, on each deal (opening and closing). MT5's own deals replace it per symbol"],
   ["be_buffer_ticks", "BE buffer (ticks)", "Extra ticks beyond break-even + costs when a stop moves to BE"],
-  ["risk_cap_pct", "Risk cap per trade %", "For placing orders from the app (next step)"],
-  ["sl_required", "Stop loss required", "For placing orders from the app (next step)", [[true, "required"], [false, "optional"]]],
+  ["risk_cap_pct", "Risk cap per trade %", "Net risk at the stop, % of balance: lots are cut to fit; 0 = off"],
+  ["max_open_risk_pct", "Max open risk %", "Everything open at its stop, % of balance; 0 = off"],
+  ["max_margin_pct", "Max margin use %", "0 = off"],
+  ["max_trades", "Max trades a day", "Pending orders count; 0 = no limit"],
+  ["sl_required", "Stop loss required", "", [[true, "required"], [false, "optional"]]],
 ];
 function mtRulesHTML(r){
   return MT5_RULES.map(([k, label, help, opts]) => `<div class="rf"><label>${label}${k === "size" || k === "comm_default" ? ` (${CUR().trim()})` : ""}</label>` +
-    (opts ? `<select data-k="${k}" ${typeof opts[0][0] === "string" ? 'data-t="s"' : ""}>${opts.map(([v, n]) => `<option value="${v}" ${String(r[k]) === String(v) ? "selected" : ""}>${n}</option>`).join("")}</select>`
+    (opts ? `<select data-k="${k}" ${typeof opts[0][0] === "string" ? 'data-t="s"' : typeof opts[0][0] === "boolean" ? 'data-t="b"' : ""}>${opts.map(([v, n]) => `<option value="${v}" ${String(r[k]) === String(v) ? "selected" : ""}>${n}</option>`).join("")}</select>`
           : `<input data-k="${k}" value="${esc(r[k])}" inputmode="decimal">`) + (help ? `<div class="help">${help}</div>` : "") + `</div>`).join("");
 }
 function mtAccountPage(){
@@ -165,6 +205,7 @@ function mtAccountPage(){
     ["EA", M.ea ? `${esc(M.ea)}${M.ea_ok ? "" : ` <span class="down">(needs ${esc(M.ea_min)})</span>`}` : "–"],
     ["App can change trades", !M.ea_ok ? '<span class="down">no (old EA)</span>' : tr.on === false ? '<span class="down">no (AllowTrading off)</span>'
       : tr.term === false || tr.mql === false ? '<span class="down">no (Algo Trading off)</span>' : M.confirmed ? '<span class="up">yes</span>' : '<span class="warnc">after you confirm the login</span>'],
+    ["Placing orders", M.halted ? '<span class="down">paused (kill switch)</span>' : !M.ea_trade ? `<span class="down">needs EA ${esc(M.ea_trade_min)}</span>` : '<span class="up">yes</span>'],
     ["Mode", esc(I.mode || "–") + (I.demo ? " · DEMO" : "")]];
   const lim = [["Today's start (broker's midnight)", pc(M.day_start)], ["Daily floor", a.daily_floor != null ? pc(a.daily_floor) : "off"],
     ["Daily room", a.day_room != null ? `<span class="${a.day_room < 0 ? "down" : ""}">${pc(a.day_room)}</span>` : "off"],
@@ -176,6 +217,7 @@ function mtAccountPage(){
     <div class="pg-cards">${cards.map(([k, v]) => `<div class="pgc"><span>${k}</span><b>${v}</b></div>`).join("")}</div>
     ${(M.breach || []).map(b => `<div class="note down">⚠ LIMIT: ${esc(b)}</div>`).join("")}${(M.warnings || []).map(w => `<div class="note warnc">⚠ ${esc(w)}</div>`).join("")}
     ${!M.confirmed && M.ea_ok ? `<div class="btns"><button class="mt5btn" id="mtConfGo">Confirm this account's login…</button></div>` : ""}
+    <div class="btns">${M.halted ? '<button class="primary" id="mtResume">Resume trading</button>' : ""}<button class="danger" id="mtKillGo" title="Close every position and cancel every order of this account at MT5, then pause new orders">Kill switch</button></div>
     <div class="pg-split">
       <div class="pg-card mtcard"><h3 class="pg-h3" style="margin-top:0">FundingPips' loss limits</h3>
         <p class="help">${mtLimitsText()}. Shown here and on the panel; they refuse new orders once placing from the app arrives (next step). FundingPips
@@ -196,6 +238,13 @@ function mtAccountPage(){
         <div class="pg-card"><h3 class="pg-h3" style="margin-top:0">Trailing defaults</h3><p class="help">For trades this account opens or shows. Changing them also changes every open trade (and moves MT5's stops).</p>
           <div class="trail"><span>Trail BE</span><input id="pgTrBeR" value="${t.be_r}"><button id="pgTrBe" class="${t.be_on ? "on" : ""}">${t.be_on ? "ON" : "off"}</button>
             <span>Trail SL</span><input id="pgTrSlR" value="${t.sl_r}"><button id="pgTrSl" class="${t.sl_on ? "on" : ""}">${t.sl_on ? "ON" : "off"}</button></div></div>
+        <div class="pg-card"><h3 class="pg-h3" style="margin-top:0">High-impact news (ForexFactory)</h3>
+          <p class="help">${r.phase === "master" ? `Master: no opening or closing from the app from ${r.news_min} min before to ${r.news_min} min after each, on the symbol's currencies (MT5's own SL / TP still fire).`
+            : "Evaluation: no block - a warning before each (purposely trading news is prohibited)."} ${r.news_on ? "" : "<b>The guard is off.</b>"}
+            FundingPips' dashboard calendar is the official one. ${M.news_src && M.news_src.at ? "Read " + istTime(M.news_src.at) : "Not read yet"}${M.news_src && M.news_src.err ? ` · <span class="warnc">last try failed: ${esc(M.news_src.err)}</span>` : ""}.</p>
+          ${(M.news || []).length ? `<table class="mtcomm"><tr><th>When (IST)</th><th>Currency</th><th>Event</th></tr>${M.news.map(e => `<tr><td>${esc(e.ist)}</td><td>${esc(e.cur)}</td><td style="text-align:left">${esc(e.title)}</td></tr>`).join("")}</table>`
+            : '<p class="muted">None in the next 24 hours for this account\'s symbols.</p>'}
+          <div class="btns"><button id="mtNewsGo">Read ForexFactory now</button></div><div id="mtNewsMsg"></div></div>
         <div class="pg-card"><h3 class="pg-h3" style="margin-top:0">MT5's history</h3>
           <p class="help">${M.deals} deals received${M.caught ? "" : " (more on their way)"}. The History page shows this account's closed trades from MT5's deals, the last 90 days
             the first time. Trades from before the app saw them have no stop, so no R.</p>
@@ -210,6 +259,11 @@ function mtAccountPage(){
   pgq("#mtResync").onclick = async () => { const j = await api("/api/mt5acct/resync", {body: {}}); if(j.paper) paperUpdate(j.paper);
     pgq("#mtResMsg").textContent = j.ok ? "Asked MT5 for its deals again." : j.error; };
   const cg = pgq("#mtConfGo"); if(cg) cg.onclick = async () => { if(await mtConfirm(M.login)) mtAccountPage(); };
+  pgq("#mtKillGo").onclick = async () => { await mtKill(); setTimeout(mtAccountPage, 800); };
+  const rg = pgq("#mtResume"); if(rg) rg.onclick = async () => { const j = await stepUp(() => api("/api/mt5acct/resume", {body: {}}));
+    if(j.paper) paperUpdate(j.paper); else if(j.error && j.error !== "cancelled") toast(j.error); mtAccountPage(); };
+  pgq("#mtNewsGo").onclick = async () => { pgq("#mtNewsMsg").textContent = "Reading…"; const j = await api("/api/mt5acct/news", {body: {}});
+    pgq("#mtNewsMsg").textContent = j.ok ? `Read: ${j.news.n} events.` : "Couldn't read it: " + (j.error || ""); const k = await api("/api/paper"); if(k.paper) paperUpdate(k.paper); setTimeout(mtAccountPage, 200); };
 }
 
 /* ---------------------------------------------------------------- hooks into the existing views */
@@ -217,6 +271,8 @@ function mtAccountPage(){
   const pu = paperUpdate;
   paperUpdate = function(s, events){ pu(s, events); mtDecorate(); };
   if(typeof pgPositions === "function"){ const pp = pgPositions; pgPositions = function(){ pp(); mtPositions(); }; }
+  if(typeof renderPlan === "function"){ const rp = renderPlan; renderPlan = function(){ rp(); mtPlace(); }; }
+  if(typeof toolOverlay === "function"){ const to = toolOverlay; toolOverlay = function(){ to(); mtPlace(); }; }
   if(typeof pgAccount === "function"){ const pa = pgAccount; pgAccount = function(){ if(mtOn()) return mtAccountPage(); pa(); }; }
   if(typeof renderRules === "function"){                  // Settings › rules: an MT5 account's own limits
     const rr = renderRules;

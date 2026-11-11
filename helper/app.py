@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 
 from fastapi.staticfiles import StaticFiles
 
-from . import alerts, charges, charges_watch, fyers_link, journal, jreplay, jshots, logbuf, mt5, mt5acct, rt, store, symbols, telegram, users
+from . import alerts, charges, charges_watch, fyers_link, journal, jreplay, jshots, logbuf, mt5, mt5acct, news, rt, store, symbols, telegram, users
 from .feedcheck import FC
 from . import candles as candles_store
 from .paper import Refused
@@ -75,6 +75,8 @@ async def _engine_loop():
         for urt in list(rt.RT.values()):
             urt.housekeeping()
         alerts.tick(VERSION, asyncio.get_running_loop())   # the watchdog's heartbeat, and Telegram alerts for live trades
+        if any(any(getattr(e, "mode", "") == "mt5" for e in r.engines.values()) for r in rt.RT.values()):
+            news.tick(asyncio.get_running_loop())             # ForexFactory's calendar for the MT5 news guard (hourly)
         n += 1
         if FC.buf:                                         # the order-flow check's snapshots, written every few seconds
             asyncio.get_running_loop().run_in_executor(None, FC.flush)
@@ -666,6 +668,45 @@ async def mt5acct_confirm(request: Request):
     return _ok(e)
 
 
+@app.post("/api/mt5acct/kill")
+async def mt5acct_kill(request: Request):
+    """The MT5 kill switch: close every position and cancel every order of this MT5 account at the broker, then pause new
+    orders until Resume. No 2FA, no login typed, no news window: it must be quick."""
+    _same_origin(request)
+    u = _user(request)
+    b = await _body(request)
+    e = _mt5e(request, b)
+    if e.none:
+        return _err("no MT5 account yet")
+    users.audit(u["uid"], "MT5 KILL SWITCH", str(e.login), _ip(request))
+    try:
+        e.kill()
+    except Refused as ex:
+        return JSONResponse({"ok": False, "error": str(ex), "paper": e.snapshot()}, status_code=400)
+    return _ok(e)
+
+
+@app.post("/api/mt5acct/resume")
+async def mt5acct_resume(request: Request):
+    _same_origin(request)
+    u = _user(request)
+    b = await _body(request)
+    e = _mt5e(request, b)
+    _stepped(request)                                  # (orders back on after the kill switch: a fresh 2FA code)
+    e.resume()
+    users.audit(u["uid"], "MT5 trading resumed", str(e.login), _ip(request))
+    return _ok(e)
+
+
+@app.post("/api/mt5acct/news")
+async def mt5acct_news(request: Request):
+    """Read ForexFactory's calendar now (it's read every hour)."""
+    _same_origin(request)
+    _user(request)
+    st = await asyncio.get_running_loop().run_in_executor(None, news.refresh, True)
+    return {"ok": not st.get("err"), "news": st, "error": st.get("err")}
+
+
 @app.post("/api/mt5acct/resync")
 async def mt5acct_resync(request: Request):
     """Ask the EA for MT5's deals again (90 days); anything already in the history is skipped."""
@@ -1091,7 +1132,7 @@ async def paper_place(request: Request):
     await _prefetch_margin(engine, b)
     u, r = _urt(request)
     aid = next((k for k, v in r.engines.items() if v is engine), "")
-    if b.get("setup"):
+    if b.get("setup") and getattr(engine, "mode", "") != "mt5":     # (MT5 accounts: no journal yet, roadmap 8 c)
         jreplay.note_order(u["uid"], aid, b)          # the chart it came from, for the trade replay (v0.29.0)
     try:
         plan = engine.place(b)

@@ -46,7 +46,7 @@ FYERS_HELPER_DATA=/tmp/fyers_test node tests/jinsights_flow.js     # journal v0.
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/mobile_flow.js        # the phone layout on an emulated Pixel 7: order sheet and its bubble, positions, tabs, full screen (resets the admin's paper account)
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/replay_flow.js        # trade replay: ▶ On chart (recorded chart + Pine code, nothing saved), ▶ Play, every chart type, History, the phone; ~5 min (resets the admin's paper account)
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/settings_search_flow.js  # v0.35.0: the ƒx search (filter, marks, ↑ / ↓ / Enter / Esc, "/") and Settings as a page (sections list, jumps, #settings, Esc / ← Back), the phone
-FYERS_HELPER_DATA=/tmp/fyers_test node tests/mt5acct_flow.js       # v0.36.0: PAPER | LIVE | MT5 (2FA), the MT5 account from fake_mt5 (--ctl 8769 --history): switcher, $, floors, a trade from MT5 on the panel / chart, the login dialog, SL / BE / TRAIL / ✕ from the entry line's bar reaching MT5, a pending order moved / cancelled, 403 from Paper, History, Account page, rules, the phone
+FYERS_HELPER_DATA=/tmp/fyers_test node tests/mt5acct_flow.js       # v0.36.0 / v0.37.0 (~2 min): placing from the chart tool (MT5 PLACE), hedging refused, the news guard (a ForexFactory file), KILL / Resume; PAPER | LIVE | MT5 (2FA), the MT5 account from fake_mt5 (--ctl 8769 --history): switcher, $, floors, a trade from MT5 on the panel / chart, the login dialog, SL / BE / TRAIL / ✕ from the entry line's bar reaching MT5, a pending order moved / cancelled, 403 from Paper, History, Account page, rules, the phone
 FYERS_HELPER_DATA=/tmp/fyers_test node tests/mt5_flow.js           # v0.34.0: Settings › MT5 bridge (key with 2FA), a fake MT5 terminal connecting (fake_mt5.py), Find, an MT5 chart with every chart type + Volume + Pine, the broker's day, trading refused, MT5 off, the phone
 ```
 
@@ -84,3 +84,6 @@ The mock's fake Fyers stream sends only what Fyers would (`feed.fy_wanted()`): n
 v0.36.0: `fake_mt5.py` plays EA 1.10 (an MT5 Hedge account: positions, pending orders, deals with commission and swap, SL / TP
 on bid / ask, the app's MOD / CLOSE / CANCEL / OMOD with retcodes); `--old` plays 1.00, `--history` adds two closed trades
 10 days back, `--ctl PORT` serves a control API (see its docstring). Its tickets are unique per run, as MT5's.
+v0.37.0: it plays EA 1.20 (OPEN, margin per symbol, TRAIL and the offline trailing; `--ver 1.10` plays the older one; control
+`/offline` cuts the link). `mock_server.py` sets `FTM_NEWS_URL` to `file://<data folder>/ff_test.json`, so the news guard
+reads a file the test writes, never the real ForexFactory.

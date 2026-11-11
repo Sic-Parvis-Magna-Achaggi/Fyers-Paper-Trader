@@ -4,6 +4,22 @@
 its charts (Point & Figure, Renko, my Pine scripts...) can show my broker's prices, and so I can manage my trades from it.
 This page explains how it works, in plain words, for anyone who asks (FundingPips' Responsible Trading Team included).
 
+## What version 1.20 does
+
+Everything 1.10 does (below), and:
+
+- **It places the orders I place in the app** (OPEN): market, limit or stop, each with its stop loss and take profit in the
+  same request (`Buy` / `Sell` / `BuyLimit` / `SellLimit` / `BuyStop` / `SellStop` from MT5's `CTrade`, all in `DoOpen`), with
+  the comment "FTM <tag>" so the app knows it's the one it asked for. **Every order starts from my own click in the app.**
+  It opens nothing on its own: there is no signal, no indicator, no strategy in the EA.
+- **It sends each symbol's margin for 1 lot** (MT5's own `OrderCalcMargin`), minimum / maximum volume and stops level, so the
+  app sizes orders within the account's free margin.
+- **If it can't reach my server for 20 seconds** (input `OfflineTrailSec`), it moves my open trades' stops itself, by the
+  trailing I set on each trade in the app (move to break-even + costs once price reaches the BE trigger; trail the stop N R
+  behind the best price, never below break-even + costs). The app sends these rules with each call (`TRAIL` lines). Only
+  ever tighter, at most once every 2 seconds per trade. When the link is back it tells the app what it moved.
+- Still: only calls out, only on my laptop, no VPS, no VPN; `AllowTrading = false` makes it refuse everything.
+
 ## What version 1.10 does
 
 - **Prices and candles**, as 1.00 did.
@@ -53,6 +69,10 @@ This page explains how it works, in plain words, for anyone who asks (FundingPip
    - (1.10) `CLOSE <tag> <ticket> <volume>`: close that position at market (`DoClose`; volume 0 = all of it).
    - (1.10) `CANCEL <tag> <ticket>`: delete that pending order (`DoCancel`).
    - (1.10) `OMOD <tag> <ticket> <price> <sl> <tp>`: move that pending order (`DoOmod`).
+   - (1.20) `OPEN <tag> <symbol> <side> <market|limit|stop> <volume> <price> <sl> <tp>`: the order I placed in the app
+     (`DoOpen`).
+   - (1.20) `TRAIL <ticket> ...`: that trade's trailing, kept for when the app can't be reached (`SetTrail`;
+     `OfflineTrail` does the moving, `Trailed` reports it).
      Each result (done, or MT5's refusal and its code) goes back with the next call (`Results`).
 4. **If a call fails** (`Failed`), it waits longer before the next one (1 s, 2 s, ... up to 30 s) and shows why on the
    chart: for example that WebRequest isn't allowed for the address yet.
@@ -88,3 +108,5 @@ downloaded EA.
 - **1.10** (10 Nov 2026): the account's positions, pending orders and deals for the app; carries out the app's requests on
   existing trades (SL / TP, close, cancel / move a pending order), once per tag, only with AllowTrading on. Opens no new
   trades.
+- **1.20** (11 Nov 2026): places the orders I place in the app (OPEN, with SL / TP); margin per symbol for the app's sizing;
+  trails my trades' stops by itself, by my own rules from the app, when it can't reach the app for 20 s.

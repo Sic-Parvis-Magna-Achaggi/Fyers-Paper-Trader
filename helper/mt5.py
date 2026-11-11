@@ -45,7 +45,7 @@ MAX_BARS = 200_000        # per request
 RES_MIN = {"1": 1, "2": 2, "3": 3, "5": 5, "10": 10, "15": 15, "20": 20, "30": 30, "60": 60, "120": 120, "180": 180,
            "240": 240, "D": "D"}          # MT5's own timeframes; "45" is built here from M15
 NAME_RE = re.compile(r"^[A-Za-z0-9._#&+\-!$%@^~]{1,40}$")
-EA_LATEST = "1.10"
+EA_LATEST = "1.20"
 STORE_V = "1"             # how MT5 candles are stored (times, daily stamps): a change drops them once, they load again
 _checked: set = set()     # candle folders whose MT5 candles have been checked against STORE_V
 

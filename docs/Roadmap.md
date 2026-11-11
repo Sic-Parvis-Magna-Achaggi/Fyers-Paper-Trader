@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 10 Nov 2026 (v0.36.0: item 8 b1, MT5 accounts on their own side, managed from the app). This is the one task list for the project.
+Updated 11 Nov 2026 (v0.37.0: item 8 b2 / b3, placing on MT5 accounts, the kill switch, the news guard, the EA's own trailing: stage b complete). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -145,6 +145,10 @@ v0.24.0 / v0.24.1); Telegram (3, done in v0.25.0) and the journal (4) next.
      once can take a few seconds.
 7. [x] **Measurement tool** (MT5 + TradingView, with net ₹ and R): shipped in **v0.22.0**, see Done.
 
+**Order change (owner, 10 Nov 2026, 23:34, after v0.36.0: "the 1.10 compiled fine and is connected to the app. Finish
+everything"):** the rest of item 8 (b) - b2 and b3 - built at once, as one release (**v0.37.0**, EA 1.20). (c) waits for the
+owner's yes to 4b; (d) is "a later stage" (owner, 10 Nov).
+
 **Order change (owner, 10 Nov 2026: "Let's build this. If they come back saying no, we can have the local setup as
 fallback"):** item 8 is built now, stage by stage. Stage a shipped in **v0.34.0**.
 
@@ -264,8 +268,17 @@ fallback"):** item 8 is built now, stage by stage. Stage a shipped in **v0.34.0*
          broker's-midnight balance, from MT5's deals) and max floor (typed starting size) shown. EA 1.10 calls out only and
          **opens no new trades** (input AllowTrading). The journal leaves MT5 accounts out until (c). **Not run on a real
          MT5 yet** (the owner compiles 1.10 and tries it on the demo: see Handoff).
-       - [ ] **b2** placing orders from the app (ticket, chart tool, PLACE) with sizing, the guards and the no-hedging check.
-       - [ ] **b3** the EA trailing on its own if the link drops; the news guard (ForexFactory); the MT5 kill switch.
+         **EA 1.10 compiled and connected by the owner (10 Nov, 23:34).**
+       - [x] **b2** *(v0.37.0)*: placing from the ticket / chart tool / MT5 PLACE (market, limit, stop, each with its real SL /
+         TP in the same request; EA 1.20's OPEN, tied back by the comment "FTM <tag>": the trade is the app's, its planned stop
+         1R, its trailing); sizing by risk % / $ / lots in 0.01 steps within MT5's min / max; margin from MT5's OrderCalcMargin;
+         the guards (FundingPips' floors, risk cap, open risk, margin, max trades, SL required); **no hedging** on the same
+         symbol in the account or across the MT5 accounts; never sent twice, dropped if not delivered in 10 s.
+       - [x] **b3** *(v0.37.0)*: the MT5 kill switch (close all, cancel all, pause until Resume with 2FA); the news guard
+         (ForexFactory's calendar read hourly on the server; high-impact events on the symbol's currencies; Master: no opening /
+         closing from the app ±5 min, evaluation: a warning; the kill switch never blocked); the EA trailing by itself
+         (TRAIL lines, OfflineTrailSec 20 s, the same rules, never looser) when it can't reach the app, its moves taken as the
+         trail when the link is back. **Not run on a real MT5 yet** (the owner compiles 1.20 and tries it on the demo).
      - [ ] (c) The journal for prop accounts (joins 4b) and FundingPips' rules.
      - [ ] (d) **Copy trades between MT5 accounts, later** (owner, 10 Nov: "in the roadmap, we can also have copy trades for
        a later stage"). FundingPips allows copying between your own FundingPips accounts (and out to an external
@@ -514,6 +527,7 @@ marked before relying on it.
 
 ## Done
 
+- [x] **v0.37.0** (11 Nov): MT5 stage b complete (item 8 b2 / b3): orders placed from the app on MT5 accounts (MT5 PLACE, real SL / TP, sizing in 0.01 lots net of commission, margin from MT5, FundingPips' floors and the other guards, no hedging across your MT5 accounts); the MT5 kill switch; the ForexFactory news guard (Master blocks ±5 min, evaluation warns); the EA trailing by itself when the link drops. EA 1.20.
 - [x] **v0.36.0** (10 Nov): MT5 accounts (item 8 b1): PAPER | LIVE | MT5 at the top left; each MT5 login with FTM Bridge 1.10 an account of its own (positions, orders, balance, history from MT5; trades placed in MT5 too); SL / TP, BE, BE-T, TRAIL, ✕ and pending orders managed at the broker through the EA (the login typed once); $ net of commission learned from MT5's deals and swap; FundingPips' daily (broker's midnight) and max (typed size) floors shown. EA 1.10 opens no new trades.
 - [x] **v0.35.0** (10 Nov): the ƒx search, like TradingView (item 18: filter as you type, marks, ↑ / ↓ / Enter, Esc, "/") and Settings as a page of its own (item 19: sections listed on the left, cards, ← Back / Esc, #settings; chips on the phone); the version at the top (item 20).
 - [x] **v0.34.0** (10 Nov): MT5 prices and charts through the owner's own bridge EA (item 8, stage a): `mt5/FTM_Bridge.mq5` (calls out only, no orders), Settings › MT5 bridge, MT5 in the Prices pill, MT5 symbols in Find, every chart type and Pine on the broker's own candles, the broker's day; paper trading refuses MT5 symbols until stage b.

@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 10 Nov 2026, version **0.36.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 11 Nov 2026, version **0.37.0**. Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -106,7 +106,37 @@ automatic pictures off itself (other suites turn them on).
 `indicator_settings_flow.js`'s "at the start of a contract's history it stops asking" failed once in 2 runs on 1 Nov
 (v0.22.0; passed on re-run, 37/37). Same advice.
 
-## MT5 accounts (v0.36.0, roadmap 8 b, slice b1)
+## MT5 accounts (v0.36.0 b1; v0.37.0 b2 / b3: stage b complete)
+
+**v0.37.0 (b2 / b3, EA 1.20)** - on top of the b1 notes below:
+- **EA 1.20:** `OPEN <tag> <sym> <side> <market|limit|stop> <vol> <price> <sl> <tp>` (`DoOpen`: CTrade Buy / Sell /
+  BuyLimit / ... with SL / TP and comment "FTM <tag>"; result ticket = `ResultOrder()`); `sym` arrays grow to [tv, ts, vstep,
+  contract, digits, margin buy 1 lot, margin sell 1 lot, vmin, vmax, stops level] and include the SUB symbols; `TRAIL
+  <ticket> <side> <best> <BE trigger> <BE price> <SL start> <SL dist> <floor> <min step>` (10 fields; `TRAIL <ticket> 0` =
+  forget) -> `g_t*` arrays; `TrailBest()` every timer tick (best bid), `Offline()` = no answered call for OfflineTrailSec
+  -> `OfflineTrail()` (PositionModify, only tighter, 2 s apart) -> `g_trailed` -> body `"trailed": [[ticket, sl, msc]]`
+  (dropped after a 200, like results).
+- **Server:** `Mt5Engine.plan()` (temp_watch the symbol for this terminal; "waiting for its price" before the first tick;
+  lots typed = volume -> steps, `_steps` marks the converted request; min / max volume; `_hedge_block` wins over other
+  reasons; ₹ / "1 lot" in the paper engine's words turned into $ / 0.01 lot), `margin_per_lot` from `M.sym` mb / ms,
+  `guard_new` = `_block(EA_TRADE)` / kill switch / hedge / news / the paper guards; `place()` -> `_cmd("OPEN")` +
+  `M.opening[tag]` (shown) + `M.placed[tag]` (the plan's sl / tp / trailing, 30 days) -> `_placed_meta(comment)` in `_adopt`
+  and `_take_orders` links it. OPEN: OPEN_EXPIRE 10 s undelivered; `_lost` never re-sends (`_tag_seen` looks for the tag).
+  `kill()` / `resume()` (`M.halted`); routes `/api/mt5acct/kill`, `/resume` (step-up), `/news` (read now). `_news_block(s,
+  what)` (Master) / `_news_note(row)`; rules `news_on`, `news_min` 5, `news_warn_min` 15. `_trail_spec` / `_trail_lines`
+  (on change, every TRAIL_EVERY 30 s, all after `dcur == 0`); `M.etrail` (the EA's reported moves) -> `_ea_trailed` instead of
+  `_adopt_stops`, and an unsent older MOD is dropped so the EA's tighter stop is never loosened. `siblings` (rt.py) = the
+  user's other MT5 engines. `charges.size_for_risk` reaches MT5's vmax.
+- **`helper/news.py`:** ForexFactory's export `https://nfs.faireconomy.media/ff_calendar_thisweek.json` (env `FTM_NEWS_URL`;
+  `file://` works), read hourly from app.py's 5 s loop while any MT5 account exists (`news.tick`), merged with what's kept
+  8 days in `data/news/ff.json`; `parse`, `inside`, `next_event`, `upcoming`, `status`, `set_events` (tests). **The real
+  feed hasn't been read from here** (no internet in the build environment): its format is as documented / widely used;
+  check Account › High-impact news after the update.
+- **Page:** `lotsIn` / `lotsStep` / `isMtAcct` (paper.js; mobile.js uses them), `CUR()` in the risk labels, `mtPlace` (MT5
+  PLACE), `mtOpening` (`#mtOpening` on the panel), `mtKillBtn` / `mtKill` (`#bKillMt5`; the phone's `#mKill`), the Account
+  page's kill / resume / news card, the rules form's news rows (`data-t="b"` booleans). CSS: the product switch and Fyers'
+  `#pBudget` hidden on MT5 (the top bar had no room for KILL at 1500 px); the switcher's label is "● login · $balance".
+
 
 - **What:** each MT5 login whose terminal runs FTM Bridge **1.10** is an account of its own (`mt5-<login>`, the admin's only),
   on a third side of the top-left switch (PAPER | LIVE | MT5). b1 = see and manage; **placing from the app is b2** (`plan()` /
@@ -274,19 +304,23 @@ automatic pictures off itself (other suites turn them on).
 
 ## Next job
 
-**Roadmap 8 b1 shipped in v0.36.0** (MT5 accounts, managed from the app). Next, the owner:
-1. **Updates the server**, downloads FTM_Bridge.mq5 1.10 (Settings › MT5 bridge), puts it over 1.00 in `MQL5\Experts` and
-   compiles it (send any errors: it has never been compiled here). On the chart: the EA's Common tab "Allow Algo Trading"
-   ticked, MT5's Algo Trading button on, input AllowTrading true.
-2. Switches a page to **MT5** (top left, a 2FA code): account 21182752 should be there with its balance, MT5's history of
-   the last 90 days on the History page, and the floors under the figures (check them against the FundingPips dashboard).
-3. On the demo: places a small XAUUSD trade **in MT5** with an SL, then from the app: drags the SL, BE, BE-T / TRAIL, ✕ (the
-   first change asks for the login). Also a pending order in MT5: move it, cancel it here. Reports anything odd.
-**Not seen on a real MT5 yet** (only the fake): that 1.10 compiles; `POSITION_TIME_MSC` / `DEAL_FEE` / `DEAL_REASON` as
-used; deals arriving in time order from `HistorySelect`; FundingPips' commission (per side or all on the opening deal; how
-MT5 rounds it) and swap on the closing deal; `PositionModify` / `PositionClose` / `OrderModify` / `OrderDelete` retcodes on
-FundingPips-SIM1 (stops level, filling mode); the broker's midnight balance vs the dashboard's daily figure; how fast MT5
-reports a closed position's deal. Then **b2** (placing orders from the app, the no-hedging check), b3.
+**Roadmap 8 stage b is complete in v0.37.0** (b1 v0.36.0: the owner compiled 1.10 and it connected, 10 Nov 23:34). Next,
+the owner:
+1. **Updates the server**, downloads FTM_Bridge.mq5 **1.20** (Settings › MT5 bridge), compiles it over 1.10 and checks the
+   chart's corner (version 1.20, "Places the orders you place in the app").
+2. On the MT5 side (FundingPips demo): Account page - the floors vs the dashboard, the commission learned, **High-impact news**
+   listed (if it says "Not read yet" / an error, ForexFactory's feed couldn't be reached from the server: send the error).
+3. Places a small XAUUSD order from the chart tool (MT5 PLACE): it should be in MT5 with its SL / TP and show as the app's
+   trade; then a SELL XAUUSD is refused (no hedging); a limit order; BE / TRAIL; KILL and Resume.
+4. Optional: with a trade trailing, pull the laptop's network for a minute and watch the EA's corner ("CAN'T REACH THE APP:
+   trailing") and the stop move in MT5; plug it back: the app says "the EA trailed the stop".
+**Not seen on a real MT5 yet:** 1.20 compiling; FundingPips-SIM1 accepting SL / TP in a market request (if not, the app
+sends them right after with MOD - the position shows "→ moving to"); OrderCalcMargin's figures; the filling mode of pending
+orders; ForexFactory's real feed from the server; the offline trailing on a real disconnect. Then: (c) the prop journal
+(needs the owner's yes to 4b), (d) copy trades (later).
+
+**Seen again in v0.37.0's test run (00:35 IST):** the journal's "Copy for Gemini › today" after midnight: the roadmap's
+Small follow-ups already has it ("Copy for Gemini after midnight"), waiting for the owner's word.
 
 **Roadmap 8 stage a shipped in v0.34.0**: the owner compiled 1.00 and saw XAUUSD on the app (10 Nov, 21:45).
 

@@ -44,14 +44,15 @@ const code = async pg => { if(await pg.isVisible("#codeAsk:not(.hide) #caCode"))
   // ---- PAPER -> MT5 (a 2FA code)
   await pg.click('#sideSw [data-s="mt5"]');
   await pg.waitForSelector("#mtSideDlg:not(.hide) #mtsGo");
-  ok(/opens no new|Placing new orders from here comes in the next step/.test(await pg.textContent("#mtSideDlg")), "the MT5 dialog explains it (managing real trades; placing comes next)");
+  ok(/Every order you place here is real/.test(await pg.textContent("#mtSideDlg")), "the MT5 dialog explains it (managing real trades; placing comes next)");
   await pg.click("#mtsGo"); await pg.waitForTimeout(400); await code(pg);
   await pg.waitForFunction(() => S.side === "mt5" && ACCT === "mt5-21182752" && P.snap && P.snap.mode === "mt5", null, { timeout: 15000 });
   ok(await pg.evaluate(() => document.body.classList.contains("is-mt5") && document.querySelector('#sideSw [data-s="mt5"]').classList.contains("on")), "on MT5: the switch and the header in MT5's colour");
   const opt = await pg.evaluate(() => [document.querySelector("#acctSel").selectedOptions[0].textContent, document.querySelector("#acctSel").title]);
-  ok(/● 21182752 · DEMO · \$[\d,]+\.\d\d/.test(opt[0]) && /FundingPips-SIM1/.test(opt[1]), `the switcher: "${opt[0]}" (${opt[1].slice(0, 50)})`);
-  ok(await pg.evaluate(() => { const h = document.querySelector("#app > header"), w = document.querySelector("#mtWarn");
-    return h.scrollHeight - (w && !w.classList.contains("hide") ? w.offsetHeight : 0) < 70; }), "the top bar stays on one line at 1500 px on MT5");
+  ok(/● 21182752 · \$[\d,]+$/.test(opt[0]) && /FundingPips-SIM1 · DEMO · balance \$[\d,]+\.\d\d/.test(opt[1]), `the switcher: "${opt[0]}" (${opt[1].slice(0, 70)})`);
+  const hb = await pg.evaluate(() => { const h = document.querySelector("#app > header"), w = document.querySelector("#mtWarn");
+    return {h: h.scrollHeight - (w && !w.classList.contains("hide") ? w.offsetHeight : 0), kids: [...h.children].filter(c => c.offsetWidth).map(c => (c.id || c.className).slice(0, 12) + ":" + c.offsetWidth + "@" + c.offsetTop + "/" + c.offsetHeight).join(" ")}; });
+  ok(hb.h < 70, "the top bar stays on one line at 1500 px on MT5" + (hb.h < 70 ? "" : ` (${hb.h}: ${hb.kids})`));
   ok(await pg.evaluate(() => /\$/.test(document.querySelector("#acct").textContent) && !/₹/.test(document.querySelector("#acct").textContent)), "money in $ on the panel");
   ok(/Daily floor \$[\d,.]+ \(5% of the day's start/.test(await pg.textContent("#mtFoot")) && /Max floor \$4,500\.00/.test(await pg.textContent("#mtFoot")),
      "FundingPips' limits under the figures (daily from the broker's midnight, max from $5,000)");
@@ -153,6 +154,64 @@ const code = async pg => { if(await pg.isVisible("#codeAsk:not(.hide) #caCode"))
   await pg.evaluate(() => openDrawer()); await pg.waitForTimeout(600);
   ok(/Starting size/.test(await pg.textContent("#rulesForm")) && !/square-off/i.test(await pg.textContent("#rulesForm")), "Settings' rules: the MT5 account's own limits (no Fyers square-off)");
   await pg.click("#bClose");
+
+  // ---- b2: placing from the app (the chart tool, PLACE)
+  await pg.evaluate(() => pgShow("chart"));
+  await pg.evaluate(async () => { await openBySymbol("MT5:XAUUSD"); });
+  await pg.waitForTimeout(1500);
+  await pg.evaluate(() => { arm(1); P.T.mode = "lots"; P.T.lots = 0.03; P.T.slDist = 5; P.T.tpMode = "r"; P.T.tp_r = 2; renderTicket(); toolRedraw(); preview(0); });
+  await pg.waitForFunction(() => P.plan && P.plan.lots === 0.03 && !P.plan.blocked && document.querySelector("#tPlace") && !document.querySelector("#tPlace").disabled,
+    null, { timeout: 15000 }).catch(() => {});
+  const pv = await pg.evaluate(() => ({lots: P.plan && P.plan.lots, blocked: P.plan && P.plan.blocked, risk: P.plan && P.plan.risk, sl: P.plan && P.plan.sl,
+    btn: (document.querySelector("#tPlace") || {}).textContent, ccy: P.plan && P.plan.ccy, size: document.querySelector("#tkSizeUnit").textContent}));
+  ok(pv.lots === 0.03 && !pv.blocked && /^MT5 PLACE/.test(pv.btn || "") && pv.ccy === "USD", `the chart tool on MT5: 0.03 lot, net risk $${pv.risk}, "${pv.btn}"`);
+  ok(/0\.01 steps/.test(pv.size) && !(await pg.isVisible("#tProd")), "lots in MT5's 0.01 steps; no Fyers product on MT5");
+  const before = (await ctl("/state")).positions.length;
+  await pg.click("#tPlace");
+  for(let i = 0; i < 20 && (await ctl("/state")).positions.length === before; i++) await pg.waitForTimeout(250);
+  const placed = (await ctl("/state")).positions.find(p => /^FTM /.test(p.comment));
+  ok(placed && placed.vol === 0.03 && Math.abs(placed.sl - pv.sl) < 1e-6 && placed.tp > 0, `PLACE: the order is in MT5 with its real SL / TP (#${placed && placed.ticket}, SL ${placed && placed.sl})`);
+  await pg.waitForFunction(t => P.snap.positions.some(p => p.ticket === t && !p.outside), placed && placed.ticket, { timeout: 8000 }).catch(() => {});
+  ok(await pg.evaluate(t => { const p = P.snap.positions.find(x => x.ticket === t); return p && !p.outside && p.first_sl && p.init_risk > 0; }, placed && placed.ticket),
+     "it shows as the app's trade, its planned stop as 1R");
+  await pg.screenshot({ path: SHOT + "mt5acct_placed.png" });
+  await pg.evaluate(() => { arm(-1); P.T.slDist = 5; renderTicket(); toolRedraw(); preview(0); });
+  await pg.waitForFunction(() => P.plan && P.plan.side === -1, null, { timeout: 8000 }).catch(() => {});
+  ok(/no hedging/.test(await pg.evaluate(() => P.plan && P.plan.blocked || "")), "no hedging: a SELL XAUUSD while long is blocked, with the reason");
+  await pg.evaluate(() => disarm());
+
+  // ---- b3: the news guard (a ForexFactory file the mock reads), the kill switch
+  fs.writeFileSync((process.env.FYERS_HELPER_DATA || ".") + "/ff_test.json", JSON.stringify([
+    {title: "Non-Farm Employment Change", country: "USD", date: new Date(Date.now() + 120000).toISOString(), impact: "High", forecast: "", previous: ""},
+    {title: "German ifo", country: "EUR", date: new Date(Date.now() + 600000).toISOString(), impact: "Medium", forecast: "", previous: ""}]));
+  await pg.evaluate(() => pgShow("account")); await pg.waitForTimeout(800);
+  await pg.click("#mtNewsGo"); await pg.waitForTimeout(1500);
+  ok(/Non-Farm Employment Change/.test(await pg.textContent("#pg_account")) && !/German ifo/.test(await pg.textContent("#pg_account")),
+     "the Account page lists the high-impact news ahead (ForexFactory; medium impact left out)");
+  await pg.selectOption('#mtRules [data-k="phase"]', "master"); await pg.click("#mtRulesSave"); await pg.waitForTimeout(800);
+  await pg.evaluate(() => pgShow("chart"));
+  await pg.evaluate(() => { arm(1); P.T.slDist = 5; renderTicket(); toolRedraw(); preview(0); });
+  await pg.waitForFunction(() => P.plan && P.plan.blocked, null, { timeout: 8000 }).catch(() => {});
+  ok(/FundingPips Master/.test(await pg.evaluate(() => P.plan && P.plan.blocked || "")), "Master: no opening within 5 min of high-impact USD news");
+  ok(/Non-Farm/.test(await pg.textContent("#mtWarn")), "... and the warning under the top bar names it");
+  await pg.evaluate(() => disarm());
+  fs.writeFileSync((process.env.FYERS_HELPER_DATA || ".") + "/ff_test.json", "[]");
+  await pg.evaluate(async () => { await api("/api/paper/rules", {body: {phase: "evaluation"}}); });
+  ok(await pg.isVisible("#bKillMt5"), "KILL in the top bar on MT5");
+  pg.once("dialog", d => d.accept());
+  await pg.click("#bKillMt5");
+  for(let i = 0; i < 20 && (await ctl("/state")).positions.length; i++) await pg.waitForTimeout(250);
+  ok(!(await ctl("/state")).positions.length, "KILL: every position closed in MT5");
+  await pg.waitForFunction(() => P.snap.mt5.halted, null, { timeout: 5000 }).catch(() => {});
+  await pg.evaluate(() => { arm(1); P.T.slDist = 5; renderTicket(); toolRedraw(); preview(0); });
+  await pg.waitForFunction(() => P.plan && P.plan.blocked, null, { timeout: 8000 }).catch(() => {});
+  ok(/kill switch/.test(await pg.evaluate(() => P.plan && P.plan.blocked || "")), "... and new orders are paused");
+  await pg.evaluate(() => disarm());
+  await pg.evaluate(() => pgShow("account")); await pg.waitForTimeout(800);
+  await pg.click("#mtResume"); await pg.waitForTimeout(400); await code(pg);
+  await pg.waitForFunction(() => !P.snap.mt5.halted, null, { timeout: 8000 }).catch(() => {});
+  ok(await pg.evaluate(() => !P.snap.mt5.halted), "Resume (a 2FA code): orders allowed again");
+  await pg.evaluate(() => pgShow("chart"));
 
   // ---- back to PAPER
   await pg.click('#sideSw [data-s="paper"]'); await pg.waitForTimeout(1500);

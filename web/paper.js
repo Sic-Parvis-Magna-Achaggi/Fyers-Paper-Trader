@@ -13,6 +13,10 @@ const CURLOC = () => CUR() === "₹" ? "en-IN" : "en-US";
 const rs = n => n == null || isNaN(n) ? "–" : (n < 0 ? "−" : "") + CUR() + Math.abs(n).toLocaleString(CURLOC(), {minimumFractionDigits: 2, maximumFractionDigits: 2});
 const rsS = n => n == null || isNaN(n) ? "–" : (n > 0 ? "+" : n < 0 ? "−" : "") + CUR() + Math.abs(n).toLocaleString(CURLOC(), {maximumFractionDigits: CUR() === "₹" ? 0 : 2});
 const cls = n => n > 0 ? "up" : n < 0 ? "down" : "";
+/* lots typed: whole lots on Fyers; MT5's volume in 0.01 steps on an MT5 account (v0.37.0) */
+const isMtAcct = () => !!(P.snap && P.snap.mode === "mt5");
+const lotsIn = v => isMtAcct() ? Math.max(0.01, Math.round(+v * 100) / 100) : Math.max(1, Math.round(+v));
+const lotsStep = (v, d) => isMtAcct() ? lotsIn(+v + d * 0.01) : lotsIn(+v + d);
 const short = s => (s || "").replace(/^[A-Z][A-Z0-9]*:/, "");   // (NSE:, MCX:, MT5:)
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const num = v => { const n = parseFloat(String(v).replace(/,/g, "")); return isNaN(n) ? null : n; };
@@ -196,7 +200,7 @@ function renderTicket(){
   $("#tkSl").placeholder = T.basis === "underlying" ? "future price" : "price";
   $("#tkTpR").disabled = T.basis === "underlying";
   setv("#tkSize", T.mode === "pct" ? T.risk_pct : T.mode === "amt" ? T.risk_amt : T.lots);
-  $("#tkSizeUnit").textContent = T.mode === "pct" ? "% of balance" : T.mode === "amt" ? "₹ at risk (net)" : "lots";
+  $("#tkSizeUnit").textContent = T.mode === "pct" ? "% of balance" : T.mode === "amt" ? CUR().trim() + " at risk (net)" : isMtAcct() ? "lots (0.01 steps)" : "lots";
   // stocks: Intraday or Delivery (CNC); derivatives: Intraday or Carry (NRML)
   const stock = row && (row.f === "EQ" || row.f === "OTHER"), want = stock ? "CNC" : "MARGIN";
   const pe = $("#tkProd"); if(pe.dataset.k !== want){ pe.dataset.k = want;
@@ -340,7 +344,7 @@ function wireTicket(){
   for(const id of ["#cLock", "#tkLock"]){ const b = $(id); if(b) b.onclick = e => { e.stopPropagation(); rrLockToggle(); }; }
   renderLock();
   on("#tkSize", () => { const v = num($("#tkSize").value); if(v == null) return;
-    if(P.T.mode === "pct") P.T.risk_pct = v; else if(P.T.mode === "amt") P.T.risk_amt = v; else P.T.lots = Math.max(1, Math.round(v));
+    if(P.T.mode === "pct") P.T.risk_pct = v; else if(P.T.mode === "amt") P.T.risk_amt = v; else P.T.lots = lotsIn(v);
     preview(); saveTicketDefaults(); });
   $("#tkProd").onchange = () => { P.T.product = $("#tkProd").value; preview(); saveTicketDefaults(); };
   $("#bPlace").onclick = place;
@@ -930,7 +934,7 @@ async function saveRules(sel = "#rulesForm", msgSel = "#rulesMsg"){
   const body = {};
   document.querySelectorAll(sel + " [data-k]").forEach(el => {
     const k = el.dataset.k; let v = el.value;
-    if(k === "sl_required" || k === "squareoff_on") v = v === "true";
+    if(k === "sl_required" || k === "squareoff_on" || el.dataset.t === "b") v = v === "true";
     else if(el.dataset.t === "s"){}                                  // (a word: MT5's daily % of, phase)
     else if(!["max_mode", "day_from"].includes(k) && !/^(expiry_exit|squareoff_cd|fy_sq)/.test(k)) v = num(v);
     body[k] = v;

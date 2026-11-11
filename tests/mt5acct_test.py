@@ -353,13 +353,163 @@ async def main():
     e.set_rules({"size": 5000, "daily_of": "day"})
     ok("back to 5,000: no breach", not e.snapshot()["mt5"]["breach"])
 
-    print("placing is the next step; paper accounts still refuse MT5")
-    for fn in (lambda: e.plan({"s": "MT5:XAUUSD", "side": 1}), lambda: e.place({"s": "MT5:XAUUSD", "side": 1})):
-        try:
-            fn()
-            ok("placing from the app refused (b2)", False)
-        except Refused as x:
-            ok("placing from the app refused (b2)", "next step" in str(x), x)
+    print("b2: placing from the app")
+    await calls(ea, 2)                                  # (the ticket's symbol is streamed by this terminal now)
+    bid, ask = ea.quote("XAUUSD")
+    req = {"s": "MT5:XAUUSD", "side": 1, "type": "market", "sl": round(bid - 6, 2), "tp_r": 2, "mode": "pct", "risk_pct": 0.5}
+    try:
+        e.plan(dict(req))
+    except Refused as x:
+        ok("(the first preview, before this terminal streams it: waiting for its price)", "waiting for" in str(x), x)
+    await calls(ea, 2)
+    p1 = e.plan(dict(req))
+    ok("a plan: volume in 0.01 steps, risk within 0.5% of the balance, net of commission", p1.get("steps") and
+       abs(p1["lots"] - p1["steps"] * 0.01) < 1e-9 and 0 < p1["risk"] <= e.balance() * 0.005 + 0.01 and not p1.get("blocked"), p1)
+    ok("its margin from MT5's own figure (OrderCalcMargin)", p1.get("margin_source") == "mt5" and p1.get("margin") > 0, p1.get("margin"))
+    ok("money in $, product MT5", p1.get("ccy") == "USD" and p1.get("product") == "MT5")
+    p2 = e.plan({**req, "mode": "lots", "lots": 0.05})
+    ok("fixed lots: 0.05 lot = 5 steps", p2["steps"] == 5 and p2["lots"] == 0.05, (p2["steps"], p2["lots"]))
+    p3 = e.plan({**req, "mode": "lots", "lots": 0.004})
+    ok("under MT5's minimum volume: blocked", p3.get("blocked"), p3.get("blocked"))
+    ph = e.plan({**req, "side": -1, "sl": round(ask + 6, 2)})
+    ok("no hedging: a SELL XAUUSD with a long open in this account is blocked", "no hedging" in str(ph.get("blocked")), ph.get("blocked"))
+    try:
+        e.plan({"s": "MT5:EURUSD", "side": -1, "type": "market", "sl": 2, "mode": "lots", "lots": 0.01})
+    except Refused:
+        pass
+    await calls(ea, 2)
+    pe2 = e.plan({"s": "MT5:EURUSD", "side": -1, "type": "market", "sl": round(ea.quote("EURUSD")[1] + 0.002, 5), "tp_r": 2,
+                  "mode": "lots", "lots": 0.01})
+    ok("another symbol the other way is fine (owner, 10 Nov)", not pe2.get("blocked"), pe2.get("blocked"))
+    n_pos = len(e.positions)
+    pl = e.place(dict(req))
+    oc = [c for c in e.M["cmd"].values() if c["k"] == "OPEN"]
+    ok("PLACE: an OPEN command with the plan's volume, SL and TP", len(oc) == 1 and f" {pl['lots']:.8g} " in " " + oc[0]["args"] + " "
+       and e.snapshot()["mt5"]["opening"], oc)
+    await calls(ea, 2)
+    newp = [x for x in e.positions if x.get("comment", "").startswith("FTM ")] if False else \
+        [x for x in e.positions if not x.get("outside")]
+    ok("MT5 opened it: the app's trade (not 'placed in MT5'), its planned stop as 1R", len(e.positions) == n_pos + 1 and newp and
+       newp[-1]["first_sl"] == req["sl"] and abs(newp[-1]["init_risk"] - pl["risk"]) < 1.0 and not e.M["opening"],
+       (len(e.positions), newp and newp[-1].get("first_sl"), pl.get("risk")))
+    ok("... with MT5's real SL and TP from the start", newp and ea.positions[newp[-1]["ticket"]]["sl"] == req["sl"]
+       and ea.positions[newp[-1]["ticket"]]["tp"] == pl["tp"], newp and ea.positions[newp[-1]["ticket"]])
+    lp = {**req, "type": "limit", "price": round(bid - 3, 2), "sl": round(bid - 9, 2), "mode": "lots", "lots": 0.02}
+    e.place(dict(lp))
+    await calls(ea, 2)
+    lo = [o for o in e.orders if not o.get("outside")]
+    ok("a limit from the app: a pending order at MT5, linked to the app", len(lo) == 1 and lo[0]["price"] == lp["price"]
+       and lo[0]["lots"] == 0.02 and not e.M["opening"], lo)
+    e.cancel(lo[0]["id"])
+    await calls(ea, 2)
+    ea.control("/refuse", {"k": "OPEN", "code": 10016, "n": 1})
+    e.place({**req, "mode": "lots", "lots": 0.01})
+    await calls(ea, 2)
+    ok("MT5 refuses an order: shown, nothing waiting", any("MT5 refused BUY MARKET XAUUSD" in ev["msg"] for ev in e.events)
+       and not e.M["opening"], [ev["msg"] for ev in e.events[-2:]])
+    n_pos = len(e.positions)
+    ea.drop_results = 1
+    e.place({**req, "mode": "lots", "lots": 0.01})
+    await calls(ea, 2)
+    for c in e.M["cmd"].values():
+        c["sent"] -= mt5acct.CMD_WAIT + 1
+    await calls(ea, 2)
+    ok("a lost OPEN result: never sent again; the position, found by its tag, is the app's", len(e.positions) == n_pos + 1 and
+       len([c for c in ea.cmds if c.startswith("OPEN")]) == 4 and not e.M["cmd"], (len(e.positions), n_pos, ea.cmds[-2:]))
+    e.seen = time.time() - 60
+    pb = e.plan(dict(req))
+    ok("MT5 not connected: the plan says so", "isn't connected" in str(pb.get("blocked")), pb.get("blocked"))
+    try:
+        e.place(dict(req))
+        ok("... and PLACE is refused", False)
+    except Refused:
+        ok("... and PLACE is refused", True)
+    e.seen = time.time()
+    e.place({**req, "mode": "lots", "lots": 0.01})
+    e.seen = time.time() - 60
+    for c in e.M["cmd"].values():
+        c["made"] -= mt5acct.OPEN_EXPIRE + 1
+    e.housekeeping()
+    ok("an order that couldn't reach MT5 in 10 s is dropped, never placed late", not e.M["cmd"] and not e.M["opening"]
+       and any("NOT placed" in ev["msg"] for ev in e.events))
+    await calls(ea, 1)
+    ea.ver = "1.10"
+    await calls(ea, 1)
+    pv = e.plan(dict(req))
+    ok("EA 1.10: placing blocked (install 1.20); managing still works", "1.20" in str(pv.get("blocked")), pv.get("blocked"))
+    ea.ver = "1.20"
+    await calls(ea, 1)
+
+    print("b3: the kill switch")
+    lp2 = {**req, "type": "limit", "price": round(ea.quote("XAUUSD")[0] - 4, 2), "sl": round(ea.quote("XAUUSD")[0] - 10, 2),
+           "mode": "lots", "lots": 0.01}
+    e.place(lp2)
+    await calls(ea, 2)
+    ok("(a position and an order open)", ea.positions and ea.orders)
+    e.kill()
+    await calls(ea, 3)
+    ok("KILL: every position closed and every order cancelled in MT5", not ea.positions and not ea.orders and not e.positions
+       and not e.orders, (list(ea.positions), list(ea.orders)))
+    ok("... reason kill in the history", e.history[-1]["reason"] == "kill")
+    pk = e.plan(dict(req))
+    ok("... new orders paused", "kill switch" in str(pk.get("blocked")), pk.get("blocked"))
+    e.resume()
+    ok("Resume: orders allowed again", not e.plan(dict(req)).get("blocked"))
+
+    print("b3: the news guard (ForexFactory)")
+    from helper import news
+    e.set_rules({"phase": "evaluation"})
+    news.set_events([{"t": int(time.time()) + 120, "cur": "USD", "title": "Non-Farm Employment Change", "impact": "High"},
+                     {"t": int(time.time()) + 60, "cur": "JPY", "title": "BOJ Policy Rate", "impact": "High"},
+                     {"t": int(time.time()) + 90, "cur": "USD", "title": "Unemployment Claims", "impact": "Medium"}])
+    e.place({**req, "mode": "lots", "lots": 0.01})
+    await calls(ea, 2)
+    pn = e.plan(dict(req))
+    ok("evaluation: not blocked, a note about purposely trading news", not pn.get("blocked") and
+       any("Non-Farm" in n and "purposely" in n for n in pn["notes"]), pn["notes"])
+    ok("... and a warning on the open trade", any("Non-Farm" in w for w in e.snapshot()["mt5"]["warnings"]))
+    ok("the next 24 h of high-impact news for the account (medium-impact left out)", [x["title"] for x in e.snapshot()["mt5"]["news"]]
+       == ["Non-Farm Employment Change"], e.snapshot()["mt5"]["news"])
+    e.set_rules({"phase": "master"})
+    pn = e.plan(dict(req))
+    ok("Master: no opening within 5 min of it", "FundingPips Master" in str(pn.get("blocked")) and "Non-Farm" in pn["blocked"], pn.get("blocked"))
+    try:
+        e.close_now(e.positions[-1]["id"])
+        ok("Master: no closing from the app within 5 min of it", False)
+    except Refused as x:
+        ok("Master: no closing from the app within 5 min of it", "closing" in str(x), x)
+    ok("another currency's news doesn't block EURUSD... (USD is EURUSD's too)", "Non-Farm" in str(e.plan(pe2 | {"_steps": False, "s": "MT5:EURUSD",
+       "side": -1, "type": "market", "mode": "lots", "lots": 0.01}).get("blocked") or ""))
+    news.set_events([{"t": int(time.time()) + 1800, "cur": "USD", "title": "FOMC Statement", "impact": "High"}])
+    ok("30 min away: no block", not e.plan(dict(req)).get("blocked"))
+    news.set_events([])
+    e.set_rules({"phase": "evaluation"})
+    ok("news parsed from ForexFactory's JSON (time with its offset)", news.parse([{"title": "CPI m/m", "country": "USD",
+       "date": "2026-11-12T08:30:00-05:00", "impact": "High"}])[0]["t"] == 1794490200)
+
+    print("b3: the EA trails by itself while the link is down")
+    tp_ = e.positions[-1]
+    e.set_pos_trail(tp_["id"], {"sl_r": 1.0, "be_r": 0.5})
+    await calls(ea, 2)
+    ok("the EA has the trade's trailing table (TRAIL)", tp_["ticket"] in ea.trail and ea.trail[tp_["ticket"]]["sl_d"] > 0, ea.trail)
+    R = abs(tp_["basis_entry"] - tp_["first_sl"])
+    ea.offline = True
+    ea.control("/shift", {"sym": "XAUUSD", "by": round(R * 1.6, 2)})      # (its target is at 2R)
+    sl0 = ea.positions[tp_["ticket"]]["sl"]
+    for _ in range(3):
+        await calls(ea, 1)
+    ok("link down: the EA moved MT5's stop by itself (Trail SL, never below BE)", ea.positions[tp_["ticket"]]["sl"] > sl0
+       and ea.positions[tp_["ticket"]]["sl"] >= e._be_price(tp_) and ea.trailed, (sl0, ea.positions[tp_["ticket"]]["sl"]))
+    moved = ea.positions[tp_["ticket"]]["sl"]
+    ea.offline = False
+    await calls(ea, 1)
+    await calls(ea, 1)
+    ok("link back: the app takes it as the trail (not 'moved by hand'), and keeps trailing", abs(tp_["sl"] - moved) < 1e-9
+       and not tp_.get("own_stop") and tp_.get("trail") and any("EA trailed" in ev["msg"] for ev in e.events), (tp_["sl"], moved))
+    ea.trail.clear()
+    ea.dcur = (0, 0)
+    await calls(ea, 2)
+    ok("an EA restart gets the table again", tp_["ticket"] in ea.trail)
     try:
         e.plan({"s": "MCX:CRUDEOIL26NOVFUT", "side": 1})
         ok("a Fyers contract on an MT5 account: refused", False)
@@ -390,6 +540,18 @@ async def main():
     px1 = e.px("MT5:XAUUSD").get("bid")
     ok("... and the first account's are still its own", px1 and abs(px1 - ea.quote("XAUUSD")[0]) < 1, (px1, ea.quote("XAUUSD")))
     ok("the second account needs its own confirmation", not e2.M["confirmed"])
+    ea.open("US30.cash", 1, 0.1, sl=round(ea.quote("US30.cash")[0] - 300, 2))
+    await calls(ea, 1)
+    q30 = {"s": "MT5:US30.cash", "side": -1, "type": "market", "sl": round(ea2.quote("US30.cash")[1] + 300, 2), "tp_r": 2,
+           "mode": "lots", "lots": 0.1}
+    try:
+        e2.plan(dict(q30))
+    except Refused:
+        pass
+    await calls(ea2, 2)
+    ph2 = e2.plan(dict(q30))
+    ok("no hedging across your MT5 accounts: a SELL US30 here while 21182752 is long US30", "21182752" in str(ph2.get("blocked"))
+       and "no hedging" in ph2["blocked"], ph2.get("blocked"))
 
     print("EA 1.00, a non-admin user")
     ea3 = terminal("adm", r, login=21182754, old=True)

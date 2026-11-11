@@ -13,6 +13,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fake_telegram  # noqa: E402
 TG_PORT = int(os.environ.get("FAKE_TELEGRAM_PORT", "8767"))
 os.environ["TELEGRAM_API"] = f"http://127.0.0.1:{TG_PORT}"
+# the MT5 news guard (v0.37.0) never reads the real ForexFactory in tests: a file the tests write (mt5acct_flow.js)
+os.environ.setdefault("FTM_NEWS_URL", "file://" + os.path.join(os.environ.get("FYERS_HELPER_DATA", "."), "ff_test.json"))
 os.environ.setdefault("HC_API", f"http://127.0.0.1:{TG_PORT}")
 fake_telegram.start(TG_PORT)
 from helper import fyers_link, feed as feedmod  # noqa: E402

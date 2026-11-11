@@ -1,4 +1,4 @@
-"""MT5 accounts (roadmap 8, stage b, slice b1): each MT5 login whose terminal runs the FTM Bridge EA (1.10 or later) is an
+"""MT5 accounts (roadmap 8, stage b: slice b1 v0.36.0, b2 / b3 v0.37.0): each MT5 login whose terminal runs the FTM Bridge EA (1.10 or later) is an
 account of its own in this app, on the MT5 side of the switch at the top left (PAPER | LIVE | MT5), kept apart from Fyers.
 
 What b1 does: everything about the account comes from MT5 itself, through the EA's sync call (helper/mt5.py):
@@ -17,6 +17,16 @@ default until then, a warning if a later deal differs) and the position's swap. 
 as in MT5. FundingPips' loss limits are shown: daily from the balance at the broker's midnight (worked out from MT5's
 deals since then), max from the starting size typed for the account.
 
+b2 (EA 1.20): orders placed from the app (the ticket, the chart tool's PLACE): sized like paper (risk %, $ amount or lots in
+0.01 steps), margin from MT5's own OrderCalcMargin, the guards (FundingPips' floors, risk cap, ...), and no hedging: nothing
+opposite an open trade / pending order on the same symbol in this or the user's other MT5 accounts. An OPEN command carries
+the tag the EA puts in the order's comment ("FTM <tag>"): that ties the position / order back to the app's plan (its stop as
+1R, its trailing). An OPEN is never sent twice; one not delivered within 10 s is dropped.
+b3: the kill switch (close everything, cancel everything, pause new orders until Resume with 2FA); the news guard
+(helper/news.py: ForexFactory's high-impact events on the symbol's currencies; Master phase: no opening / closing from the
+app ±5 min, evaluation: a warning); TRAIL lines so the EA trails by itself (the same rules) while it can't reach the app,
+its moves reported back ("trailed") and taken as the trail, never as a stop moved by hand.
+
 The engine reuses the paper engine's sizing, BE (+ costs) and trailing logic: an MT5 row passed to charges.py has
 x == "MT5" and the engine's qty is a whole number of volume steps (0.01 lot), so R, BE and the trail work unchanged."""
 from __future__ import annotations
@@ -25,7 +35,7 @@ import datetime as dt
 import logging
 import time
 
-from . import charges, mt5, store
+from . import charges, mt5, news, store
 from .paper import DEFAULT_RULES, Paper, Refused
 
 log = logging.getLogger("mt5acct")
@@ -33,6 +43,9 @@ log = logging.getLogger("mt5acct")
 PREFIX = "mt5-"              # account ids: mt5-<login>
 NONE_ID = "mt5-none"         # what the MT5 side shows before any MT5 terminal has called
 EA_MIN = "1.10"              # the first EA that reports positions and carries out the app's commands
+EA_TRADE = "1.20"            # the first EA that places orders the app sends (OPEN) and trails by itself when the link drops
+OPEN_EXPIRE = 10             # an order not yet delivered (MT5 offline) after this long is dropped: never placed late
+TRAIL_EVERY = 30             # the EA's offline-trailing table is sent again this often (and at once on a change)
 CMD_WAIT = 20                # a sent command with no result after this long is treated as lost (MT5's state decides)
 CLOSE_EXPIRE = 20            # a close / cancel not yet delivered (MT5 offline) after this long is dropped: never late
 MOD_EXPIRE = 300             # an SL / TP change not yet delivered after this long is dropped (asked again if needed)
@@ -61,8 +74,11 @@ MT5_RULES = {
     "daily_of": "day",         # the daily % is of: "day" the day's starting balance (FundingPips) or "size" the starting size
     "phase": "evaluation",     # evaluation | master (the news guard, slice b3, depends on it)
     "comm_default": 0.0,       # $ per lot on each deal (opening and closing) until MT5's own deals teach the real figure
+    "news_on": True,           # the news guard (ForexFactory's high-impact events on the symbol's currencies)
+    "news_min": 5,             # Master: no opening / closing this many minutes either side of the event (FundingPips: 5)
+    "news_warn_min": 15,       # a warning this many minutes before one (evaluation: a warning only)
 }
-MT5_ONLY = ("daily_of", "phase", "comm_default")
+MT5_ONLY = ("daily_of", "phase", "comm_default", "news_on", "news_min", "news_warn_min")
 MT5_KEYS = ("size", "daily_pct", "max_pct", "max_mode", "day_from", "buffer_pct", "risk_cap_pct", "max_margin_pct",
             "max_open_risk_pct", "max_trades", "sl_required", "be_buffer_ticks") + MT5_ONLY      # what an MT5 account can set
 FIXED = {"squareoff_on": False, "stale_sec": 120}      # (Fyers' square-off and expiry rules never apply to MT5)
@@ -93,9 +109,9 @@ def _i(v, d=0):
             return d
 
 
-def ver_ok(v: str) -> bool:
+def ver_ok(v: str, need: str = EA_MIN) -> bool:
     try:
-        return tuple(int(x) for x in str(v).split(".")[:2]) >= tuple(int(x) for x in EA_MIN.split("."))
+        return tuple(int(x) for x in str(v).split(".")[:2]) >= tuple(int(x) for x in need.split("."))
     except ValueError:
         return False
 
@@ -122,6 +138,9 @@ class Mt5Engine(Paper):
         if not s.get("acct"):
             size = float(self.rules["size"])
             self.acct = {"start": size, "realized": 0.0, "peak": size, "created": time.time(), "cycle": 1}
+        if not s.get("ticket"):
+            self.ticket.update(mode="pct", risk_pct=0.5, lots=0.01, product="MT5")   # (lots: MT5's volume, 0.01 steps)
+        self.ticket["product"] = "MT5"
         d = store.load(self.dir + "mt5_deals.json", {}) if not self.none else {}
         self.deals = {int(k): v for k, v in (d.get("deals") or {}).items()}
         self.booked = set(d.get("booked") or [])
@@ -134,7 +153,9 @@ class Mt5Engine(Paper):
         self.M = {"comm": m.get("comm") or {}, "cmd": m.get("cmd") or {}, "confirmed": bool(m.get("confirmed")),
                   "base": bool(m.get("base")), "sym": m.get("sym") or {}, "seq": int(m.get("seq") or 0),
                   "info": m.get("info") or {}, "caught": bool(m.get("caught")), "size_set": bool(m.get("size_set")),
-                  "dreset": bool(m.get("dreset")), "first_seen": m.get("first_seen") or 0, "ea": m.get("ea") or ""}
+                  "dreset": bool(m.get("dreset")), "first_seen": m.get("first_seen") or 0, "ea": m.get("ea") or "",
+                  "opening": m.get("opening") or {}, "placed": m.get("placed") or {}, "halted": bool(m.get("halted")),
+                  "trail_sent": m.get("trail_sent") or {}, "trail_at": 0, "etrail": m.get("etrail") or {}}
         self.ea = self.M["ea"]
 
     def _save_extra(self) -> dict:
@@ -293,9 +314,15 @@ class Mt5Engine(Paper):
         changed = False
         for name, v in (body.get("sym") or {}).items():
             if isinstance(v, list) and len(v) >= 5 and mt5.NAME_RE.match(str(name)):
-                self.M["sym"][name] = {"tv": _f(v[0]), "ts": _f(v[1]), "vs": _f(v[2]) or 0.01, "cs": _f(v[3]), "dg": _i(v[4])}
+                si = {"tv": _f(v[0]), "ts": _f(v[1]), "vs": _f(v[2]) or 0.01, "cs": _f(v[3]), "dg": _i(v[4])}
+                if len(v) >= 10:                   # EA 1.20: margin for 1 lot (buy, sell), volume min / max, stops level
+                    si.update(mb=_f(v[5]), ms=_f(v[6]), vmin=_f(v[7]), vmax=_f(v[8]), sl=_i(v[9]))
+                self.M["sym"][name] = si
         for r in body.get("res") or []:
             changed |= self._result(r)
+        for r in body.get("trailed") or []:         # stops the EA moved itself while the link was down (1.20)
+            if isinstance(r, list) and len(r) >= 2 and _i(r[0]) > 0:
+                self.M["etrail"].setdefault(str(_i(r[0])), []).append([_f(r[1]), time.time()])
         nd = self._take_deals(body.get("deals") or [])
         if nd:
             changed = True
@@ -329,6 +356,7 @@ class Mt5Engine(Paper):
         self._lost()
         self._push_all()
         lines += self._out()
+        lines += self._trail_lines(force=dcur == 0)
         if changed:
             self.changed(None)
         elif self.on_change and (old_bal != self.info.get("balance") or t - self._report_push > 1.0):
@@ -580,11 +608,21 @@ class Mt5Engine(Paper):
             else:
                 pos.pop("qty_diff", None)
             pend = self._cmd_for(tk, "MOD")
+            et0 = self.M["etrail"].get(str(tk)) or []
+            if pend and not pend["sent"] and sl is not None and any(self._same(row, sl, v[0]) for v in et0) \
+                    and (pos.get("sl") is None or pos["side"] * (sl - pos["sl"]) > 0):
+                self.M["cmd"].pop(pend["tag"], None)       # (an older trail step queued when the link dropped: the EA's
+                pend = None                                 # tighter stop wins, never loosened back)
             if not self._same(row, sl, pos.get("b_sl")) or not self._same(row, tp, pos.get("b_tp")):
                 if not pend:
-                    # moved at MT5, not by the app (by hand in MT5, or another EA): MT5's stop is the stop now
+                    # moved at MT5, not by the app: by the EA's own trailing while the link was down (1.20), else by hand
+                    # in MT5 or another EA - MT5's stop is the stop now
                     if not self._same(row, sl, pos.get("sl")) or not self._same(row, tp, pos.get("tp")):
-                        self._adopt_stops(pos, row, sl, tp)
+                        et = self.M["etrail"].pop(str(tk), None) or []
+                        if sl is not None and self._same(row, tp, pos.get("tp")) and any(self._same(row, sl, v[0]) for v in et):
+                            self._ea_trailed(pos, row, sl)
+                        else:
+                            self._adopt_stops(pos, row, sl, tp)
                         changed = True
                 pos["b_sl"], pos["b_tp"] = sl, tp
         for pos in list(self.positions):
@@ -606,6 +644,7 @@ class Mt5Engine(Paper):
             comm_in, est = round(float(row["comm"]["in"]) * vol, 2), True
         opened = self.to_utc(tmsc / 1000.0) if tmsc else time.time()
         outside = not cm.startswith("FTM")
+        meta = self._placed_meta(cm)
         pos = {"id": f"P{tk}", "ticket": tk, "pid_mt": ident, "s": row["s"], "side": side, "product": "MT5", "qty": n,
                "max_qty": n, "avg": po, "paid": round(comm_in - sw, 2), "comm_in": comm_in, "comm_est": est, "swap": round(sw, 2),
                "charges": charges.mt5_comm(row, n, "in"), "entries": [{"t": opened, "qty": n, "price": po, "charges": {}, "how": "MT5"}],
@@ -614,16 +653,52 @@ class Mt5Engine(Paper):
                "be_done": False, "trail": False, "own_stop": False, "margin": 0, "tr": dict(self.trail),
                "outside": outside, "magic": magic, "comment": cm, "b_sl": sl, "b_tp": tp, "seen_srv": srv_now,
                "found": bool(first)}
+        if meta:                                   # placed from the app: its planned stops and trailing
+            pos["sl"] = pos["first_sl"] = meta.get("sl") if meta.get("sl") is not None else sl
+            pos["tp"] = meta.get("tp") if meta.get("tp") is not None else tp
+            pos["tr"] = dict(meta.get("tr") or self.trail)
         self.positions.append(pos)
-        if sl is not None:
+        if pos["sl"] is not None:
             pos["init_risk"] = round(self.pos_risk(pos), 2)
         if tmsc and tmsc / 1000.0 >= self._midnight_srv():
             self.day["trades"] = self.day.get("trades", 0) + 1
         self._symbols_changed()
-        what = "Already open in MT5" if first else ("Opened in MT5" if outside else "Opened")
+        what = "Already open in MT5" if first else ("Opened in MT5" if outside else "Opened (from the app)")
         self.event(f"{what}: {'LONG' if side > 0 else 'SHORT'} {row['u']} {vol:g} lot @ {po:g} (#{tk})"
                    + (f", SL {sl:g}" if sl else ", no SL") + (f", TP {tp:g}" if tp else ""), "info" if sl else "warn")
         return pos
+
+    def _ea_trailed(self, pos, row, sl):
+        """The EA moved the stop itself while the link to the app was down (Trail BE / Trail SL, as set here)."""
+        be = self._be_price(pos)
+        pos["sl"] = sl
+        pos["_pk"] = "trail"
+        if pos["side"] * (sl - be) >= -float(row.get("tick") or 0.01) / 2:
+            pos["be_done"] = True
+        if not self._same(row, sl, be) and (pos.get("tr") or self.trail).get("sl_on"):
+            pos["trail"] = True
+        pos.pop("mt_err", None)
+        self.event(f"{row['u']} #{pos['ticket']}: the EA trailed the stop to {sl:g} while the link was down")
+
+    def _placed_meta(self, cm: str):
+        """An MT5 position / order whose comment is "FTM <tag>" came from the app's OPEN with that tag."""
+        cm = str(cm or "")
+        if not cm.startswith("FTM "):
+            return None
+        tag = cm[4:].strip().split(" ")[0]
+        self.M["opening"].pop(tag, None)
+        return self.M["placed"].get(tag)
+
+    def _tag_seen(self, tag: str) -> bool:
+        c = "FTM " + tag
+        return any(p.get("comment") == c for p in self.positions) or any(o.get("comment") == c for o in self.orders) \
+            or any(d.get("cm") == c for d in self.deals.values())
+
+    def _op_text(self, op) -> str:
+        if not op:
+            return "the order"
+        return (f"{'BUY' if op['side'] > 0 else 'SELL'} {op['type'].upper()} {op['s'][len(mt5.PREFIX):]} {op['vol']:g} lot"
+                + (f" @ {op['price']:g}" if op.get("price") else ""))
 
     def _adopt_stops(self, pos, row, sl, tp):
         """SL / TP changed in MT5 itself: MT5's are the trade's stops now (the app stops trailing a stop moved by hand)."""
@@ -689,12 +764,13 @@ class Mt5Engine(Paper):
             price = self._rnd(row, price)
             o = next((x for x in self.orders if x.get("ticket") == tk), None)
             if o is None:
+                self._placed_meta(str(r[10]))         # (an order from the app: no longer "on its way")
                 n = self.steps(row, vcur)
                 o = {"id": f"O{tk}", "ticket": tk, "s": s, "side": side, "type": kind, "product": "MT5", "basis": "self",
                      "qty": n, "lots": round(vcur, 8), "price": price, "sl": sl, "tp": tp, "ref": None, "ref_price": None,
                      "delta": None, "margin": 0, "created": self.to_utc(_f(r[8]) / 1000.0) if _f(r[8]) else time.time(),
                      "outside": not str(r[10]).startswith("FTM"), "b_price": price, "b_sl": sl, "b_tp": tp,
-                     "stoplimit": _f(r[11]) or None, "mt_type": typ}
+                     "stoplimit": _f(r[11]) or None, "mt_type": typ, "comment": str(r[10])[:40]}
                 o["risk"] = round(self.order_risk(o), 2)
                 self.orders.append(o)
                 self._symbols_changed()
@@ -787,7 +863,7 @@ class Mt5Engine(Paper):
         for tag, c in sorted(self.M["cmd"].items(), key=lambda kv: kv[1]["made"]):
             if c["sent"]:
                 continue
-            exp = CLOSE_EXPIRE if c["k"] in ("CLOSE", "CANCEL") else MOD_EXPIRE
+            exp = OPEN_EXPIRE if c["k"] == "OPEN" else CLOSE_EXPIRE if c["k"] in ("CLOSE", "CANCEL") else MOD_EXPIRE
             if t - c["made"] > exp:
                 self.M["cmd"].pop(tag, None)
                 self._expired(c)
@@ -806,6 +882,10 @@ class Mt5Engine(Paper):
         return out
 
     def _expired(self, c):
+        if c["k"] == "OPEN":
+            op = self.M["opening"].pop(c["tag"], None)
+            self.event(f"{self._op_text(op) if op else 'An order'}: MT5 wasn't connected for {OPEN_EXPIRE} s - NOT placed", "warn")
+            return
         if c["k"] == "CLOSE":
             p = next((x for x in self.positions if x.get("ticket") == c["ticket"]), None)
             if p:
@@ -827,6 +907,13 @@ class Mt5Engine(Paper):
             if not c["sent"] or t - c["sent"] < CMD_WAIT:
                 continue
             self.M["cmd"].pop(tag, None)
+            if c["k"] == "OPEN":                   # never sent again: MT5's own reports (its comment "FTM <tag>") show it
+                op = self.M["opening"].get(tag)
+                if op and not self._tag_seen(tag):
+                    op["unsure"] = time.time()
+                    self.event(f"MT5 didn't confirm {self._op_text(op)}; nothing with its tag is in MT5 yet - the app won't send "
+                               "it again: check MT5 before placing it again", "warn")
+                continue
             if c["k"] == "CLOSE":
                 p = next((x for x in self.positions if x.get("ticket") == c["ticket"]), None)
                 if p and p.get("exiting"):
@@ -850,6 +937,16 @@ class Mt5Engine(Paper):
         if not c:
             return False
         ok = ok or ret in OK_CODES
+        if c["k"] == "OPEN":
+            op = self.M["opening"].get(tag)
+            if ok:
+                if op:
+                    op.update(ticket=_i(r[4]) if len(r) > 4 else 0, done=time.time())
+                self.event(f"MT5 placed {self._op_text(op) if op else 'the order'} (#{_i(r[4]) if len(r) > 4 else '?'})")
+            else:
+                self.M["opening"].pop(tag, None)
+                self.event(f"MT5 refused {self._op_text(op) if op else 'the order'}: {msg} ({ret})", "warn")
+            return True
         tk = c["ticket"]
         p = next((x for x in self.positions if x.get("ticket") == tk), None)
         o = next((x for x in self.orders if x.get("ticket") == tk), None)
@@ -877,41 +974,253 @@ class Mt5Engine(Paper):
         self.event(why, "warn")
         return True
 
-    # ------------------------------------------------------------ what the page can do (b1: manage, not place)
-    B2 = ("placing orders from the app comes in the next step (b2) - place it in MT5 for now: it shows here at once "
-          "and you can manage it from here")
+    # ------------------------------------------------------------ what the page can do
+    siblings = None                                # set by rt.py: () -> the user's other MT5 accounts (the no-hedging check)
 
-    def _writable(self):
+    def _block(self, need: str = EA_MIN):
+        """Why nothing can be changed at the broker right now (None: it can)."""
         if self.none:
-            raise Refused("no MT5 account yet: start MT5 on your laptop with the FTM Bridge EA (Settings › MT5 bridge)")
-        if not ver_ok(self.ea):
-            raise Refused(f"the EA on this terminal is {self.ea or 'old'}: install FTM Bridge {EA_MIN} (Settings › MT5 bridge) "
-                          "so the app can manage this account's trades")
+            return "no MT5 account yet: start MT5 on your laptop with the FTM Bridge EA (Settings › MT5 bridge)"
+        if not ver_ok(self.ea, need):
+            return (f"the EA on this terminal is {self.ea or 'old'}: install FTM Bridge {need} (Settings › MT5 bridge)"
+                    + (" to place orders from the app" if need == EA_TRADE else " so the app can manage this account's trades"))
         if not self.online():
-            raise Refused("MT5 isn't connected (start MT5 with the FTM Bridge EA): nothing can be changed at the broker now")
+            return "MT5 isn't connected (start MT5 with the FTM Bridge EA): nothing can be changed at the broker now"
         if self.trade and not self.trade.get("on"):
-            raise Refused("trading from the app is off in the EA's inputs (AllowTrading = false)")
+            return "trading from the app is off in the EA's inputs (AllowTrading = false)"
         if self.trade and not (self.trade.get("term") and self.trade.get("mql")):
-            raise Refused("MT5's Algo Trading is off (the button at the top of MT5, or the EA's 'Allow Algo Trading' box)")
-        if not self.M["confirmed"]:
+            return "MT5's Algo Trading is off (the button at the top of MT5, or the EA's 'Allow Algo Trading' box)"
+        return None
+
+    def _writable(self, need: str = EA_MIN, confirm: bool = True):
+        why = self._block(need)
+        if why:
+            raise Refused(why)
+        if confirm and not self.M["confirmed"]:
             raise NeedLogin(self.login)
 
     def confirm(self, typed) -> None:
         if str(typed or "").strip() != str(self.login):
             raise Refused(f"that isn't this account's login ({self.login})")
         self.M["confirmed"] = True
-        self.changed(f"MT5 account {self.login} confirmed: the app can now move its stops and close its trades")
+        self.changed(f"MT5 account {self.login} confirmed: the app can now place, move and close its trades")
+
+    # ---- placing (b2)
+    def margin_per_lot(self, row, side, product, price) -> tuple:
+        """Margin for one volume step, from MT5's own OrderCalcMargin (EA 1.20 sends it per symbol for 1 lot)."""
+        si = self.M["sym"].get(row["s"][len(mt5.PREFIX):]) or {}
+        m = si.get("mb" if side > 0 else "ms")
+        if m:
+            return float(m) * float(row["vstep"]), "mt5"
+        return None, "unknown"
+
+    def fetch_margin(self, row, side, product):
+        return None                                # (MT5 sends it: no Fyers call)
 
     def plan(self, req: dict, place=False) -> dict:
-        if not self.none:
-            self.row(req.get("s"))                # (a Fyers contract: the clearer refusal)
-        raise Refused(self.B2)
+        if self.none:
+            raise Refused(self._block())
+        row = self.row(req.get("s"))               # (a Fyers contract: refused here)
+        s = row["s"]
+        if s not in self.temp_watch:               # this terminal streams the symbol from now on (its own prices)
+            self.temp_watch[s] = time.time() + 300
+            self._symbols_changed()
+        self.temp_watch[s] = time.time() + 300
+        req = dict(req)
+        if not req.get("_steps"):
+            req["_steps"] = True
+            req["product"], req["basis"] = "MT5", "self"
+            if req.get("mode") == "lots":          # the page's lots are MT5's volume (0.05 lot); the engine counts steps
+                req["lots"] = int(round(float(req.get("lots") or 0) / float(row["vstep"])))
+        if not (self.px(s).get("bid") or self.px(s).get("ltp")):
+            raise Refused(f"waiting for {row['u']}'s price from MT5 {self.login} (its terminal streams it from now)")
+        out = super().plan(req, place)
+        si = self.M["sym"].get(row["u"]) or {}
+        steps = int(out.get("lots") or 0)
+        vmin = int(round(float(si.get("vmin") or row["vstep"]) / float(row["vstep"])))
+        vmax = int(round(float(si.get("vmax") or 0) / float(row["vstep"]))) if si.get("vmax") else 0
+        if steps and steps < vmin and not out.get("blocked"):
+            out["blocked"] = f"Blocked: {steps * row['vstep']:g} lot is under MT5's minimum volume ({vmin * row['vstep']:g})"
+        if vmax and steps > vmax:
+            out["notes"].append(f"cut to MT5's maximum volume ({vmax * row['vstep']:g} lot)")
+            steps = vmax
+        out.update(steps=steps, lots=round(steps * float(row["vstep"]), 8), vol=round(steps * float(row["vstep"]), 8),
+                   ccy=self.ccy(), product="MT5")
+        if out.get("risk_1lot") is not None:
+            out["risk_1step"] = out["risk_1lot"]
+        w = self._news_note(row)
+        if w:
+            out["notes"].append(w)
+        hb = self._hedge_block(out)
+        if hb:                                     # (no hedging is the reason that matters, whatever else is said)
+            out["blocked"] = hb
+        sym = "$" if self.ccy() == "USD" else self.ccy() + " "
+        one = f"{float(row['vstep']):g} lot"       # (the paper engine's words: ₹ and "1 lot" = one step here)
+        fix = lambda t: t.replace("₹", sym).replace("1 lot ", one + " ") if isinstance(t, str) else t
+        out["blocked"] = fix(out.get("blocked"))
+        out["notes"] = [fix(n) for n in out["notes"]]
+        return out
+
+    def guard_new(self, o) -> str | None:
+        return (self._block(EA_TRADE) or ("Blocked: new orders are paused by the MT5 kill switch (Resume on the Account page)"
+                                          if self.M["halted"] else None)
+                or self._hedge_block(o) or self._news_block(o.get("s"), "opening") or super().guard_new(o))
+
+    def _hedge_block(self, o) -> str | None:
+        """FundingPips (10 Nov 2026): no hedging, even in Hedge mode - no opposite trade on the same symbol in this account,
+        and (to be safe) not across your MT5 accounts either. The same side, or another symbol, is fine."""
+        s, side = o.get("s"), o.get("side")
+        name = str(s)[len(mt5.PREFIX):]
+        for e in [self] + list(self.siblings() if self.siblings else []):
+            where = "in this account" if e is self else f"in MT5 account {e.login}"
+            for p in e.positions:
+                if p["s"] == s and p["side"] != side and not p.get("gone"):
+                    return (f"Blocked: no hedging (FundingPips) - you have a {'LONG' if p['side'] > 0 else 'SHORT'} {name} open "
+                            f"{where}; close it first")
+            for x in e.orders:
+                if x["s"] == s and x["side"] != side and not x.get("cancel_req"):
+                    return f"Blocked: no hedging (FundingPips) - there's an opposite pending {name} order {where}; cancel it first"
+            for x in e.M["opening"].values():
+                if x["s"] == s and x["side"] != side:
+                    return f"Blocked: no hedging (FundingPips) - an opposite {name} order is on its way to MT5 {where}"
+        return None
 
     def place(self, req: dict) -> dict:
-        raise Refused(self.B2)
+        self._writable(EA_TRADE)
+        p = self.plan(req, place=True)
+        if p.get("blocked"):
+            raise Refused(p["blocked"])
+        if p["type"] not in ("market", "limit", "stop"):
+            raise Refused("market, limit or stop")
+        row = self.row(p["s"])
+        vol = round(p["steps"] * float(row["vstep"]), 8)
+        if vol <= 0:
+            raise Refused("0 lots")
+        price = p["entry"] if p["type"] != "market" else None
+        args = (f"{row['u']} {p['side']} {p['type']} {vol:.8g} {self._fmt(row, price)} {self._fmt(row, p.get('sl'))} "
+                f"{self._fmt(row, p.get('tp'))}")
+        c = self._cmd("OPEN", 0, args, "open")
+        op = {"tag": c["tag"], "s": p["s"], "side": p["side"], "type": p["type"], "vol": vol, "steps": p["steps"],
+              "price": price, "sl": p.get("sl"), "tp": p.get("tp"), "risk": p.get("risk"), "made": time.time(), "ticket": None}
+        self.M["opening"][c["tag"]] = op
+        self.M["placed"][c["tag"]] = {"s": p["s"], "side": p["side"], "sl": p.get("sl"), "tp": p.get("tp"),
+                                      "tr": dict(self.trail), "at": time.time()}
+        self.changed(f"{self._op_text(op)} sent to MT5" + (f", SL {p['sl']:g}" if p.get("sl") is not None else "")
+                     + (f", TP {p['tp']:g}" if p.get("tp") is not None else "") + (f", risk {p['risk']:,.2f} {self.ccy()} net"
+                                                                                  if p.get("risk") is not None else ""))
+        return p
 
     def reset(self, capital: float):
         raise Refused("an MT5 account's balance is MT5's own: it can't be reset here")
+
+    # ---- the news guard (b3): ForexFactory's high-impact events (helper/news.py)
+    def _curs(self, row) -> set:
+        m = row.get("mt5") or {}
+        return {str(c).upper() for c in (m.get("cbase"), m.get("cprofit"), m.get("cmargin")) if c}
+
+    def _news_block(self, s, what: str) -> str | None:
+        """Master phase: no opening or closing from N minutes before to N minutes after a high-impact release on the
+        symbol's currencies (FundingPips, 10 Nov 2026). Evaluation: no block (a warning instead)."""
+        R = self.rules
+        if not R.get("news_on") or R.get("phase") != "master" or not s:
+            return None
+        try:
+            row = self.row(s)
+        except Refused:
+            return None
+        ev = news.inside(self._curs(row), float(R.get("news_min") or 5))
+        if ev:
+            return (f"Blocked: FundingPips Master - no {what} {R.get('news_min'):g} min either side of high-impact news: "
+                    f"{ev['cur']} {ev['title']} at {news.ist(ev['t'])} IST")
+        return None
+
+    def _news_note(self, row) -> str | None:
+        R = self.rules
+        if not R.get("news_on"):
+            return None
+        ev = news.next_event(self._curs(row), float(R.get("news_warn_min") or 15), float(R.get("news_min") or 5))
+        if not ev:
+            return None
+        t = f"high-impact {ev['cur']} news: {ev['title']} at {news.ist(ev['t'])} IST"
+        return (t + " - purposely trading news is prohibited in the evaluation (FundingPips)") if R.get("phase") != "master" else t
+
+    # ---- the kill switch (b3)
+    def kill(self) -> None:
+        """Close every position and cancel every order of this account at MT5 (and orders on their way), then refuse new
+        orders until Resume. No login, no news window: it must be quick."""
+        why = self._block()
+        self.M["halted"] = True
+        for tag, c in list(self.M["cmd"].items()):
+            if c["k"] == "OPEN" and not c["sent"]:
+                self.M["cmd"].pop(tag, None)
+                self.M["opening"].pop(tag, None)
+        if why:
+            self.changed(f"KILL SWITCH: new orders paused - but {why}: close the trades in MT5 itself", "warn")
+            raise Refused(f"new orders are paused, but {why}: close the trades in MT5 itself")
+        for p in self.positions:
+            if not p.get("exiting"):
+                self._close(p, "kill")
+        for o in self.orders:
+            if not o.get("cancel_req"):
+                self._cmd("CANCEL", o["ticket"], str(o["ticket"]), "kill")
+                o["cancel_req"] = time.time()
+        self.changed("KILL SWITCH: closing everything in MT5 and cancelling its orders; new orders paused until Resume", "warn")
+
+    def resume(self) -> None:
+        self.M["halted"] = False
+        self.changed("Trading resumed (MT5 kill switch off)")
+
+    # ---- the EA's own trailing while the link is down (b3)
+    def _trail_spec(self, p):
+        """What the EA needs to go on trailing this trade by itself (the same rules as here): Trail BE's trigger and BE +
+        costs price, Trail SL's start, distance and floor (BE + costs), the smallest step."""
+        if p.get("gone") or p.get("exiting") or p.get("first_sl") is None or not p.get("ticket"):
+            return None
+        R = abs(p["basis_entry"] - p["first_sl"])
+        tr = p.get("tr") or self.trail
+        if R <= 0 or not (tr.get("be_on") and not p.get("be_done")) and not (tr.get("sl_on") and not p.get("own_stop")):
+            return None
+        row = self.row(p["s"])
+        be = self._be_price(p)
+        side = p["side"]
+        be_t = be_p = sl_s = sl_d = 0.0
+        if tr.get("be_on") and not p.get("be_done"):
+            be_t, be_p = p["basis_entry"] + side * tr["be_r"] * R, be
+        if tr.get("sl_on") and not p.get("own_stop"):
+            sl_s, sl_d = p["basis_entry"] + side * tr["sl_r"] * R, tr["sl_r"] * R
+        f = lambda v: self._fmt(row, v) if v else "0"
+        return f"{side} {f(be_t)} {f(be_p)} {f(sl_s)} {sl_d:.8g} {f(be)} {0.05 * R:.8g}"
+
+    def _trail_lines(self, force=False) -> list:
+        """TRAIL <ticket> <side> <best> <BE trigger> <BE price> <SL start> <SL distance> <floor> <min step> for each trade
+        with trailing on (TRAIL <ticket> 0: off). Sent on a change, and all of them every TRAIL_EVERY s (and after an EA
+        restart). The EA uses them only when it hasn't reached the app for a while."""
+        if not ver_ok(self.ea, EA_TRADE) or not self.M["confirmed"]:
+            return []
+        t = time.time()
+        every = force or t - float(self.M.get("trail_at") or 0) > TRAIL_EVERY
+        sent = self.M["trail_sent"]
+        out, now_keys = [], set()
+        for p in self.positions:
+            spec = self._trail_spec(p)
+            k = str(p.get("ticket"))
+            if spec is None:
+                if k in sent:
+                    out.append(f"TRAIL {k} 0")
+                    sent.pop(k, None)
+                continue
+            now_keys.add(k)
+            if every or sent.get(k) != spec:
+                row = self.row(p["s"])
+                side = p["side"]
+                parts = spec.split(" ")
+                out.append(f"TRAIL {k} {parts[0]} {self._fmt(row, p.get('basis_best'))} " + " ".join(parts[1:]))
+                sent[k] = spec
+        for k in [k for k in sent if k not in now_keys and not any(str(p.get("ticket")) == k for p in self.positions)]:
+            sent.pop(k, None)
+        if every:
+            self.M["trail_at"] = t
+        return out
 
     def changed(self, msg=None, lvl="info"):
         try:
@@ -948,6 +1257,9 @@ class Mt5Engine(Paper):
     def close_now(self, pid, reason="manual"):
         self._writable()
         pos = self.find_pos(pid)
+        nb = self._news_block(pos["s"], "closing")
+        if nb:
+            raise Refused(nb + " (MT5's own SL / TP still work)")
         if pos.get("exiting"):
             raise Refused("already closing in MT5")
         self._close(pos, reason)
@@ -962,6 +1274,10 @@ class Mt5Engine(Paper):
 
     def close_all(self):
         self._writable()
+        for p in self.positions:
+            nb = self._news_block(p["s"], "closing")
+            if nb:
+                raise Refused(nb + " - use the kill switch if you must")
         for p in self.positions:
             if not p.get("exiting"):
                 self._close(p, "manual")
@@ -1078,9 +1394,20 @@ class Mt5Engine(Paper):
         self._lost()
         t = time.time()
         for tag, c in list(self.M["cmd"].items()):
-            if not c["sent"] and t - c["made"] > (CLOSE_EXPIRE if c["k"] in ("CLOSE", "CANCEL") else MOD_EXPIRE):
+            if not c["sent"] and t - c["made"] > (OPEN_EXPIRE if c["k"] == "OPEN" else CLOSE_EXPIRE if c["k"] in ("CLOSE", "CANCEL")
+                                                  else MOD_EXPIRE):
                 self.M["cmd"].pop(tag, None)
                 self._expired(c)
+        for tag, op in list(self.M["opening"].items()):   # placed, but no position / order appeared: stop showing it
+            if (op.get("done") and t - op["done"] > 60) or (op.get("unsure") and t - op["unsure"] > 300):
+                self.M["opening"].pop(tag, None)
+                n = -1
+        for tag, m in list(self.M["placed"].items()):
+            if t - float(m.get("at") or 0) > 30 * 86400:
+                self.M["placed"].pop(tag, None)
+        for k, v in list(self.M["etrail"].items()):
+            if all(t - x[1] > 3600 for x in v):
+                self.M["etrail"].pop(k, None)
         if len(self.M["cmd"]) != n:
             self.changed()
         elif self._dirty_at and t - self._dirty_at > 10:
@@ -1094,7 +1421,10 @@ class Mt5Engine(Paper):
 
     # ------------------------------------------------------------ for the page
     def watch_symbols(self) -> list:
-        return sorted({p["s"] for p in self.positions} | {o["s"] for o in self.orders})
+        t = time.time()
+        self.temp_watch = {s: u for s, u in self.temp_watch.items() if u > t}
+        return sorted({p["s"] for p in self.positions} | {o["s"] for o in self.orders}
+                      | {x["s"] for x in self.M["opening"].values()} | set(self.temp_watch))
 
     def pos_view(self, pos) -> dict:
         v = super().pos_view(pos)
@@ -1146,6 +1476,22 @@ class Mt5Engine(Paper):
                 warnings.append(f"this account is in {self.acct_mode} mode: the app is built for Hedge accounts")
             if not self.M["caught"] and self.M["base"]:
                 warnings.append("MT5's history is still arriving: today's start and the history may change")
+            if self.M["halted"]:
+                warnings.append("KILL SWITCH: new orders are paused on this account (Resume on the Account page)")
+            if ver_ok(self.ea) and not ver_ok(self.ea, EA_TRADE):
+                warnings.append(f"EA {self.ea}: install FTM Bridge {EA_TRADE} to place orders from the app (managing works)")
+            if R.get("news_on"):
+                for p in self.positions:
+                    try:
+                        row = self.row(p["s"])
+                    except Refused:
+                        continue
+                    ev = news.next_event(self._curs(row), float(R.get("news_warn_min") or 15), float(R.get("news_min") or 5))
+                    if ev:
+                        warnings.append(f"{row['u']}: high-impact {ev['cur']} news ({ev['title']}) at {news.ist(ev['t'])} IST"
+                                        + (" - Master: no opening or closing from the app around it; MT5's own SL / TP can "
+                                           "still fire inside the window" if R.get("phase") == "master" else ""))
+                        break
         s.update(ccy=self.ccy(), mt5={
             "login": self.login, "none": self.none, "online": self.online(), "seen": int(self.seen) or None,
             "ea": self.ea, "ea_ok": ver_ok(self.ea), "ea_min": EA_MIN, "trade": self.trade, "confirmed": self.M["confirmed"],
@@ -1153,8 +1499,23 @@ class Mt5Engine(Paper):
             "daily_of": R.get("daily_of"), "size_set": self.M["size_set"], "first_deposit": self._first_deposit(),
             "day_start": self.day.get("start_bal"), "day_start_eq": self.day.get("start_eq"), "day_base": f.get("day_base"),
             "breach": breach, "warnings": warnings, "caught": self.M["caught"], "deals": len(self.deals),
-            "cmds": len(self.M["cmd"]), "midnight_ist": self._midnight_ist()})
+            "cmds": len(self.M["cmd"]), "midnight_ist": self._midnight_ist(), "halted": self.M["halted"],
+            "ea_trade": ver_ok(self.ea, EA_TRADE), "ea_trade_min": EA_TRADE, "news": self._news_list(),
+            "news_src": news.status(),
+            "opening": [{"tag": k, "text": self._op_text(v), "s": v["s"], "side": v["side"], "sent": bool(
+                (self.M["cmd"].get(k) or {}).get("sent")), "ticket": v.get("ticket"), "unsure": bool(v.get("unsure"))}
+                for k, v in self.M["opening"].items()]})
         return s
+
+    def _news_list(self) -> list:
+        """The next 24 h of high-impact events on the currencies of this account's symbols (open, pending, on the ticket)."""
+        curs = set()
+        for s in {p["s"] for p in self.positions} | {o["s"] for o in self.orders} | set(self.temp_watch):
+            try:
+                curs |= self._curs(self.row(s))
+            except Refused:
+                pass
+        return [{**e, "ist": news.ist(e["t"])} for e in news.upcoming(curs or {"USD"}, 24 * 3600)][:20]
 
     def _midnight_ist(self) -> str:
         m = self._clock().day_ist()

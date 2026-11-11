@@ -101,6 +101,7 @@ class UserRT:
             if self.role != "admin":
                 return None
             e = Mt5Engine(folder, self.uid, a.get("login") or 0, a.get("name", ""))
+            e.siblings = lambda me=e: [x for x in self.engines.values() if isinstance(x, Mt5Engine) and x is not me]
             e.on_change = lambda ev, aid=a["id"]: on_engine_change and on_engine_change(self, aid, ev)
             e.on_symbols = lambda: self.feed._resync()
             self.engines[a["id"]] = e

@@ -283,6 +283,9 @@ def breakeven(row: dict, side: int, qty: float, entry: float, paid: float | None
 def size_for_risk(row: dict, side: int, entry: float, sl: float, risk: float, max_lots: int = 500) -> dict:
     """Most lots whose net loss at the SL (gross loss + entry charges + exit charges) is within `risk` rupees."""
     lot = row.get("lot") or 1
+    if is_mt5(row):                                        # MT5: steps of 0.01 lot, up to the symbol's maximum volume
+        vmax = float((row.get("mt5") or {}).get("vmax") or 100)
+        max_lots = max(max_lots, int(round(vmax / float(row.get("vstep") or 0.01))))
     best = 0
     lo, hi = 0, max_lots
     while lo <= hi:                                        # net loss grows with lots, so binary search works

@@ -32,9 +32,10 @@ async function mtRender(){
   box.innerHTML = `<p class="help">Prices and charts from your own MT5 terminal (FundingPips), through the <b>FTM Bridge</b> EA on
       your laptop. Every chart type, indicator and Pine script works on them. The EA only calls out to this server; nothing
       connects in to your laptop, and this server never logs in to your broker account.</p>
-    <p class="help"><b>Version ${mesc(j.ea_latest || "1.10")}</b> also makes each terminal's account an <b>MT5 account</b> in this app (MT5 at the top
-      left): its positions, orders, balance and history from MT5, managed from here (SL / TP, BE, trailing, close, cancel) only when you
-      ask and only while its <b>AllowTrading</b> input is on. <b>It opens no new trades</b> (placing orders from the app comes next).</p>
+    <p class="help"><b>Version ${mesc(j.ea_latest || "1.20")}</b> also makes each terminal's account an <b>MT5 account</b> in this app (MT5 at the top
+      left): its positions, orders, balance and history from MT5; the orders you place there (each with its real SL / TP) and
+      managing them (SL / TP, BE, trailing, close, cancel), only while its <b>AllowTrading</b> input is on. If it can't reach
+      this server for 20 s it goes on trailing your trades' stops by itself, as you set them. <b>It opens nothing on its own.</b></p>
     <div class="note">FundingPips: run MT5 and the EA only on your own laptop at home. No VPS, no VPN.</div>
     ${rows ? `<h4>Terminals</h4>${rows}` : `<p class="help"><b>No terminal has connected yet.</b></p>`}
     ${j.bridges && j.bridges.length > 1 ? `<p class="help">Prices come from the ticked terminal while it's connected, otherwise from the one heard from last.</p>` : ""}

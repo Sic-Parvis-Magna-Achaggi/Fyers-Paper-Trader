@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.36.0)
+# Paper and live trading: how it works (v0.37.0)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -149,7 +149,7 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
 
 - **What it is:** each MT5 login whose terminal runs **FTM Bridge 1.10** is an account of its own here, kept apart from Fyers:
   **PAPER | LIVE | MT5** at the top left (MT5 in purple). Going to MT5 asks for a fresh 2FA code. On the MT5 side the account
-  switcher lists only your MT5 accounts ("● 21182752 · DEMO · $5,012.50"; the server in its tip; ● connected, ○ not), and
+  switcher lists only your MT5 accounts ("● 21182752 · $5,013"; the server, DEMO and the exact balance in its tip; ● connected, ○ not), and
   Fyers never appears there. The admin only. Back to PAPER is one click; each browser or phone switches for itself.
 - **From MT5 itself:** its positions, pending orders, balance, equity, margin and history, straight from MT5 (about 4 times a
   second). Trades you place in MT5 show at once ("Placed in MT5"); ones already open when the app first saw the account say
@@ -179,10 +179,28 @@ Paper trades run **on the server**. Stops, targets, trailing, intraday square-of
   kept for the news guard (later). FundingPips' dashboard stays the official figure.
 - **The Account page** of an MT5 account: MT5's figures, the EA and whether the app can change trades, the limits and their
   form, the commission learned per symbol, trailing defaults, and **Read MT5's history again**.
-- **Not yet (next steps):** placing orders from the app (ticket, chart tool, PLACE), the no-hedging check, the news guard,
-  the EA trailing on its own when the link drops, the MT5 kill switch, the journal for MT5 accounts.
+- **Not yet:** the journal for MT5 accounts (roadmap 8 c, with the prop-firm journal), copy trades between MT5 accounts (8 d).
 - **The EA's switch:** its input **AllowTrading** = false makes it refuse every change (the app then only shows the account).
-  MT5's **Algo Trading** button must be on too. An EA older than 1.10: the account shows, its trades don't.
+  MT5's **Algo Trading** button must be on too. An EA older than 1.10: the account shows, its trades don't. Placing orders
+  needs 1.20.
+- **Placing orders (EA 1.20):** on the MT5 side the ticket, the chart's BUY / SELL tool and **MT5 PLACE** work as on Fyers:
+  market, limit or stop, sent to MT5 **with its real SL and TP**. Size by risk %, risk $ or lots (MT5's volume, 0.01 steps;
+  within the symbol's minimum / maximum). Margin is MT5's own figure. The guards refuse with the reason: FundingPips' daily
+  and max floors (if every stop were hit), the risk cap (lots cut to fit), max open risk, max margin, max trades, SL required.
+  The order shows as "Sending to MT5…" until MT5 has it; then it's your trade with its planned stop as 1R. An order that
+  can't reach MT5 within 10 s is dropped (never placed late); one is never sent twice.
+- **No hedging (FundingPips):** an order opposite an open trade or pending order on the same symbol is refused, in this
+  account and in your other MT5 accounts. The same side, or another symbol, is fine.
+- **KILL (MT5 side, top bar; the Account page; the phone):** closes every position and cancels every order of that MT5 account
+  at the broker and pauses new orders until **Resume** (a 2FA code).
+- **The news guard (ForexFactory):** the server reads ForexFactory's calendar every hour. High-impact events on the symbol's
+  currencies (XAUUSD: USD): **Master** phase - no opening or closing from the app 5 minutes either side (settable; MT5's own
+  SL / TP still fire; KILL always works); **evaluation** - no block, a note on the ticket and a warning on open trades 15 minutes
+  before (purposely trading news is prohibited). The Account page lists the next 24 hours' events. FundingPips' dashboard
+  calendar is the official one.
+- **If the EA can't reach the app** (your internet, the server) for 20 s, it goes on trailing your trades itself, by each
+  trade's BE-T / TRAIL as set here (never looser, never below BE + costs). When the link is back, the app takes those moves
+  as the trail and carries on. MT5's SL / TP protect the trades throughout.
 
 ## Pages
 
@@ -695,7 +713,7 @@ When BE-T has already moved the stop to break-even, a Trail SL of N R behind the
 
 ## Not yet
 
-- MT5: placing orders from the app with sizing, the guards and the no-hedging check (b2); the EA trailing on its own when the link drops, the news guard, the MT5 kill switch (b3); MT5 accounts in the journal (stage c).
+- MT5 accounts in the journal (roadmap 8 c, with the prop-firm journal); copy trades between MT5 accounts (8 d, later).
 - Footprint / delta (order flow): waiting for the order-flow check (Monday 2 Nov).
 - Comparing the charges the app counts with what Fyers actually deducted (live).
 - Prop-firm journals in the same journal (waiting for the owner's yes).

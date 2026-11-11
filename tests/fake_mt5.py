@@ -102,7 +102,7 @@ def spec(n):
 
 class FakeEA:
     def __init__(self, url, key, login=21182752, server="FundingPips-SIM1", poll=0.25, fixed_offset=None, log=print,
-                 old=False, balance=5000.0, history=False):
+                 old=False, balance=5000.0, history=False, ver="1.20"):
         self.url, self.key, self.login, self.server = url.rstrip("/"), key, login, server
         self.poll, self.fixed, self.log, self.old = poll, fixed_offset, log, old
         self.subs, self.last = [], {}
@@ -134,6 +134,10 @@ class FakeEA:
         self.dmax = 200
         self.deals_asked = []
         self.comm = dict(COMM)
+        self.ver = ver
+        self.trail = {}               # ticket -> the app's TRAIL table entry (EA 1.20)
+        self.trailed, self.trailed_sent = [], 0
+        self.offline = False          # the test cuts the link: calls fail, the EA trails by itself
         dep_t = self.srv_now() - (40 if history else 1) * 86400
         self._deal(0, 0, "", 2, 0, 0, 0, 0, 0, self.balance, dep_t, reason=0, comment="Deposit", balance=False)
         if history:
@@ -308,6 +312,25 @@ class FakeEA:
                     return [tag, 0, 10013, "Invalid request (order not found)", tk]
                 self.orders.pop(tk)
                 return [tag, 1, OK_DONE, "Request completed", tk]
+            if k == "OPEN":
+                sym, side, typ, vol, px, sl, tp = a[0], int(a[1]), a[2], float(a[3]), float(a[4]), float(a[5]), float(a[6])
+                if sym not in SYMS:
+                    return [tag, 0, 10013, sym + " isn't a symbol on this broker", 0]
+                bid, ask = self.quote(sym)
+                if typ == "market":
+                    ref = ask if side > 0 else bid
+                    if not self._stops_ok(sym, side, sl, tp):
+                        return [tag, 0, INVALID_STOPS, "Invalid stops", 0]
+                    tk = self.open(sym, side, vol, sl, tp, comment="FTM " + tag, magic=20261110)
+                    return [tag, 1, OK_DONE, "Request completed", tk]
+                kind = typ
+                if (kind == "limit" and side * (px - (ask if side > 0 else bid)) > 0) or \
+                        (kind == "stop" and side * (px - (ask if side > 0 else bid)) <= 0):
+                    return [tag, 0, 10015, "Invalid price", 0]
+                if not self._stops_ok(sym, side, sl, tp, ref=px):
+                    return [tag, 0, INVALID_STOPS, "Invalid stops", 0]
+                tk = self.pending(sym, kind, side, px, vol, sl, tp, comment="FTM " + tag)
+                return [tag, 1, OK_PLACED, "Request completed", tk]
             if k == "OMOD":
                 tk, px, sl, tp = int(a[0]), float(a[1]), float(a[2]), float(a[3])
                 o = self.orders.get(tk)
@@ -343,7 +366,7 @@ class FakeEA:
             return b
         with self.lock:
             self.step()
-            b["v"], b["ea"] = 2, "1.10"
+            b["v"], b["ea"] = 2, self.ver
             b["acct"]["balance"], b["acct"]["equity"] = self.balance, self.equity()
             b["trade"] = {"on": self.trade_on, "term": self.algo, "mql": True}
             pos, syms = [], set()
@@ -359,7 +382,12 @@ class FakeEA:
                              0, o["comment"], 0])
                 syms.add(o["sym"])
             b["pos"], b["ord"] = pos, ords
-            b["sym"] = {s: [spec(s)["tick_value"], spec(s)["tick_size"], 0.01, SYMS[s][6], SYMS[s][2]] for s in syms}
+            syms |= set(self.subs)
+            b["sym"] = {s: [spec(s)["tick_value"], spec(s)["tick_size"], 0.01, SYMS[s][6], SYMS[s][2],
+                            round(SYMS[s][6] * self.quote(s)[1] / 100.0, 2), round(SYMS[s][6] * self.quote(s)[0] / 100.0, 2),
+                            0.01, 100, 0] for s in syms}
+            self.trailed_sent = len(self.trailed)
+            b["trailed"] = list(self.trailed)
             if self.dcur == (0, 0):
                 b["deals"], b["dmore"], self.dpend = [], False, None
             else:
@@ -378,7 +406,55 @@ class FakeEA:
             m += p["vol"] * SYMS[p["sym"]][6] * p["open"] / 100.0
         return round(m, 2)
 
+    # ------------------------------------------------------------ 1.20: trailing by itself while the link is down
+    def set_trail(self, ln):
+        p = ln.split()
+        tk = int(p[1])
+        if len(p) < 10 or int(p[2]) == 0:
+            self.trail.pop(tk, None)
+            return
+        side, best = int(p[2]), float(p[3])
+        old = self.trail.get(tk)
+        if old:
+            best = max(best, old["best"]) if side > 0 else min(best, old["best"])
+        self.trail[tk] = {"side": side, "best": best, "be_t": float(p[4]), "be_p": float(p[5]), "sl_s": float(p[6]),
+                          "sl_d": float(p[7]), "floor": float(p[8]), "step": float(p[9]), "last": 0.0}
+
+    def offline_trail(self):
+        """The EA's OfflineTrail(), in Python (the app can't be reached)."""
+        with self.lock:
+            for tk, t in list(self.trail.items()):
+                p = self.positions.get(tk)
+                if not p:
+                    self.trail.pop(tk, None)
+                    continue
+                bid, ask = self.quote(p["sym"])
+                sd, dg = t["side"], SYMS[p["sym"]][2]
+                t["best"] = max(t["best"], bid) if sd > 0 else min(t["best"], bid)
+                ex = bid if sd > 0 else ask
+                cur = p["sl"]
+                want = cur
+                if t["be_t"] and sd * (t["best"] - t["be_t"]) >= 0 and sd * (ex - t["be_p"]) > 0 and (not want or sd * (t["be_p"] - want) > 0):
+                    want = t["be_p"]
+                if t["sl_s"] and sd * (t["best"] - t["sl_s"]) >= 0:
+                    c = t["best"] - sd * t["sl_d"]
+                    if t["floor"]:
+                        c = max(c, t["floor"]) if sd > 0 else min(c, t["floor"])
+                    if sd * (ex - c) > 0 and (not want or sd * (c - want) >= t["step"]):
+                        want = c
+                want = round(want, dg)
+                if not want or (cur and sd * (want - cur) <= 0) or time.time() - t["last"] < 2:
+                    continue
+                t["last"] = time.time()
+                p["sl"] = want
+                if t["be_t"] and abs(want - t["be_p"]) < 10 ** -dg / 2:
+                    t["be_t"] = 0
+                self.trailed.append([tk, want, int(self.srv_now() * 1000)])
+
     def once(self):
+        if self.offline:
+            self.offline_trail()
+            return 0
         body = self.sync_body()
         code, text = self.post("/api/mt5/sync", body)
         self.calls += 1
@@ -388,6 +464,7 @@ class FakeEA:
         with self.lock:
             if not self.old:
                 del self.res[:self.res_sent]          # delivered
+                del self.trailed[:self.trailed_sent]
                 if self.dpend:
                     self.dcur = self.dpend
                     self.dpend = None
@@ -400,8 +477,10 @@ class FakeEA:
                 self.deals_asked.append(frm)
                 with self.lock:
                     self.dcur, self.dpend = (frm * 1000, 0), None
-            elif ln.split(" ", 1)[0] in ("MOD", "CLOSE", "CANCEL", "OMOD") and not self.old:
+            elif ln.split(" ", 1)[0] in ("MOD", "CLOSE", "CANCEL", "OMOD", "OPEN") and not self.old:
                 self.command(ln)
+            elif ln.startswith("TRAIL ") and not self.old:
+                self.set_trail(ln)
             elif ln.startswith("HIST "):
                 _, hid, sym, tf, a, b = ln.split()
                 self.hist_asked.append((sym, tf, int(a), int(b)))
@@ -441,7 +520,8 @@ class FakeEA:
             q = {s: self.quote(s) for s in SYMS}
             return {"balance": self.balance, "equity": self.equity(), "positions": list(self.positions.values()),
                     "orders": list(self.orders.values()), "deals": len(self.deals), "cmds": self.cmds[-50:], "quotes": q,
-                    "subs": self.subs, "dcur": self.dcur, "deals_asked": self.deals_asked}
+                    "subs": self.subs, "dcur": self.dcur, "deals_asked": self.deals_asked, "trail": self.trail,
+                    "trailed": self.trailed}
 
     def control(self, path, b):
         if path == "/open":
@@ -474,6 +554,9 @@ class FakeEA:
             return {"ok": True}
         if path == "/comm":
             self.comm[b["sym"]] = (float(b["in"]), float(b["out"]))
+            return {"ok": True}
+        if path == "/offline":
+            self.offline = bool(b.get("on"))
             return {"ok": True}
         if path == "/jitter":
             self.jitter = bool(b.get("on"))
@@ -519,10 +602,11 @@ if __name__ == "__main__":
     ap.add_argument("--ctl", type=int, default=0, help="a control API on this port (tests)")
     ap.add_argument("--history", action="store_true", help="two closed trades 10 days ago in MT5's history")
     ap.add_argument("--old", action="store_true", help="play EA 1.00 (prices only)")
+    ap.add_argument("--ver", default="1.20", help="the EA version it reports (1.10: manages, doesn't place)")
     ap.add_argument("--balance", type=float, default=5000.0)
     a = ap.parse_args()
     ea = FakeEA(a.url, a.key, a.login, a.server, fixed_offset=None if a.offset == "auto" else int(a.offset), old=a.old,
-                balance=a.balance, history=a.history)
+                balance=a.balance, history=a.history, ver=a.ver)
     if a.ctl:
         serve_control(ea, a.ctl)
     print(f"fake MT5 {a.login} on {a.server} -> {a.url}" + (f" (control on :{a.ctl})" if a.ctl else ""), flush=True)

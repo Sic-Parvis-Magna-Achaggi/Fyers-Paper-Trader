@@ -61,7 +61,7 @@ function mBuild(){
   mqa("#mNav button").forEach(b => b.onclick = () => mShow(b.dataset.ms));
   mq("#mSym").onclick = () => mShow("quotes");
   mq("#mAcct").onclick = mAcctSheet;
-  mq("#mKill").onclick = () => liveKill();
+  mq("#mKill").onclick = () => typeof mtOn === "function" && mtOn() ? mtKill() : liveKill();
   mq("#mLive").onclick = () => { mShow("more"); pgShow("account"); };
   mq("#mBack").onclick = () => pgShow("chart");
   mq("#mBuy").onclick = () => mTicket(1);
@@ -122,7 +122,7 @@ function mTopBar(){
   mq("#mAcct span").textContent = sn ? rs(sn.acct.equity) : "";
   const live = typeof liveOn === "function" && liveOn();
   mq("#mLive").classList.toggle("hide", !live);
-  mq("#mKill").classList.toggle("hide", !live);
+  mq("#mKill").classList.toggle("hide", !live && !(typeof mtOn === "function" && mtOn() && !mtM().none));
   document.body.classList.toggle("is-live", live);
   if(typeof sideRender === "function") sideRender();
   mSymBar();
@@ -138,7 +138,7 @@ function mSymBar(){
   mq("#mSell b").textContent = t && (t.bid || t.ltp) ? fmt(t.bid || t.ltp, cur.tick) : "–";
   mq("#mBuy b").textContent = t && (t.ask || t.ltp) ? fmt(t.ask || t.ltp, cur.tick) : "–";
   const T = P.T;
-  const size = T.mode === "pct" ? `${T.risk_pct}%` : T.mode === "amt" ? `₹${(+T.risk_amt).toLocaleString("en-IN")}` : `${T.lots} lot${T.lots == 1 ? "" : "s"}`;
+  const size = T.mode === "pct" ? `${T.risk_pct}%` : T.mode === "amt" ? `${CUR()}${(+T.risk_amt).toLocaleString(CURLOC())}` : `${T.lots} lot${T.lots == 1 ? "" : "s"}`;
   mq("#mSize").innerHTML = `${esc(size)}<small>${T.mode === "lots" ? "" : "risk · "}${prodName(T.product)}</small>`;
 }
 function mWarnings(){
@@ -238,7 +238,7 @@ function mBubFill(){
   const b = mq("#mBub"); if(!b) return;
   const p = P.plan, T = P.T, live = typeof liveOn === "function" && liveOn(), buy = T.side > 0;
   const est = p && p.risk_estimated ? "≈" : "";
-  const r0 = n => (n < 0 ? "−₹" : "₹") + Math.round(Math.abs(n)).toLocaleString("en-IN");   // whole ₹, like the chart's zone labels
+  const r0 = n => (n < 0 ? "−" : "") + CUR() + Math.round(Math.abs(n)).toLocaleString(CURLOC());   // whole ₹ ($ on MT5), like the chart's zone labels
   const side = `<b class="${buy ? "up" : "down"}">${buy ? "BUY" : "SELL"}</b>`;
   const l1 = p ? `${side} ${p.lots || 0} lot${p.lots === 1 ? "" : "s"} · ${p.type === "market" ? "market" : esc(p.type) + " " + fmt(p.entry, p.tick)} · ${esc(prodName(T.product))}`
     : `${side} ${esc(short(T.s))}`;
@@ -273,7 +273,7 @@ function mTicketBuild(){
       ${opt ? `<div class="mrow"><span>SL / target follow</span><div class="mseg" data-g="basis" style="margin:0"><button data-v="self" class="${T.basis === "self" ? "on" : ""}">This option</button><button data-v="underlying" class="${T.basis === "underlying" ? "on" : ""}">The future</button></div></div>` : ""}
       <div class="mrow"><span>Stop loss<i class="down" data-f="atsl"></i></span>${mStep("mtSl", "", T.basis === "underlying" ? "future price" : "price")}</div>
       <div class="mrow"><span>Target<i class="up" data-f="attp"></i></span><div class="step r lkr"><button data-st="mtTp" data-d="-1">−</button><input id="mtTp" class="mono" inputmode="decimal" autocomplete="off" placeholder="${T.basis === "underlying" ? "future price" : "price"}"><button data-st="mtTp" data-d="1">+</button><input id="mtTpR" class="mono" inputmode="decimal" placeholder="R" title="Target as a multiple of the risk" ${T.basis === "underlying" ? "disabled" : ""}><button id="mtLock" class="lk" type="button" title="RR lock"></button></div></div>
-      <div class="mrow"><span>Size</span><div class="mseg" data-g="mode" style="margin:0">${[["pct", "Risk %"], ["amt", "Risk ₹"], ["lots", "Lots"]].map(([v, n]) => `<button data-v="${v}" class="${T.mode === v ? "on" : ""}">${n}</button>`).join("")}</div></div>
+      <div class="mrow"><span>Size</span><div class="mseg" data-g="mode" style="margin:0">${[["pct", "Risk %"], ["amt", "Risk " + CUR().trim()], ["lots", "Lots"]].map(([v, n]) => `<button data-v="${v}" class="${T.mode === v ? "on" : ""}">${n}</button>`).join("")}</div></div>
       <div class="mrow"><span data-f="unit"></span>${mStep("mtSize", "")}</div>
       <div class="mrow"><span>Product</span><div class="mseg" data-g="prod" style="margin:0">${prods.map(([v, n]) => `<button data-v="${v}">${esc(n.replace(/ \(.*\)/, ""))}</button>`).join("")}</div></div>
       <div class="mpv" id="mtPv"></div>
@@ -297,7 +297,7 @@ function mTicketBuild(){
     if(id === "mtSl"){ const tk = tickOf(basisSym()), v = slNow(); if(v == null) return; mDesk("#tkSl", roundTick(v + d * tk, tk)); return; }
     if(id === "mtTp"){ const tk = tickOf(basisSym()), v = tpNow(); if(v == null) return; mDesk("#tkTp", roundTick(v + d * tk, tk)); return; }
     if(id === "mtSize"){ const v = T.mode === "pct" ? Math.max(0.05, +(T.risk_pct + d * (T.risk_pct < 1 || (T.risk_pct === 1 && d < 0) ? 0.1 : 0.25)).toFixed(2))
-        : T.mode === "amt" ? Math.max(10, Math.round(T.risk_amt + d * (T.risk_amt < 500 ? 25 : 100))) : Math.max(1, Math.round(T.lots + d));
+        : T.mode === "amt" ? Math.max(10, Math.round(T.risk_amt + d * (T.risk_amt < 500 ? 25 : 100))) : lotsStep(T.lots, d);
       mDesk("#tkSize", v); mSymBar(); }
   });
   box.querySelector("#mtPlace").onclick = async () => { await place(); if(!P.armed) mClose(); };
@@ -323,7 +323,7 @@ function mTicketFill(){
   setv(mq("#mtSl"), slNow()); setv(mq("#mtTp"), tpNow());
   setv(mq("#mtTpR"), T.tpMode === "r" ? T.tp_r : "");
   setv(mq("#mtSize"), T.mode === "pct" ? T.risk_pct : T.mode === "amt" ? T.risk_amt : T.lots);
-  f("unit").textContent = T.mode === "pct" ? "% of balance" : T.mode === "amt" ? "₹ at risk (net)" : "Lots";
+  f("unit").textContent = T.mode === "pct" ? "% of balance" : T.mode === "amt" ? CUR().trim() + " at risk (net)" : "Lots";
   const want = (mq("#tkProd") || {}).value;
   box.querySelectorAll('[data-g="prod"] button').forEach(b => b.classList.toggle("on", b.dataset.v === want));
   mPlanFill();
@@ -368,7 +368,7 @@ function mPlanFill(){
 function mSizeSheet(){
   const T = P.T;
   const sh = mOpen("size", `<div class="shead"><b>Size and product</b><button data-x>✕</button></div>
-    <div class="mseg" data-g="mode">${[["pct", "Risk %"], ["amt", "Risk ₹"], ["lots", "Lots"]].map(([v, n]) => `<button data-v="${v}">${n}</button>`).join("")}</div>
+    <div class="mseg" data-g="mode">${[["pct", "Risk %"], ["amt", "Risk " + CUR().trim()], ["lots", "Lots"]].map(([v, n]) => `<button data-v="${v}">${n}</button>`).join("")}</div>
     <div class="mrow"><span data-f="unit"></span>${mStep("msSize", "")}</div>
     <div class="mseg" data-g="prod"><button data-v="INTRADAY">Intraday</button><button data-v="CARRY">Carry / Delivery</button></div>
     <p class="help">Used by every new trade (saved on the server). Risk % and Risk ₹ size the trade from the stop, net of all charges.</p>
@@ -379,11 +379,11 @@ function mSizeSheet(){
     sh.querySelectorAll('[data-g="mode"] button').forEach(b => b.classList.toggle("on", b.dataset.v === T.mode));
     sh.querySelectorAll('[data-g="prod"] button').forEach(b => b.classList.toggle("on", (b.dataset.v === "INTRADAY") === (T.product === "INTRADAY")));
     sh.querySelectorAll('[data-g="open"] button').forEach(b => b.classList.toggle("on", b.dataset.v === prefGet("mobTicket", "full")));
-    sh.querySelector('[data-f="unit"]').textContent = T.mode === "pct" ? "% of balance" : T.mode === "amt" ? "₹ at risk" : "Lots";
+    sh.querySelector('[data-f="unit"]').textContent = T.mode === "pct" ? "% of balance" : T.mode === "amt" ? CUR().trim() + " at risk" : "Lots";
     setv(sh.querySelector("#msSize"), T.mode === "pct" ? T.risk_pct : T.mode === "amt" ? T.risk_amt : T.lots);
     mSymBar();
   };
-  const set = v => { v = num(v); if(v == null || v <= 0) return; if(T.mode === "pct") T.risk_pct = v; else if(T.mode === "amt") T.risk_amt = v; else T.lots = Math.max(1, Math.round(v));
+  const set = v => { v = num(v); if(v == null || v <= 0) return; if(T.mode === "pct") T.risk_pct = v; else if(T.mode === "amt") T.risk_amt = v; else T.lots = lotsIn(v);
     saveTicketDefaults(); if(P.armed){ renderTicket(); preview(); } fill(); };
   sh.querySelectorAll('[data-g="mode"] button').forEach(b => b.onclick = () => { T.mode = b.dataset.v; saveTicketDefaults(); if(P.armed){ renderTicket(); preview(); } fill(); });
   sh.querySelectorAll('[data-g="prod"] button').forEach(b => b.onclick = () => {
@@ -392,7 +392,7 @@ function mSizeSheet(){
   sh.querySelectorAll('[data-g="open"] button').forEach(b => b.onclick = () => { prefSet("mobTicket", b.dataset.v); fill(); });
   const inp = sh.querySelector("#msSize"); inp.onchange = () => set(inp.value);
   mWireSteps(sh, (id, d) => set(T.mode === "pct" ? Math.max(0.05, +(T.risk_pct + d * (T.risk_pct < 1 || (T.risk_pct === 1 && d < 0) ? 0.1 : 0.25)).toFixed(2))
-    : T.mode === "amt" ? Math.max(10, Math.round(T.risk_amt + d * (T.risk_amt < 500 ? 25 : 100))) : T.lots + d));
+    : T.mode === "amt" ? Math.max(10, Math.round(T.risk_amt + d * (T.risk_amt < 500 ? 25 : 100))) : lotsStep(T.lots, d)));
   fill();
 }
 

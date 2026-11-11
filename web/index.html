@@ -626,6 +626,10 @@ button.mt5btn{background:var(--mt5);border-color:var(--mt5);color:#fff}
 .mtfoot b{color:var(--text);font-weight:600}
 .mtlim{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
 .mtcomm td,.mtcomm th{padding:3px 8px;text-align:right} .mtcomm td:first-child,.mtcomm th:first-child{text-align:left}
+button.place.mt5,#tool .tp.mt5{outline:2px solid var(--mt5);outline-offset:2px}
+body.is-mt5 div:has(> #tkProd),body.is-mt5 #tProd{display:none}
+#bKillMt5.on{opacity:.6}
+body.is-mt5 #pBudget{display:none}   /* (Fyers' data budget: on PAPER / LIVE; the top bar has no room for it with MT5's KILL) */
 .sidemenu{position:fixed;z-index:200;display:flex;flex-direction:column;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px;box-shadow:0 6px 24px rgba(0,0,0,.35)}
 .sidemenu button{font-weight:700;letter-spacing:.05em;min-width:90px;padding:8px 12px}
 .sidemenu button.on.paper{background:var(--up);color:#fff} .sidemenu button.on.live{background:var(--down);color:#fff} .sidemenu button.on.mt5{background:var(--mt5);color:#fff}

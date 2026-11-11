@@ -1,5 +1,67 @@
 # Changelog
 
+## v0.37.0 — 11 Nov 2026 — MT5: placing orders from the app, the kill switch, the news guard, the EA trailing when the link drops (FundingPips, stage b complete)
+
+Added
+- **Placing orders on MT5 accounts** (roadmap 8 b2; owner, 10 Nov 23:34: "Finish everything"). On the MT5 side the ticket,
+  the chart's BUY / SELL tool and PLACE work as on Fyers: market, limit or stop, each sent to MT5 **with its real SL and TP
+  from the start**. PLACE says **MT5 PLACE** (purple).
+  - **Sizing** as on paper: risk %, risk $ or lots - lots are MT5's volume in 0.01 steps (typed 0.05; ± moves 0.01), within
+    the symbol's minimum and maximum volume. Every $ figure (risk, reward, BE) is net of the commission learned from MT5.
+    A new MT5 account's ticket starts at 0.5% risk.
+  - **Margin from MT5 itself** (its OrderCalcMargin, sent by EA 1.20 for the symbols you trade or chart); free margin is
+    MT5's.
+  - **The guards** refuse an order with the reason, as on paper: FundingPips' daily and max floors (if every stop were hit),
+    the risk cap (lots cut to fit), max open risk, max margin use, max trades a day, SL required.
+  - **No hedging** (FundingPips, 10 Nov): an order opposite an open trade, a pending order or an order on its way on the
+    same symbol is refused - in this account and in your other MT5 accounts. The same side, or another symbol, is fine.
+  - **The order is tied to the app by its tag** (MT5's comment "FTM <tag>"): the trade shows as yours (not "Placed in
+    MT5"), with its planned stop as 1R and the trailing it was placed with. On its way it shows on the panel ("Sending to
+    MT5…", "MT5 placed #…"). An order is never sent twice; one that couldn't reach MT5 within 10 s is dropped, never placed
+    late; MT5's refusal shows with its reason.
+  - The first order on an account asks for its login (once), as managing does.
+- **The MT5 kill switch** (b3): **KILL** in the top bar on the MT5 side (and on the phone; the Account page too) closes every
+  position and cancels every order of that MT5 account at the broker, drops orders still on their way, and pauses new
+  orders until **Resume** (a fresh 2FA code). No login, no news window: it's meant to be quick. With MT5 not connected it
+  says so (close in MT5 itself) and still pauses new orders.
+- **The news guard** (b3; the calendar: **ForexFactory**, owner 10 Nov): the server reads ForexFactory's calendar every hour
+  (kept on the server, last week's too). High-impact events on the symbol's currencies (XAUUSD: USD; EURUSD: EUR and USD):
+  - **Master phase:** no opening and no closing from the app from 5 minutes before to 5 minutes after (the minutes are
+    settable); MT5's own SL / TP still fire inside it (a warning beforehand). The kill switch is never blocked.
+  - **Evaluation phase** (your 21182752): no block; a note on the ticket and a warning on open trades in the 15 minutes
+    before (purposely trading news is prohibited).
+  - The Account page lists the next 24 hours' high-impact events for the account's symbols, with **Read ForexFactory now**.
+    The guard has its own switch. FundingPips' dashboard calendar stays the official one.
+- **The EA trails by itself if it can't reach the app** (b3): the app sends each trade's Trail BE / Trail SL to the EA
+  (TRAIL lines: trigger, BE + costs, start, distance, floor, step); if the EA can't reach the server for 20 s (input
+  OfflineTrailSec), it moves MT5's stops itself by the same rules - never looser, never below BE + costs, never backwards,
+  2 s apart at most - and reports each move. When the link is back the app takes them as the trail (not as a stop moved by
+  hand) and carries on.
+- **FTM Bridge 1.20** (`mt5/FTM_Bridge.mq5`, walk-through in `mt5/README.md`): OPEN (Buy / Sell / BuyLimit / SellLimit /
+  BuyStop / SellStop with SL / TP and the comment "FTM <tag>"), each symbol's margin for 1 lot (OrderCalcMargin), volume min
+  / max and stops level, the TRAIL table and the offline trailing. Still calls out only; it opens nothing on its own. New
+  input OfflineTrailSec (20; 0 = never).
+
+Changed
+- Settings › MT5 bridge and the MT5 side's dialog say what 1.20 does. An EA 1.10 still manages trades; placing asks for 1.20.
+- On the MT5 side the top bar leaves out Fyers' data-budget pill (no room next to KILL; it's still on PAPER / LIVE), and the
+  account switcher shows "● 21182752 · $5,069" (server, DEMO and cents in its tip). Fyers' product switch is hidden there.
+- The paper engine's sizer goes up to MT5's maximum volume for MT5 symbols (it stopped at 500 steps).
+
+Tests
+- `tests/mt5acct_test.py` (now 118): placing (sizing in steps, margin from MT5, minimum volume, hedging in the account and
+  across accounts, the OPEN tied back by its tag with its planned 1R, a pending order from the app, MT5's refusal, a lost
+  OPEN never re-sent, offline, an order dropped after 10 s, EA 1.10), the kill switch and Resume, the news guard
+  (evaluation note / Master block, closing blocked, 30 min away, ForexFactory's JSON parsed), the EA's offline trailing and
+  its moves taken as the trail, the table sent again after an EA restart.
+- `tests/mt5acct_flow.js` (now 49): the chart tool on MT5 (0.03 lot, MT5 PLACE), the order in MT5 with its SL / TP, the app's
+  trade, hedging refused, the news guard on the Account page and in the ticket (Master), KILL and Resume.
+- `tests/fake_mt5.py` plays EA 1.20 (OPEN, margin, TRAIL, offline trailing; `--ver`, control `/offline`).
+  `tests/mock_server.py` points the news guard at a local file (`FTM_NEWS_URL`), never the real ForexFactory.
+- Every suite run on fresh data: all pass except the known ones (`chain_lists_flow`'s old expiry fixtures, `mt5_flow`'s
+  stray-candles check on a first run, as in v0.35.0) and `jinsights_flow`'s "today" check when run between midnight and
+  06:00 IST (the journal's "today" is the calendar date, the paper day starts at 06:00: older than this release).
+
 ## v0.36.0 — 10 Nov 2026 — MT5 accounts: your MT5 logins on a side of their own, managed from the app (FundingPips, stage b1)
 
 Added

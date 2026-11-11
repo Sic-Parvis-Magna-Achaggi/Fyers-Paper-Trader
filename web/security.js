@@ -204,8 +204,8 @@ function sideMT5(){ return !!(S && S.side === "mt5" && S.user && S.user.role ===
 function mt5List(){ return (S && S.accounts || []).filter(a => a.mode === "mt5"); }
 function mtCash(n, c, dp){ const k = (c || "USD").toUpperCase(), sy = k === "USD" ? "$" : k === "EUR" ? "€" : k === "GBP" ? "£" : k + " ";
   return n == null || isNaN(n) ? "–" : (n < 0 ? "−" : "") + sy + Math.abs(n).toLocaleString("en-US", {minimumFractionDigits: dp ?? 2, maximumFractionDigits: dp ?? 2}); }
-function mt5Label(a){ return `${a.online ? "●" : "○"} ${a.name}${a.demo ? " · DEMO" : ""}${a.balance != null ? " · " + mtCash(a.balance, a.currency) : ""}`; }   // (the server: in its title; the top bar has no room)
-function mt5Title(a){ return `MT5 ${a.name} · ${a.server || ""}${a.demo ? " · DEMO" : ""} · ${a.online ? "connected" : "not connected"}`; }
+function mt5Label(a){ return `${a.online ? "●" : "○"} ${a.name}${a.balance != null ? " · " + mtCash(a.balance, a.currency, 0) : ""}`; }   // (server, DEMO, cents: in its title; the top bar has no room with KILL)
+function mt5Title(a){ return `MT5 ${a.name} · ${a.server || ""}${a.demo ? " · DEMO" : ""} · balance ${mtCash(a.balance, a.currency)} · ${a.online ? "connected" : "not connected"}`; }
 function acctById(id){ return ((S && S.accounts) || []).find(a => a.id === id); }
 function acctReload(){
   if(typeof P !== "undefined"){ P.snap = null; P.posKey = P.ordKey = ""; P.ticketLoaded = false; }

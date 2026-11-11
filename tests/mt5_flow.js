@@ -26,11 +26,12 @@ const startEA = key => { ea = spawn("python3", [__dirname + "/fake_mt5.py", "htt
   await pg.waitForSelector("#mt5Box #mtSetup", { state: "attached", timeout: 10000 });
   await pg.evaluate(() => { document.querySelector("#mtSetup").open = true; document.querySelector("#mt5Sec").scrollIntoView(); });   // (closed once a terminal has connected)
   const s0 = await pg.textContent("#mt5Box");
-  ok(/opens no new trades/i.test(s0) && /AllowTrading/.test(s0) && /No VPS, no VPN/.test(s0) && /Set it up \(5 steps\)/.test(s0), "Settings › MT5 bridge explains it (opens no new trades, AllowTrading, no VPS / VPN) with the 5 steps");
+  ok(/opens nothing on its own/i.test(s0) && /AllowTrading/.test(s0) && /No VPS, no VPN/.test(s0) && /Set it up \(5 steps\)/.test(s0), "Settings › MT5 bridge explains it (opens nothing on its own, AllowTrading, no VPS / VPN) with the 5 steps");
   ok((await pg.inputValue("#mtUrl")) === "http://localhost:8766", "step 4 shows this server's address to allow in MT5");
   const dl = await pg.evaluate(async () => { const r = await fetch("/api/mt5/ea"); const t = await r.text(); return {code: r.status, mq5: /FTM_Bridge\.mq5/.test(t) && /WebRequest/.test(t)
-    && /#property version\s+"1\.10"/.test(t) && !/OrderSend|\.Buy\(|\.Sell\(|PositionOpen|BuyLimit|SellLimit|BuyStop|SellStop|OrderOpen/.test(t)}; });
-  ok(dl.code === 200 && dl.mq5, "the EA's source (1.10) downloads from the page; it opens no new trades (no OrderSend / Buy / Sell / OrderOpen)");
+    && /#property version\s+"1\.20"/.test(t) && !/OrderSend|PositionOpen|OrderOpen/.test(t)
+    && [...t.matchAll(/g_trade\.(Buy|Sell|BuyLimit|SellLimit|BuyStop|SellStop)\(/g)].every(m => m.index > t.indexOf("string DoOpen("))}; });
+  ok(dl.code === 200 && dl.mq5, "the EA's source (1.20) downloads from the page; it opens trades only in DoOpen (the app's OPEN), never by itself");
   pg.once("dialog", d => d.accept());
   await pg.click("#mtKeyNew");
   await pg.waitForSelector("#codeAsk:not(.hide) #caCode", { timeout: 10000 });

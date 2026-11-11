@@ -26,10 +26,20 @@
 //|                                    (volume 0 = all of it)         |
 //|   CANCEL <tag> <ticket>            delete a pending order         |
 //|   OMOD <tag> <ticket> <price> <sl> <tp>  move a pending order     |
+//|   OPEN <tag> <sym> <side> <market|limit|stop> <volume> <price>    |
+//|        <sl> <tp>          (1.20) the order you placed in the app  |
+//|   TRAIL <ticket> ...      (1.20) that trade's Trail BE / Trail SL |
+//|                           so the EA can go on trailing it by      |
+//|                           itself if it can't reach the app        |
 //|   ERR <message>              a problem (shown on the chart)       |
 //| Each request has a tag; it is carried out once, and its result is |
 //| sent back with the next call (a tag seen again is not repeated).  |
 //|                                                                   |
+//| Version 1.20 (stage b, slices b2 / b3): also places the orders    |
+//| you place in the app (OPEN, each with its own real SL / TP), and  |
+//| if it can't reach the app for OfflineTrailSec seconds it moves    |
+//| your trades' stops by itself as their Trail BE / Trail SL say     |
+//| (never looser, never backwards). It opens nothing by itself.      |
 //| Version 1.10 (stage b, slice b1): manages trades that already     |
 //| exist (moves SL / TP, closes, cancels or moves pending orders),   |
 //| only when the app asks and only if AllowTrading is true. It OPENS |
@@ -37,9 +47,10 @@
 //| Version 1.00 (stage a): prices and candles only.                  |
 //+------------------------------------------------------------------+
 #property copyright   "Ashwin Kumar"
-#property version     "1.10"
-#property description "FTM Bridge 1.10: sends this terminal's prices, candles, symbol list and account to your Fyers Trade Manager,"
-#property description "and carries out the app's requests on existing trades (SL / TP, close, cancel). Opens no new trades."
+#property version     "1.20"
+#property description "FTM Bridge 1.20: sends this terminal's prices, candles, symbol list and account to your Fyers Trade Manager,"
+#property description "places the orders you place in the app, manages your trades when you ask (SL / TP, close, cancel), and"
+#property description "trails their stops by itself if it can't reach the app. It opens nothing on its own."
 #property description "Calls out only (WebRequest)."
 
 #include <Trade\Trade.mqh>
@@ -49,9 +60,10 @@ input string BridgeKey = "";                                 // Bridge key (Sett
 input int    PollMs    = 250;                                // Call the app every ... ms
 input int    TimeoutMs = 5000;                               // WebRequest time-out (ms)
 input bool   AllowTrading   = true;                          // Let the app manage this account's trades (SL / TP, close, cancel)
-input int    SlippagePoints = 30;                            // Closing at market: most slippage accepted (points)
+input int    SlippagePoints = 30;                            // Market orders: most slippage accepted (points)
+input int    OfflineTrailSec = 20;                           // Can't reach the app this long: trail stops here (0 = never)
 
-#define EA_VER        "1.10"
+#define EA_VER        "1.20"
 #define MAGIC         20261110  // the magic number on the app's closing deals
 #define DEALS_PER_CALL 200      // deals per call (the app is told when there are more)
 #define TAGS_KEPT     200       // requests remembered, so a tag is never carried out twice
@@ -92,6 +104,19 @@ string g_doneRes[];
 string g_lastCmd  = "";
 int    g_nPos     = 0;
 int    g_nOrd     = 0;
+ulong  g_tTk[];                 // 1.20: each trade's trailing, as set in the app (TRAIL lines)
+int    g_tSide[];
+double g_tBest[];               // best bid since (long: highest, short: lowest)
+double g_tBeT[];                // Trail BE: price that triggers it (0 = off / done) ...
+double g_tBeP[];                // ... and the stop it moves to (break-even + costs)
+double g_tSlS[];                // Trail SL: price where it starts (0 = off) ...
+double g_tSlD[];                // ... its distance behind the best price ...
+double g_tFloor[];              // ... never below this (break-even + costs) ...
+double g_tStep[];               // ... and at least this much tighter each time
+ulong  g_tLast[];               // when this EA last moved it (GetTickCount64)
+string g_trailed[];             // stops this EA moved by itself, until the app has them: [ticket, sl, time ms]
+int    g_trailedSent = 0;
+int    g_nTrailed = 0;
 
 //+------------------------------------------------------------------+
 int OnInit()
@@ -132,8 +157,14 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTimer()
   {
+   TrailBest();
+   if(Offline())
+      OfflineTrail();
    if(GetTickCount64() < g_waitTill)
+     {
+      Show();
       return;
+     }
    string reply = "";
    int code = Post("/api/mt5/sync", SyncBody(), reply);
    if(code == 200)
@@ -143,6 +174,7 @@ void OnTimer()
       g_dCurMsc = g_dNextMsc;                // ... and these deals (before Handle: DEALS may move the cursor)
       g_dCurTk = g_dNextTk;
       DropResults(g_resSent);                // ... and these results
+      DropTrailed(g_trailedSent);            // ... and the stops this EA trailed by itself
       g_okTick = GetTickCount64();
       g_fails = 0;
       g_okAt = TimeLocal();
@@ -222,11 +254,14 @@ void Show()
    if(g_state == "connected")
       s += "\nThis account: " + IntegerToString(g_nPos) + " position(s), " + IntegerToString(g_nOrd) + " pending order(s)";
    if(AllowTrading)
-      s += "\nManages this account's trades when the app asks: moves SL / TP, closes, cancels. Opens no new trades.";
+      s += "\nPlaces the orders you place in the app; moves SL / TP, closes, cancels when you ask. Opens nothing by itself.";
    else
       s += "\nApp trading OFF (input AllowTrading = false): shows the account to the app, changes nothing.";
    if(g_lastCmd != "")
       s += "\nLast request: " + g_lastCmd;
+   if(ArraySize(g_tTk) > 0)
+      s += (Offline() ? "\nCAN'T REACH THE APP: trailing " : "\nWould trail by itself if the link drops: ") + IntegerToString(ArraySize(g_tTk))
+           + " trade(s)" + (g_nTrailed > 0 ? " (" + IntegerToString(g_nTrailed) + " stop move(s) so far)" : "");
    Comment(s);
   }
 
@@ -291,7 +326,8 @@ string SyncBody()
    b += ",\"ord\":[" + Orders(syms) + "]";
    b += ",\"sym\":{" + SymInfo(syms) + "}";
    b += ",\"deals\":[" + Deals() + "],\"dmore\":" + Jb(g_dMore) + ",\"dcur\":" + IntegerToString(g_dSet ? g_dCurMsc : 0);
-   b += ",\"res\":[" + Results() + "]}";
+   b += ",\"res\":[" + Results() + "]";
+   b += ",\"trailed\":[" + Trailed() + "]}";
    return(b);
   }
 
@@ -403,8 +439,11 @@ void Handle(const string reply)
                        }
                      else
                         if(StringFind(ln, "MOD ") == 0 || StringFind(ln, "CLOSE ") == 0 || StringFind(ln, "CANCEL ") == 0
-                           || StringFind(ln, "OMOD ") == 0)
+                           || StringFind(ln, "OMOD ") == 0 || StringFind(ln, "OPEN ") == 0)
                            Command(ln);
+                        else
+                           if(StringFind(ln, "TRAIL ") == 0)
+                              SetTrail(ln);
      }
   }
 
@@ -738,17 +777,26 @@ string Orders(string &syms[])
 //| For the app's money figures: "SYM":[tick value, tick size,        |
 //| volume step, contract size, digits] of the symbols traded         |
 //+------------------------------------------------------------------+
-string SymInfo(const string &syms[])
+string SymInfo(string &syms[])
   {
+   for(int j = 0; j < ArraySize(g_subs); j++)  // (1.20: the symbols the app streams too: the ones it may place orders on)
+      AddSym(syms, g_subs[j]);
    string out = "";
    for(int i = 0; i < ArraySize(syms); i++)
      {
       string s = syms[i];
+      double mb = 0, ms = 0;
+      if(!OrderCalcMargin(ORDER_TYPE_BUY, s, 1.0, SymbolInfoDouble(s, SYMBOL_ASK), mb))
+         mb = 0;
+      if(!OrderCalcMargin(ORDER_TYPE_SELL, s, 1.0, SymbolInfoDouble(s, SYMBOL_BID), ms))
+         ms = 0;
       if(out != "")
          out += ",";
       out += Js(s) + ":[" + Jd(SymbolInfoDouble(s, SYMBOL_TRADE_TICK_VALUE), 10) + "," + Jd(SymbolInfoDouble(s, SYMBOL_TRADE_TICK_SIZE), 10)
              + "," + Jd(SymbolInfoDouble(s, SYMBOL_VOLUME_STEP), 4) + "," + Jd(SymbolInfoDouble(s, SYMBOL_TRADE_CONTRACT_SIZE), 4)
-             + "," + IntegerToString(SymbolInfoInteger(s, SYMBOL_DIGITS)) + "]";
+             + "," + IntegerToString(SymbolInfoInteger(s, SYMBOL_DIGITS)) + "," + Jd(mb, 2) + "," + Jd(ms, 2)
+             + "," + Jd(SymbolInfoDouble(s, SYMBOL_VOLUME_MIN), 4) + "," + Jd(SymbolInfoDouble(s, SYMBOL_VOLUME_MAX), 4)
+             + "," + IntegerToString(SymbolInfoInteger(s, SYMBOL_TRADE_STOPS_LEVEL)) + "]";
      }
    return(out);
   }
@@ -935,10 +983,14 @@ void Command(const string line)
                if(kind == "OMOD" && n >= 6)
                   r = DoOmod(tag, tk, StringToDouble(p[3]), StringToDouble(p[4]), StringToDouble(p[5]));
                else
-                  r = Res(tag, false, 0, "bad request: " + line, tk);
+                  if(kind == "OPEN" && n >= 9)
+                     r = DoOpen(tag, p[2], (int)StringToInteger(p[3]), p[4], StringToDouble(p[5]), StringToDouble(p[6]),
+                                StringToDouble(p[7]), StringToDouble(p[8]));
+                  else
+                     r = Res(tag, false, 0, "bad request: " + line, tk);
    Remember(tag, r);
    AddResult(r);
-   g_lastCmd = kind + " #" + IntegerToString((long)tk) + " " + TimeToString(TimeLocal(), TIME_SECONDS);
+   g_lastCmd = kind + (kind == "OPEN" ? " " + p[2] : " #" + IntegerToString((long)tk)) + " " + TimeToString(TimeLocal(), TIME_SECONDS);
    Print("FTM Bridge: ", line, " -> ", r);
   }
 
@@ -995,5 +1047,217 @@ string DoOmod(const string tag, const ulong tk, const double pricev, const doubl
    bool ok = g_trade.OrderModify(tk, NormalizeDouble(pricev, dg), NormalizeDouble(slv, dg), NormalizeDouble(tpv, dg), tt, exp, stl);
    uint rc = g_trade.ResultRetcode();
    return(Res(tag, ok && Done(rc), rc, g_trade.ResultRetcodeDescription(), tk));
+  }
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//| 1.20: OPEN - the order you placed in the app, with its real SL /  |
+//| TP. Its comment "FTM <tag>" ties it to the app's request.         |
+//+------------------------------------------------------------------+
+string DoOpen(const string tag, const string sym, const int side, const string typ, const double vol, const double price,
+              const double slv, const double tpv)
+  {
+   if(!SymbolSelect(sym, true))
+      return(Res(tag, false, TRADE_RETCODE_INVALID, sym + " isn't a symbol on this broker", 0));
+   int dg = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+   double step = SymbolInfoDouble(sym, SYMBOL_VOLUME_STEP);
+   double v = (step > 0 ? MathRound(vol / step) * step : vol);
+   v = NormalizeDouble(v, 8);
+   double sl = NormalizeDouble(slv, dg);
+   double tp = NormalizeDouble(tpv, dg);
+   double px = NormalizeDouble(price, dg);
+   string cmt = "FTM " + tag;
+   g_trade.SetTypeFillingBySymbol(sym);
+   bool ok = false;
+   if(typ == "market")
+      ok = (side > 0 ? g_trade.Buy(v, sym, 0.0, sl, tp, cmt) : g_trade.Sell(v, sym, 0.0, sl, tp, cmt));
+   else
+      if(typ == "limit")
+         ok = (side > 0 ? g_trade.BuyLimit(v, px, sym, sl, tp, ORDER_TIME_GTC, 0, cmt) : g_trade.SellLimit(v, px, sym, sl, tp, ORDER_TIME_GTC, 0, cmt));
+      else
+         if(typ == "stop")
+            ok = (side > 0 ? g_trade.BuyStop(v, px, sym, sl, tp, ORDER_TIME_GTC, 0, cmt) : g_trade.SellStop(v, px, sym, sl, tp, ORDER_TIME_GTC, 0, cmt));
+         else
+            return(Res(tag, false, TRADE_RETCODE_INVALID, "unknown order type " + typ, 0));
+   uint rc = g_trade.ResultRetcode();
+   return(Res(tag, ok && Done(rc), rc, g_trade.ResultRetcodeDescription(), g_trade.ResultOrder()));
+  }
+
+//+------------------------------------------------------------------+
+//| 1.20: trailing by itself while the app can't be reached           |
+//| TRAIL <ticket> 0                     forget it                    |
+//| TRAIL <ticket> <side> <best> <BE trigger> <BE price> <SL start>   |
+//|       <SL distance> <floor> <min step>  (0 = that part off)       |
+//+------------------------------------------------------------------+
+bool Offline()
+  {
+   return(OfflineTrailSec > 0 && AllowTrading && g_okTick > 0 && GetTickCount64() - g_okTick > (ulong)OfflineTrailSec * 1000);
+  }
+
+int TrailIndex(const ulong tk)
+  {
+   for(int i = 0; i < ArraySize(g_tTk); i++)
+      if(g_tTk[i] == tk)
+         return(i);
+   return(-1);
+  }
+
+void TrailRemove(const int i)
+  {
+   int n = ArraySize(g_tTk);
+   for(int j = i; j < n - 1; j++)
+     {
+      g_tTk[j] = g_tTk[j + 1];
+      g_tSide[j] = g_tSide[j + 1];
+      g_tBest[j] = g_tBest[j + 1];
+      g_tBeT[j] = g_tBeT[j + 1];
+      g_tBeP[j] = g_tBeP[j + 1];
+      g_tSlS[j] = g_tSlS[j + 1];
+      g_tSlD[j] = g_tSlD[j + 1];
+      g_tFloor[j] = g_tFloor[j + 1];
+      g_tStep[j] = g_tStep[j + 1];
+      g_tLast[j] = g_tLast[j + 1];
+     }
+   TrailSize(n - 1);
+  }
+
+void TrailSize(const int n)
+  {
+   ArrayResize(g_tTk, n);
+   ArrayResize(g_tSide, n);
+   ArrayResize(g_tBest, n);
+   ArrayResize(g_tBeT, n);
+   ArrayResize(g_tBeP, n);
+   ArrayResize(g_tSlS, n);
+   ArrayResize(g_tSlD, n);
+   ArrayResize(g_tFloor, n);
+   ArrayResize(g_tStep, n);
+   ArrayResize(g_tLast, n);
+  }
+
+void SetTrail(const string line)
+  {
+   string p[];
+   int n = StringSplit(line, ' ', p);
+   if(n < 3)
+      return;
+   ulong tk = (ulong)StringToInteger(p[1]);
+   int i = TrailIndex(tk);
+   int side = (int)StringToInteger(p[2]);
+   if(side == 0 || n < 10)
+     {
+      if(i >= 0)
+         TrailRemove(i);
+      return;
+     }
+   double best = StringToDouble(p[3]);
+   if(i < 0)
+     {
+      i = ArraySize(g_tTk);
+      TrailSize(i + 1);
+      g_tTk[i] = tk;
+      g_tLast[i] = 0;
+     }
+   else                                        // keep the better of the app's best price and the one seen here
+      best = (side > 0 ? MathMax(best, g_tBest[i]) : (g_tBest[i] > 0 ? MathMin(best, g_tBest[i]) : best));
+   g_tSide[i] = side;
+   g_tBest[i] = best;
+   g_tBeT[i] = StringToDouble(p[4]);
+   g_tBeP[i] = StringToDouble(p[5]);
+   g_tSlS[i] = StringToDouble(p[6]);
+   g_tSlD[i] = StringToDouble(p[7]);
+   g_tFloor[i] = StringToDouble(p[8]);
+   g_tStep[i] = StringToDouble(p[9]);
+  }
+
+void TrailBest()
+  {
+   for(int i = ArraySize(g_tTk) - 1; i >= 0; i--)
+     {
+      if(!PositionSelectByTicket(g_tTk[i]))
+        {
+         TrailRemove(i);                       // closed: nothing to trail
+         continue;
+        }
+      double bid = SymbolInfoDouble(PositionGetString(POSITION_SYMBOL), SYMBOL_BID);   // (the app's best price is the bid too)
+      if(bid <= 0)
+         continue;
+      if(g_tSide[i] > 0 ? bid > g_tBest[i] : (g_tBest[i] <= 0 || bid < g_tBest[i]))
+         g_tBest[i] = bid;
+     }
+  }
+
+void OfflineTrail()
+  {
+   ulong now = GetTickCount64();
+   for(int i = 0; i < ArraySize(g_tTk); i++)
+     {
+      if(!PositionSelectByTicket(g_tTk[i]))
+         continue;
+      string sym = PositionGetString(POSITION_SYMBOL);
+      int dg = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+      int sd = g_tSide[i];
+      double cur = PositionGetDouble(POSITION_SL);
+      double tp = PositionGetDouble(POSITION_TP);
+      double exitPx = (sd > 0 ? SymbolInfoDouble(sym, SYMBOL_BID) : SymbolInfoDouble(sym, SYMBOL_ASK));
+      if(exitPx <= 0)
+         continue;
+      double want = cur;
+      if(g_tBeT[i] > 0 && sd * (g_tBest[i] - g_tBeT[i]) >= 0 && sd * (exitPx - g_tBeP[i]) > 0)
+         if(want == 0 || sd * (g_tBeP[i] - want) > 0)
+            want = g_tBeP[i];                  // Trail BE
+      if(g_tSlS[i] > 0 && sd * (g_tBest[i] - g_tSlS[i]) >= 0)
+        {
+         double c = g_tBest[i] - sd * g_tSlD[i];  // Trail SL: that far behind the best price ...
+         if(g_tFloor[i] > 0)
+            c = (sd > 0 ? MathMax(c, g_tFloor[i]) : MathMin(c, g_tFloor[i]));   // ... never below break-even + costs
+         if(sd * (exitPx - c) > 0 && (want == 0 || sd * (c - want) >= g_tStep[i]))
+            want = c;
+        }
+      want = NormalizeDouble(want, dg);
+      if(want == 0 || (cur != 0 && sd * (want - cur) <= 0))
+         continue;                             // only ever tighter
+      if(now - g_tLast[i] < 2000)
+         continue;                             // (2 s apart at most, like the app)
+      g_tLast[i] = now;
+      if(g_trade.PositionModify(g_tTk[i], want, tp) && Done(g_trade.ResultRetcode()))
+        {
+         if(g_tBeT[i] > 0 && MathAbs(want - NormalizeDouble(g_tBeP[i], dg)) < SymbolInfoDouble(sym, SYMBOL_POINT) / 2)
+            g_tBeT[i] = 0;                     // Trail BE done
+         int k = ArraySize(g_trailed);
+         ArrayResize(g_trailed, k + 1);
+         g_trailed[k] = "[" + IntegerToString((long)g_tTk[i]) + "," + Jd(want, dg) + "," + IntegerToString((long)TimeCurrent() * 1000) + "]";
+         g_nTrailed++;
+         Print("FTM Bridge: can't reach the app - trailed #", g_tTk[i], "'s stop to ", DoubleToString(want, dg));
+        }
+     }
+  }
+
+string Trailed()
+  {
+   string out = "";
+   g_trailedSent = ArraySize(g_trailed);
+   for(int i = 0; i < g_trailedSent; i++)
+     {
+      if(i > 0)
+         out += ",";
+      out += g_trailed[i];
+     }
+   return(out);
+  }
+
+void DropTrailed(const int k)
+  {
+   int n = ArraySize(g_trailed);
+   if(k <= 0)
+      return;
+   if(k >= n)
+     {
+      ArrayResize(g_trailed, 0);
+      return;
+     }
+   for(int i = k; i < n; i++)
+      g_trailed[i - k] = g_trailed[i];
+   ArrayResize(g_trailed, n - k);
   }
 //+------------------------------------------------------------------+
