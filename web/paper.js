@@ -13,6 +13,80 @@ const CURLOC = () => CUR() === "₹" ? "en-IN" : "en-US";
 const rs = n => n == null || isNaN(n) ? "–" : (n < 0 ? "−" : "") + CUR() + Math.abs(n).toLocaleString(CURLOC(), {minimumFractionDigits: 2, maximumFractionDigits: 2});
 const rsS = n => n == null || isNaN(n) ? "–" : (n > 0 ? "+" : n < 0 ? "−" : "") + CUR() + Math.abs(n).toLocaleString(CURLOC(), {maximumFractionDigits: CUR() === "₹" ? 0 : 2});
 const cls = n => n > 0 ? "up" : n < 0 ? "down" : "";
+/* v0.42.0: P&L, SL and TP money shown as an amount, a % of the account size or an R multiple (a main unit and a second
+   one: Chart settings › P&L shown as; U on the chart or a click on a figure cycles the main unit). Every figure is still
+   the net one (all charges); only how it's written changes. 1R = the trade's net risk at its first stop. */
+const PNL_UNITS = ["amt", "pct", "r"];
+const PNL_NAMES = {amt: "Amount", pct: "% of account", r: "R multiple", none: "None"};
+function pnlUnits(){
+  const C = typeof chartCfg === "function" ? chartCfg() : {};
+  const m = PNL_UNITS.includes(C.pnlMain) ? C.pnlMain : "amt";
+  let s = ["none", ...PNL_UNITS].includes(C.pnlSecond) ? C.pnlSecond : "r";
+  if(s === m) s = "none";
+  return [m, s];
+}
+const acctSize = () => { const v = +(P.snap && P.snap.rules && P.snap.rules.size); return v > 0 ? v : null; };
+const sgn = x => x > 0 ? "+" : x < 0 ? "−" : "";
+/* one figure in one unit; null when that unit can't be worked out (no account size, no 1R) */
+function unitTxt(u, v, oneR, amt){
+  if(v == null || isNaN(v)) return null;
+  if(u === "amt") return (amt || rsS)(v);
+  if(u === "pct"){ const sz = acctSize(); if(!sz) return null; const x = v / sz * 100; return sgn(+x.toFixed(2)) + Math.abs(x).toFixed(2) + "%"; }
+  if(u === "r"){ if(!(oneR > 0)) return null; const x = v / oneR; return sgn(+x.toFixed(2)) + Math.abs(x).toFixed(2) + "R"; }
+  return null;
+}
+/* v: the net money; oneR: the trade's 1R in money (positive), or null; est: "≈" in front (stops on the underlying).
+   Returns "main · second"; a unit that can't be worked out falls back to the amount (main) or is left out (second). */
+function pnlTxt(v, oneR, est, amt){
+  if(v == null || isNaN(v)) return "–";
+  const [m, s] = pnlUnits();
+  const a = unitTxt(m, v, oneR, amt) ?? (amt || rsS)(v);
+  let b = s === "none" ? null : unitTxt(s, v, oneR, amt);
+  if(b === a) b = null;
+  return (est ? "≈" : "") + a + (b ? " · " + b : "");
+}
+/* one part only (tables with a column per unit): which = 0 main, 1 second */
+function pnlPart(which, v, oneR, amt){
+  if(v == null || isNaN(v)) return "–";
+  const u = pnlUnits()[which];
+  if(u === "none") return "";
+  const t = unitTxt(u, v, oneR, amt);
+  return t ?? (which ? "–" : (amt || rsS)(v));
+}
+/* a pending order's 1R: what its stop would lose (net) */
+const ordR = o => o && o.at_sl != null && o.at_sl < 0 ? -o.at_sl : null;
+const pnlTip = () => { const [m, s] = pnlUnits(); return `Shown as ${PNL_NAMES[m]}${s !== "none" ? " · " + PNL_NAMES[s] : ""}. Click (or U on the chart) for amount → % of account → R. Chart settings › P&L shown as`; };
+/* the open trades' total: % of the account size; in R the sum of each trade's R (needs every trade's 1R) */
+function openTotalTxt(amt){
+  const s = P.snap; if(!s) return "–";
+  const v = s.acct.open_net, ps = s.positions || [];
+  const [m, sec] = pnlUnits();
+  const one = u => {
+    if(u === "r"){ if(!ps.length || ps.some(p => !(p.init_risk > 0))) return null;
+      const x = ps.reduce((t, p) => t + p.net / p.init_risk, 0); return sgn(+x.toFixed(2)) + Math.abs(x).toFixed(2) + "R"; }
+    return unitTxt(u, v, null, amt);
+  };
+  const a = one(m) ?? (amt || rs)(v); let b = sec === "none" ? null : one(sec); if(b === a) b = null;
+  return a + (b ? " · " + b : "");
+}
+/* cycle the main unit (amount → % → R); the second keeps its unit unless it would be the same as the new main */
+function pnlCycle(){
+  const [m, s] = pnlUnits(), nm = PNL_UNITS[(PNL_UNITS.indexOf(m) + 1) % PNL_UNITS.length];
+  const cfg = {...(prefGet("chart", {}) || {}), pnlMain: nm, pnlSecond: s === nm ? m : s};
+  prefSet("chart", cfg);
+  pnlRefresh();
+  toast(`P&L shown as ${PNL_NAMES[nm]}` + (cfg.pnlSecond !== "none" ? ` · ${PNL_NAMES[cfg.pnlSecond]}` : ""));
+}
+function pnlRefresh(fromCfg){
+  if(!P.snap) return;
+  P.posKey = P.ordKey = P.barKey = "";
+  try{ renderAcct(); renderPositions(); renderOrders(); drawLines(); }catch(e){}
+  if(typeof PG !== "undefined"){ PG.posKey = PG.ordKey = null; }
+  if(typeof pagesPaper === "function") pagesPaper();
+  if(typeof mPnlRefresh === "function") mPnlRefresh();
+  if(typeof mtAcctRefresh === "function") mtAcctRefresh();
+  if(!fromCfg && $("#cfgPick") && !$("#cfgPick").classList.contains("hide") && typeof renderCfg === "function") renderCfg();
+}
 /* lots typed: whole lots on Fyers; MT5's volume in 0.01 steps on an MT5 account (v0.37.0) */
 const isMtAcct = () => !!(P.snap && P.snap.mode === "mt5");
 const lotsIn = v => isMtAcct() ? Math.max(0.01, Math.round(+v * 100) / 100) : Math.max(1, Math.round(+v));
@@ -50,13 +124,14 @@ function renderAcct(){
   const a = P.snap.acct;
   const cells = [
     ["Balance", rs(a.balance)], ["Equity", rs(a.equity)],
-    ["Open P&L (net)", `<span class="${cls(a.open_net)}">${rs(a.open_net)}</span>`],
+    ["Open P&L (net)", `<span class="${cls(a.open_net)} pu" title="${esc(pnlTip())}">${openTotalTxt()}</span>`],
     ["Today (net)", `<span class="${cls(a.realized_today)}">${rs(a.realized_today)}</span>`],
     ["Day room", a.day_room == null ? "off" : `<span class="${a.day_room < 0 ? "down" : a.day_room < a.balance*0.01 ? "warnc" : ""}">${rs(a.day_room)}</span>`],
     ["Max room", a.max_room == null ? "off" : `<span class="${a.max_room < 0 ? "down" : ""}">${rs(a.max_room)}</span>`],
     ["Margin used", rs(a.margin_used)], ["Open risk", rs(a.open_risk)],
   ];
   $("#acct").innerHTML = cells.map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join("");
+  const pu = $("#acct .pu"); if(pu) pu.onclick = pnlCycle;
   $("#acctFoot").textContent = `${a.trades} trades · net ${rsS(a.net_total)} · charges ${rsS(a.charges_total)}`
     + (a.win_rate != null ? ` · win ${a.win_rate}%` : "") + (a.pf != null ? ` · PF ${a.pf}` : "") + ` · today ${a.trades_today} trades, charges ${rsS(a.charges_today)}`;
 }
@@ -384,7 +459,7 @@ function renderPositions(){
         <div class="ph"><span class="side ${p.side > 0 ? "up" : "down"}">${p.side > 0 ? "LONG" : "SHORT"}</span>
           <a href="#" class="psym mono">${esc(short(p.s))}</a><span class="muted">${p.lots} lot @ ${fmt(p.avg, p.tick)}</span>${bt}
           <span class="sp"></span><button class="x" data-a="close" title="Close at market">✕</button></div>
-        <div class="pn"><b class="net" data-f="net"></b><span class="muted" data-f="sub"></span></div>
+        <div class="pn"><b class="net pu" data-f="net"></b><span class="muted" data-f="sub"></span></div>
         <div class="pl">
           <span>SL <button class="ed" data-a="sl">${p.sl ?? "add"}</button> <i data-f="atsl"></i>${p.trail ? ' <span class="tag">TRAIL</span>' : ""}</span>
           <span>TP <button class="ed" data-a="tp">${p.tp ?? "add"}</button> <i data-f="attp"></i></span>
@@ -399,17 +474,18 @@ function renderPositions(){
       el.querySelector('[data-a="close"]').onclick = () => papi("close", {id});
       el.querySelector('[data-a="be"]').onclick = () => papi("be", {id});
       el.querySelectorAll(".ed").forEach(b => b.onclick = () => inlineEdit(b, id, b.dataset.a));
+      el.querySelector(".pu").onclick = pnlCycle;
     });
   }
   for(const p of ps){
     const el = box.querySelector(`.pos[data-id="${p.id}"]`); if(!el) continue;
     const net = el.querySelector('[data-f="net"]');
-    net.textContent = rs(p.net); net.className = "net " + cls(p.net);
+    net.textContent = pnlTxt(p.net, p.init_risk, false, rs); net.className = "net pu " + cls(p.net); net.title = pnlTip();
     el.querySelector('[data-f="sub"]').textContent = ` LTP ${fmt(p.ltp, p.tick)}` + (p.ref_ltp ? ` · fut ${fmt(p.ref_ltp)}` : "")
-      + (p.r_now != null ? ` · ${p.r_now > 0 ? "+" : ""}${p.r_now}R` : "") + ` · charges so far ${rs(p.paid)}` + (p.stale ? " · no live price" : "");
-    el.querySelector('[data-f="atsl"]').textContent = p.at_sl != null ? (p.est ? "≈" : "") + rsS(p.at_sl) : "";
+      + ` · charges so far ${rs(p.paid)}` + (p.stale ? " · no live price" : "");
+    el.querySelector('[data-f="atsl"]').textContent = p.at_sl != null ? pnlTxt(p.at_sl, p.init_risk, p.est) : "";
     el.querySelector('[data-f="atsl"]').className = cls(p.at_sl);
-    el.querySelector('[data-f="attp"]').textContent = p.at_tp != null ? (p.est ? "≈" : "") + rsS(p.at_tp) : "";
+    el.querySelector('[data-f="attp"]').textContent = p.at_tp != null ? pnlTxt(p.at_tp, p.init_risk, p.est) : "";
     el.querySelector('[data-f="attp"]').className = cls(p.at_tp);
     el.querySelector('[data-f="be"]').textContent = `BE+costs ${fmt(p.be, p.tick)}`;
   }
@@ -438,8 +514,8 @@ function renderOrders(){
     <div class="ph"><span class="side ${o.side > 0 ? "up" : "down"}">${o.side > 0 ? "BUY" : "SELL"} ${o.type.toUpperCase()}</span>
       <span class="mono">${esc(short(o.s))}</span><span class="muted">${o.lots} lot @ <button class="ed" data-a="price">${o.price}</button></span>
       <span class="sp"></span><button class="x" data-a="cancel" title="Cancel">✕</button></div>
-    <div class="pl"><span>SL <button class="ed" data-a="sl">${o.sl ?? "add"}</button> <i class="down">${o.at_sl != null ? rsS(o.at_sl) : ""}</i></span>
-      <span>TP <button class="ed" data-a="tp">${o.tp ?? "add"}</button> <i class="up">${o.at_tp != null ? rsS(o.at_tp) : ""}</i></span>
+    <div class="pl"><span>SL <button class="ed" data-a="sl">${o.sl ?? "add"}</button> <i class="down">${o.at_sl != null ? pnlTxt(o.at_sl, ordR(o)) : ""}</i></span>
+      <span>TP <button class="ed" data-a="tp">${o.tp ?? "add"}</button> <i class="up">${o.at_tp != null ? pnlTxt(o.at_tp, ordR(o)) : ""}</i></span>
       <span class="muted">${esc(o.product)}</span></div></div>`).join("");
   box.querySelectorAll(".pos").forEach(el => {
     const id = el.dataset.id;
@@ -526,8 +602,8 @@ function zoneList(){
     if(bs === cur.s){
       const e = basisNow(), sl = slNow(), tp = tpNow(), p = P.plan;
       if(e != null) out.push({tool: true, entry: e, sl, tp, x0: dispLast() ? dispLast().time : null,
-        slTxt: p && (p.risk != null || p.risk_1lot != null) ? `${p.risk_estimated ? "≈" : ""}${rsS(-(p.risk ?? p.risk_1lot))}${p.risk == null ? " (1 lot)" : ""}` : "",
-        tpTxt: p && p.reward != null ? `${p.risk_estimated ? "≈" : ""}${rsS(p.reward)}${p.rr != null ? " · " + p.rr + "R" : ""}` : ""});
+        slTxt: p && (p.risk != null || p.risk_1lot != null) ? (p.risk == null ? `${p.risk_estimated ? "≈" : ""}${rsS(-p.risk_1lot)} (1 lot)` : pnlTxt(-p.risk, p.risk, p.risk_estimated)) : "",
+        tpTxt: p && p.reward != null ? (p.risk ? pnlTxt(p.reward, p.risk, p.risk_estimated) : `${p.risk_estimated ? "≈" : ""}${rsS(p.reward)}${p.rr != null ? " · " + p.rr + "R" : ""}`) : ""});
     }
   }
   if(P.snap) for(const p of P.snap.positions){
@@ -535,13 +611,13 @@ function zoneList(){
     if(bs !== cur.s) continue;
     const e = p.basis === "underlying" ? p.basis_entry : p.avg;
     out.push({entry: e, sl: p.sl, tp: p.tp, x0: curPlan ? dispTimeAt(bucket(p.opened + IST, curPlan)) : null,
-      slTxt: p.at_sl != null ? (p.est ? "≈" : "") + rsS(p.at_sl) : "", tpTxt: p.at_tp != null ? (p.est ? "≈" : "") + rsS(p.at_tp) : ""});
+      slTxt: p.at_sl != null ? pnlTxt(p.at_sl, p.init_risk, p.est) : "", tpTxt: p.at_tp != null ? pnlTxt(p.at_tp, p.init_risk, p.est) : ""});
   }
   return out;
 }
 function drawZones(ctx, size){
   const C = chartCfg(), UP = C.profitZ, DOWN = C.lossZ, A = (+C.zoneA || 20) / 100;
-  P.toolX = null;
+  P.toolX = null; P.zoneHits = [];
   for(const z of zoneList()){
     const ye = series.priceToCoordinate(z.entry); if(ye == null) continue;
     let x0 = zoneX(z.x0, size.width);
@@ -555,8 +631,9 @@ function drawZones(ctx, size){
     const ys = z.sl != null ? series.priceToCoordinate(z.sl) : null, yt = z.tp != null ? series.priceToCoordinate(z.tp) : null;
     box(ys, DOWN); box(yt, UP);
     ctx.font = "600 11px 'IBM Plex Sans', system-ui, sans-serif"; ctx.textBaseline = "middle";
-    const label = (y2, txt, col) => { if(y2 == null || !txt) return; const y = y2 + (y2 > ye ? -10 : 10);
-      ctx.fillStyle = col; ctx.fillText(txt, x0 + 8, Math.abs(y2 - ye) < 22 ? y2 : y); };
+    const label = (y2, txt, col) => { if(y2 == null || !txt) return; const y = Math.abs(y2 - ye) < 22 ? y2 : y2 + (y2 > ye ? -10 : 10);
+      ctx.fillStyle = col; ctx.fillText(txt, x0 + 8, y);
+      const w = ctx.measureText(txt).width; P.zoneHits.push({x0: x0 + 4, x1: x0 + 12 + w, y0: y - 9, y1: y + 9}); };
     label(ys, z.slTxt, C.slC); label(yt, z.tpTxt, C.tpC);
   }
 }
@@ -591,7 +668,10 @@ function ensurePrim(){
   chart.subscribeClick(param => {
     if(!param.point || Date.now() - (P.dragEnd || 0) < 300) return;
     const h = (P.hits || []).find(h => Math.abs(param.point.x - h.x) <= h.r && Math.abs(param.point.y - h.y) <= h.r);
-    if(h) h.act();
+    if(h) return h.act();
+    const {x, y} = param.point;                       // a zone's money label: cycle amount → % → R (v0.42.0)
+    const drawing = typeof DR !== "undefined" && (DR.tool || DR.measArm || DR.draft || DR.sel);   // (not while drawing or with a drawing selected)
+    if(!drawing && (P.zoneHits || []).some(z => x >= z.x0 && x <= z.x1 && y >= z.y0 && y <= z.y1)) pnlCycle();
   });
   chart.timeScale().subscribeVisibleLogicalRangeChange(() => { toolOverlay(); posBars(); });
   // keep the tool's and positions' SL / TP inside the visible price range, so they can always be grabbed
@@ -622,17 +702,17 @@ function drawLines(){
       if(p.s === cur.s && p.floor != null) mkLine(P.posLines, p.floor, C.beC, `BE floor · exit here nets ₹0 · ${p.be_ticks || 0} ticks ${p.side > 0 ? "above" : "below"} entry pay the ${rs(p.be_covers)} charges`, +C.beS);
       if(bs !== cur.s) continue;
       const slTitle = p.at_be && p.basis === "self" ? `${p.trail ? "TRAIL" : "BE"} · exit here nets ${rsS(p.at_sl)} · ${p.be_ticks} ticks ${p.side > 0 ? "above" : "below"} entry pay the ${rs(p.be_covers)} charges`
-        : `SL ${e}${rsS(p.at_sl)}${p.trail ? " trail" : ""}`;
+        : `SL ${pnlTxt(p.at_sl, p.init_risk, p.est)}${p.trail ? " trail" : ""}`;
       const atBe = p.at_be && p.basis === "self";
       if(p.sl != null) drag(mkLine(P.posLines, p.sl, atBe ? C.beC : C.slC, slTitle, atBe ? +C.beS : +C.slS, 2), p.sl, tk(bs), v => papi("modify", {id: p.id, sl: v}));
-      if(p.tp != null) drag(mkLine(P.posLines, p.tp, C.tpC, `TP ${e}${rsS(p.at_tp)}`, +C.tpS, 2), p.tp, tk(bs), v => papi("modify", {id: p.id, tp: v}));
+      if(p.tp != null) drag(mkLine(P.posLines, p.tp, C.tpC, `TP ${pnlTxt(p.at_tp, p.init_risk, p.est)}`, +C.tpS, 2), p.tp, tk(bs), v => papi("modify", {id: p.id, tp: v}));
     }
     for(const o of P.snap.orders){
       if(o.s === cur.s) drag(mkLine(P.posLines, o.price, C.orderC, "", +C.orderS, 2), o.price, tk(o.s), v => papi("modify", {id: o.id, price: v}));
       const bs = o.basis === "underlying" ? o.ref : o.s;
       if(bs !== cur.s) continue;
-      if(o.sl != null) drag(mkLine(P.posLines, o.sl, C.slC, `SL ${rsS(o.at_sl)}`, +C.orderS), o.sl, tk(bs), v => papi("modify", {id: o.id, sl: v}));
-      if(o.tp != null) drag(mkLine(P.posLines, o.tp, C.tpC, `TP ${o.at_tp != null ? rsS(o.at_tp) : ""}`, +C.orderS), o.tp, tk(bs), v => papi("modify", {id: o.id, tp: v}));
+      if(o.sl != null) drag(mkLine(P.posLines, o.sl, C.slC, `SL ${o.at_sl != null ? pnlTxt(o.at_sl, ordR(o)) : ""}`, +C.orderS), o.sl, tk(bs), v => papi("modify", {id: o.id, sl: v}));
+      if(o.tp != null) drag(mkLine(P.posLines, o.tp, C.tpC, `TP ${o.at_tp != null ? pnlTxt(o.at_tp, ordR(o)) : ""}`, +C.orderS), o.tp, tk(bs), v => papi("modify", {id: o.id, tp: v}));
     }
   }
   toolRedraw(true);
@@ -680,6 +760,7 @@ function toolRedraw(rebuild){
 function posBars(){
   const host = $("#posbars");
   if(!host) return;
+  if(!host.dataset.pu){ host.dataset.pu = "1"; host.addEventListener("click", e => { if(e.target.closest(".pu")){ e.stopPropagation(); pnlCycle(); } }); }
   if(!series || !cur || !P.snap){ host.innerHTML = ""; P.barKey = ""; return; }
   const items = [];
   for(const p of P.snap.positions){
@@ -738,8 +819,7 @@ function posBars(){
     const t = el.querySelector('[data-f="t"]');
     if(i.kind === "pos"){
       const p = i.p;
-      t.innerHTML = `<b class="${p.side > 0 ? "up" : "down"}">${p.side > 0 ? "LONG" : "SHORT"} ${p.lots}</b> <span class="muted">@ ${fmt(p.avg, (sym[p.s] || {}).tick || cur.tick)}</span> <span class="${cls(p.net)}">${rsS(p.net)}</span>`
-        + (p.r_now != null ? ` <span class="muted">${p.r_now > 0 ? "+" : ""}${p.r_now}R</span>` : "");
+      t.innerHTML = `<b class="${p.side > 0 ? "up" : "down"}">${p.side > 0 ? "LONG" : "SHORT"} ${p.lots}</b> <span class="muted">@ ${fmt(p.avg, (sym[p.s] || {}).tick || cur.tick)}</span> <span class="pu ${cls(p.net)}" title="${esc(pnlTip())}">${pnlBar(p)}</span>`;
       const ta = el.querySelector('[data-f="ta"]');
       if(ta){
         const tick = (sym[p.basis === "underlying" ? p.ref : p.s] || {}).tick;
@@ -751,6 +831,11 @@ function posBars(){
       t.innerHTML = `<b class="${o.side > 0 ? "up" : "down"}">${o.side > 0 ? "BUY" : "SELL"} ${o.type.toUpperCase()} ${o.lots}</b>`;
     }
   }
+}
+/* the position bar's P&L: the main unit in colour, the second one dimmed (as the R was before v0.42.0) */
+function pnlBar(p){
+  const t = pnlTxt(p.net, p.init_risk).split(" · ");
+  return esc(t[0]) + (t[1] ? ` <span class="muted">${esc(t[1])}</span>` : "");
 }
 /* a trade's own trailing, worded as in LiveTrader 1.24 (also used by the Trades page and the phone) */
 function trailTips(p){
@@ -776,7 +861,8 @@ function toolOverlay(){
   if(!p) body = `<span class="tl${P.pvErr ? " blocked" : ""}" title="${esc(P.pvErr || "")}">${head} · ${esc(P.pvErr || "working out…")}</span>`;
   else {
     const e = p.risk_estimated ? "≈" : "";
-    const money = p.risk != null ? ` · <span class="down">${e}${rsS(-p.risk)}</span>` + (p.reward != null ? ` / <span class="up">${e}${rsS(p.reward)}</span>` : "") + (p.rr != null ? ` · ${p.rr}R` : "") : "";
+    const money = p.risk != null ? ` · <span class="down">${e}${pnlPart(0, -p.risk, p.risk)}</span>` + (p.reward != null ? ` / <span class="up">${e}${pnlPart(0, p.reward, p.risk)}</span>` : "")
+      + (p.rr != null && pnlUnits()[0] !== "r" ? ` · ${p.rr}R` : "") : "";
     body = `<span class="tl${p.blocked ? " blocked" : ""}" title="${esc(p.blocked || (p.notes || []).join(" · "))}">${head} · ${p.lots} lot${p.lots === 1 ? "" : "s"}${money}${p.blocked ? " · " + esc(p.blocked) : ""}</span>`;
   }
   const canPlace = p && !p.blocked && p.lots > 0 && (onOwn || T.basis === "underlying");

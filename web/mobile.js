@@ -167,7 +167,7 @@ function mChips(){
     box.querySelectorAll("[data-id]").forEach(b => b.onclick = () => mPosSheet(b.dataset.id));
     const o = box.querySelector("[data-o]"); if(o) o.onclick = () => mShow("trade");
   }
-  for(const p of ps){ const b = box.querySelector(`[data-id="${p.id}"] [data-f="n"]`); if(b){ b.textContent = rsS(p.net); b.className = cls(p.net); } }
+  for(const p of ps){ const b = box.querySelector(`[data-id="${p.id}"] [data-f="n"]`); if(b){ b.textContent = pnlPart(0, p.net, p.init_risk); b.className = cls(p.net); } }
   const n = ps.length + os.length, nb = mq("#mNb");
   if(nb){ nb.textContent = n; nb.classList.toggle("hide", !n); }
 }
@@ -245,7 +245,7 @@ function mBubFill(){
   const l2 = !p ? `<span class="${P.pvErr && !/^waiting/.test(P.pvErr) ? "down" : "muted"}">${esc(P.pvErr || "Working out size and costs…")}</span>`
     : p.blocked ? `<span class="down">${esc(p.blocked)}</span>`
     : !p.lots ? `<span class="down">1 lot risks ${r0(p.risk_1lot)}: more than your size allows</span>`
-    : `<span class="down">SL ${p.risk != null ? est + r0(-p.risk) : "none"}</span> · <span class="up">TP ${p.reward != null ? est + r0(p.reward) + (p.rr != null ? " · " + p.rr + "R" : "") : "none"}</span>`;
+    : `<span class="down">SL ${p.risk != null ? est + esc(pnlPart(0, -p.risk, p.risk, r0)) : "none"}</span> · <span class="up">TP ${p.reward != null ? est + esc(pnlPart(0, p.reward, p.risk, r0)) + (p.rr != null && pnlUnits()[0] !== "r" ? " · " + p.rr + "R" : "") : "none"}</span>`;   // (one line: the main unit only, as the PLACE box; v0.42.0)
   const f1 = b.querySelector(".l1"), f2 = b.querySelector(".l2");
   if(f1.innerHTML !== l1) f1.innerHTML = l1;
   if(f2.innerHTML !== l2) f2.innerHTML = l2;
@@ -405,8 +405,8 @@ function mPosSheet(id){
   mOpen("pos", `
     <div class="shead"><span class="side ${p.side > 0 ? "up" : "down"}">${p.side > 0 ? "LONG" : "SHORT"}</span><b>${esc(short(p.s))}</b><button data-x>✕</button></div>
     <div class="mgrid">
-      <div><span>Net P&L (after all charges)</span><b data-f="net" style="font-size:20px"></b></div>
-      <div><span>R now</span><b data-f="r"></b></div>
+      <div><span>Net P&L (after all charges)</span><b data-f="net" class="pu" style="font-size:20px"></b></div>
+      <div><span data-f="rl">R now</span><b data-f="r"></b></div>
       <div><span>Lots · product</span><b>${p.lots} · ${esc(prodName(p.product))}</b></div>
       <div><span>Entry</span><b>${fmt(p.avg, p.tick)}</b></div>
       <div><span>LTP</span><b data-f="ltp"></b></div>
@@ -453,6 +453,7 @@ function mPosSheet(id){
     sh.querySelector(inp).onchange = () => { const v = num(sh.querySelector(inp).value); if(v > 0) papi("pos_trail", {id, [rk]: v}); };
   }
   sh.querySelector("#mpBeNow").onclick = () => papi("be", {id});
+  sh.querySelector('[data-f="net"]').onclick = pnlCycle;               // tap: amount → % → R (v0.42.0)
   sh.querySelector("#mpMyStop").onclick = () => { if(typeof placeMyStop === "function") placeMyStop(id); };
   sh.querySelector("#mpChart").onclick = () => { const q = mPos(id); if(!q) return; const s = q.basis === "underlying" ? q.ref : q.s; mClose(); mShow("chart");
     if(!cur || cur.s !== s){ const r = sym[s]; if(r) openSymbol(r); else openBySymbol(s); } };
@@ -469,12 +470,14 @@ function mPosFill(force){
   const p = mPos(M.posId), sh = mq("#mSheet");
   if(!p){ toast("Position closed"); mClose(); return; }
   const f = n => sh.querySelector(`[data-f="${n}"]`), e = p.est ? "≈" : "";
-  f("net").textContent = rs(p.net); f("net").className = cls(p.net);
-  f("r").textContent = p.r_now != null ? (p.r_now > 0 ? "+" : "") + p.r_now + "R" : "–"; f("r").className = cls(p.r_now);
+  const U = pnlUnits();
+  f("net").textContent = pnlPart(0, p.net, p.init_risk, rs); f("net").className = "pu " + cls(p.net);
+  f("rl").textContent = U[1] === "none" ? "" : U[1] === "r" ? "R now" : U[1] === "pct" ? "% of account" : "Amount";
+  f("r").textContent = pnlPart(1, p.net, p.init_risk, rs); f("r").className = cls(p.net);
   f("ltp").textContent = fmt(p.ltp, p.tick) + (p.ref_ltp ? ` · fut ${fmt(p.ref_ltp)}` : "") + (p.stale ? " ⚠" : "");
   f("be").textContent = fmt(p.be, p.tick); f("paid").textContent = rs(p.paid);
-  f("atsl").textContent = p.at_sl != null ? e + rsS(p.at_sl) + (p.at_be ? " · at BE" : p.trail ? " · trailing" : "") : ""; f("atsl").className = cls(p.at_sl);
-  f("attp").textContent = p.at_tp != null ? e + rsS(p.at_tp) : ""; f("attp").className = cls(p.at_tp);
+  f("atsl").textContent = p.at_sl != null ? pnlTxt(p.at_sl, p.init_risk, p.est) + (p.at_be ? " · at BE" : p.trail ? " · trailing" : "") : ""; f("atsl").className = cls(p.at_sl);
+  f("attp").textContent = p.at_tp != null ? pnlTxt(p.at_tp, p.init_risk, p.est) : ""; f("attp").className = cls(p.at_tp);
   const fy = f("fy");
   if(typeof liveOn === "function" && liveOn()){ const s = fyStopText(p); fy.textContent = s.t; fy.className = "fy " + s.c; } else fy.textContent = "";
   const ms = sh.querySelector('[data-f="mystop"]');
@@ -533,7 +536,7 @@ function mOrdFill(force){
   if(!o){ toast("The order is no longer pending"); mClose(); return; }
   const f = n => sh.querySelector(`[data-f="${n}"]`);
   const t = last[o.s]; f("ltp").textContent = t ? fmt(t.ltp, tickOf(o.s)) : "–";
-  f("atsl").textContent = o.at_sl != null ? rsS(o.at_sl) : ""; f("attp").textContent = o.at_tp != null ? rsS(o.at_tp) : "";
+  f("atsl").textContent = o.at_sl != null ? pnlTxt(o.at_sl, ordR(o)) : ""; f("attp").textContent = o.at_tp != null ? pnlTxt(o.at_tp, ordR(o)) : "";
   const fy = o.fy || {};
   f("fy").textContent = typeof liveOn === "function" && liveOn() ? (fy.cancel_req ? "cancelling at Fyers…" : fy.oid ? `at Fyers #${fy.oid}` + (fy.filled ? ` · ${fy.filled} filled` : "") : fy.state === "unsure" ? "Fyers didn't confirm - checking" : "sending to Fyers…") : "";
   for(const [inId, k] of [["moPx", "price"], ["moSl", "sl"], ["moTp", "tp"]]) if(force || !(k in M.draft)) setv(sh.querySelector("#" + inId), k in M.draft ? M.draft[k] : o[k]);
@@ -572,7 +575,7 @@ function mAcctSheet(){
 function mTrade(){
   const box = mq("#ms_trade"); if(!box || M.ms !== "trade" || !P.snap) return;
   const sn = P.snap, a = sn.acct, ps = sn.positions, os = sn.orders, live = typeof liveOn === "function" && liveOn();
-  const key = [ps.map(p => p.id).join(","), os.map(o => [o.id, o.price, o.sl, o.tp].join(":")).join(","), live].join("|");
+  const key = [ps.map(p => p.id).join(","), os.map(o => [o.id, o.price, o.sl, o.tp].join(":")).join(","), live, pnlUnits().join()].join("|");
   if(key !== M.tradeKey || !box.childElementCount){
     M.tradeKey = key;
     box.innerHTML = `
@@ -585,7 +588,7 @@ function mTrade(){
       <div class="mh">Pending orders (${os.length})<span class="sp"></span>${os.length ? `<button class="sm" id="mtCancelAll">Cancel all</button>` : ""}</div>
       ${os.length ? os.map(o => `<button class="mpos" data-oid="${o.id}">
           <div class="r1"><span class="side ${o.side > 0 ? "up" : "down"}">${o.side > 0 ? "BUY" : "SELL"} ${esc(o.type.toUpperCase())}</span><span class="sym">${esc(short(o.s))}</span><span class="mono">${fmt(o.price, tickOf(o.s))}</span></div>
-          <div class="r2"><span>${o.lots} lot · ${esc(prodName(o.product))}</span><span>SL <b>${o.sl ?? "–"}</b> <i class="down">${o.at_sl != null ? rsS(o.at_sl) : ""}</i></span><span>TP <b>${o.tp ?? "–"}</b> <i class="up">${o.at_tp != null ? rsS(o.at_tp) : ""}</i></span></div></button>`).join("") : `<div class="mempty">No pending orders.</div>`}
+          <div class="r2"><span>${o.lots} lot · ${esc(prodName(o.product))}</span><span>SL <b>${o.sl ?? "–"}</b> <i class="down">${o.at_sl != null ? esc(pnlTxt(o.at_sl, ordR(o))) : ""}</i></span><span>TP <b>${o.tp ?? "–"}</b> <i class="up">${o.at_tp != null ? esc(pnlTxt(o.at_tp, ordR(o))) : ""}</i></span></div></button>`).join("") : `<div class="mempty">No pending orders.</div>`}
       <div class="mh">Trailing for new trades</div>
       <div class="mcard">
         <div class="mtog"><span>Trail BE at</span><input id="mtBeR" inputmode="decimal"><button id="mtBe">off</button></div>
@@ -605,20 +608,21 @@ function mTrade(){
     mq("#mtSlR").onchange = () => papi("trail", {sl_r: num(mq("#mtSlR").value) || 1});
   }
   const cells = [["Balance", rs(a.balance)], ["Equity", rs(a.equity)],
-    ["Open P&L (net)", `<span class="${cls(a.open_net)}">${rs(a.open_net)}</span>`], ["Today (net)", `<span class="${cls(a.realized_today)}">${rs(a.realized_today)}</span>`],
+    ["Open P&L (net)", `<span class="${cls(a.open_net)} pu">${openTotalTxt()}</span>`], ["Today (net)", `<span class="${cls(a.realized_today)}">${rs(a.realized_today)}</span>`],
     ["Day room", a.day_room == null ? "off" : `<span class="${a.day_room < 0 ? "down" : ""}">${rs(a.day_room)}</span>`],
     ["Max room", a.max_room == null ? "off" : `<span class="${a.max_room < 0 ? "down" : ""}">${rs(a.max_room)}</span>`],
     ["Margin used", rs(a.margin_used)], ["Open risk", rs(a.open_risk)],
     ["Trades today", a.trades_today + (sn.rules.max_trades ? ` / ${sn.rules.max_trades}` : "")], ["Charges today", rs(a.charges_today)]];
   mq("#mtAcct").innerHTML = cells.map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join("");
+  const pu = mq("#mtAcct .pu"); if(pu) pu.onclick = pnlCycle;
   for(const p of ps){
     const el = box.querySelector(`[data-id="${p.id}"]`); if(!el) continue;
     const f = n => el.querySelector(`[data-f="${n}"]`);
-    f("net").textContent = rs(p.net); f("net").className = "net " + cls(p.net);
+    f("net").textContent = pnlPart(0, p.net, p.init_risk, rs); f("net").className = "net " + cls(p.net);
     f("ltp").textContent = fmt(p.ltp, p.tick) + (p.stale ? " ⚠" : "");
     f("sl").textContent = (p.sl != null ? fmt(p.sl, p.tick) : "none") + (p.at_be ? " BE" : p.trail ? " TR" : "");
     f("tp").textContent = p.tp != null ? fmt(p.tp, p.tick) : "none";
-    f("r").innerHTML = p.r_now != null ? `<b class="${cls(p.r_now)}">${p.r_now > 0 ? "+" : ""}${p.r_now}R</b>` : "";
+    { const t = pnlPart(1, p.net, p.init_risk, rs); f("r").innerHTML = t && t !== "–" ? `<b class="${cls(p.net)}">${esc(t)}</b>` : ""; }
     if(live){ const s = fyStopText(p); f("fy").textContent = s.t; f("fy").className = "fy " + s.c; } else f("fy").textContent = "";
   }
   const t = sn.trail;
@@ -761,3 +765,12 @@ addEventListener("resize", () => { mApply(); mWarnings(); });
 addEventListener("orientationchange", () => setTimeout(() => { mApply(); mOrient(); }, 250));
 if(screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener("change", () => setTimeout(mOrient, 250));
 mApply();
+
+/* the P&L unit changed (v0.42.0): redraw what the phone shows */
+function mPnlRefresh(){
+  if(typeof M === "undefined") return;
+  try{ mChips(); }catch(e){}
+  if(M.sheet === "pos") try{ mPosFill(true); }catch(e){}
+  if(M.sheet === "ord") try{ mOrdFill(true); }catch(e){}
+  M.tradeKey = ""; try{ if(mq("#mtAcct")) mTrade(); }catch(e){}
+}

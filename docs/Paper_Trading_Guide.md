@@ -558,6 +558,30 @@ Phones get their own layout, like MT5's app (a desktop browser never does). **Mo
 
   They're saved with your preferences.
 
+## P&L shown as an amount, a % of the account or R (v0.42.0)
+
+Every P&L, SL and TP figure can be written three ways, a **main** unit with a **second** one next to it:
+- **Amount** (₹, or $ on an MT5 account), as before;
+- **% of account**: of the account size (the paper account's size, the Live account's size from Fyers, the MT5 account's
+  starting size, which FundingPips' % rules count from);
+- **R multiple**: of the trade's net risk at its first stop (1R). A stop trailed past break-even shows the R it locks in
+  ("SL +0.50R"); a pending order's 1R is what its own stop would lose, so its SL reads −1.00R.
+
+Example (an MT5 gold short, 1R = $24.02 net, on a $5,000 account): Amount · R reads **SL −$24.02 · −1.00R**,
+**TP +$91.42 · +3.81R**, the position bar **+$9.06 +0.38R**; R · % reads **SL −1.00R · −0.48%**, **TP +3.81R · +1.83%**.
+
+It applies to the position bar, the SL / TP labels (price scale and zones), the new-trade tool (its zones; the PLACE box
+shows the main unit only), the trades panel and its Open P&L, pending orders, the Trades page, the MT5 Account page's Open
+P&L and the phone (chips, the position and order sheets, the Trade tab; the order bubble shows the main unit only).
+Every figure is still net of all charges: only the writing changes.
+
+**Switching:** Chart settings › **P&L shown as** (Main and Second; Second can be None), **U** on the chart or the Trades page,
+or a click on a P&L figure (the position bar, a zone's label, the panel's P&L, the Open P&L, the Trades page's P&L headers;
+on the phone a tap on the position sheet's P&L) cycles the main one Amount → % → R. Saved on the server, so every device
+shows the same. Default: Amount · R.
+
+The open total in R is the sum of each trade's R; a trade without a stop has no 1R, so it (and the total) shows the amount.
+
 ## Timeframes and full screen
 
 - The bar above the chart shows your pinned timeframes. **▾** lists them all: 1m–45m, 1h–4h, 1D, 1W, 1M.

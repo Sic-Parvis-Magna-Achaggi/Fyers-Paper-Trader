@@ -51,7 +51,7 @@ function pgAcctCards(sel){
   const a = P.snap.acct;
   const cells = [
     ["Balance", rs(a.balance)], ["Equity", rs(a.equity)],
-    ["Open P&L (net)", `<span class="${cls(a.open_net)}">${rs(a.open_net)}</span>`],
+    ["Open P&L (net)", `<span class="${cls(a.open_net)} pu" title="${esc(pnlTip())}">${openTotalTxt()}</span>`],
     ["Today (net)", `<span class="${cls(a.realized_today)}">${rs(a.realized_today)}</span>`],
     ["Day room", a.day_room == null ? "off" : `<span class="${a.day_room < 0 ? "down" : ""}">${rs(a.day_room)}</span>`],
     ["Max room", a.max_room == null ? "off" : `<span class="${a.max_room < 0 ? "down" : ""}">${rs(a.max_room)}</span>`],
@@ -59,6 +59,7 @@ function pgAcctCards(sel){
     ["Trades today", a.trades_today + (P.snap.rules.max_trades ? ` / ${P.snap.rules.max_trades}` : "")],
   ];
   el.innerHTML = cells.map(([k, v]) => `<div class="pgc"><span>${k}</span><b>${v}</b></div>`).join("");
+  const pu = el.querySelector(".pu"); if(pu) pu.onclick = pnlCycle;
 }
 
 /* ------------------------------------------------------------------ Trades: positions and orders */
@@ -100,13 +101,13 @@ function pgPositions(){
   const tb = pgq("#pgPos"); if(!tb) return;
   const ps = P.snap.positions;
   pgq("#pgPosN").textContent = ps.length ? `(${ps.length})` : "";
-  const key = ps.map(p => [p.id, p.sl, p.tp, p.floor, p.qty, p.trail, p.be_done, p.at_be, JSON.stringify(p.tr)].join("|")).join(";");
+  const U = pnlUnits(), key = U.join() + "#" + ps.map(p => [p.id, p.sl, p.tp, p.floor, p.qty, p.trail, p.be_done, p.at_be, JSON.stringify(p.tr)].join("|")).join(";");
   if(key !== PG.posKey){
     PG.posKey = key;
     if(!ps.length){ tb.innerHTML = `<tr><td class="empty">No open positions.</td></tr>`; return; }
     tb.innerHTML = `<thead><tr><th>Contract</th><th>Side</th><th class="r">Lots</th><th>Product</th><th class="r">Entry</th><th class="r">LTP</th>
       <th class="r">SL</th><th class="r">at SL</th><th class="r">TP</th><th class="r">at TP</th><th class="r">BE + costs</th>
-      <th class="r">Net P&L</th><th class="r">R</th><th class="r">Charges paid</th><th>Opened</th><th>Trail BE</th><th>Trail SL</th><th></th></tr></thead><tbody>` +
+      <th class="r pu" title="${esc(pnlTip())}">Net P&L${U[0] === "amt" ? "" : U[0] === "pct" ? " %" : " R"}</th><th class="r pu" title="${esc(pnlTip())}">${U[1] === "none" ? "" : U[1] === "amt" ? "Net P&L" : U[1] === "pct" ? "% of account" : "R"}</th><th class="r">Charges paid</th><th>Opened</th><th>Trail BE</th><th>Trail SL</th><th></th></tr></thead><tbody>` +
       ps.map(p => { const tr = p.tr || {}, tk = p.tick, ts = trailTips(p);
         return `<tr data-id="${p.id}">
         <td><a href="#" class="psym mono" data-open="${esc(p.basis === "underlying" ? p.ref : p.s)}">${esc(short(p.s))}</a>${p.basis === "underlying" ? `<div class="muted sm">stops on ${esc(short(p.ref))}</div>` : ""}</td>
@@ -130,17 +131,18 @@ function pgPositions(){
         inp.onchange = save; inp.onkeydown = e => { e.stopPropagation(); if(e.key === "Enter"){ save(); inp.blur(); } }; });
     });
     tb.querySelectorAll("[data-open]").forEach(a => a.onclick = e => { e.preventDefault(); pgShow("chart"); const r = sym[a.dataset.open]; if(r) openSymbol(r); else openBySymbol(a.dataset.open); });
+    tb.querySelectorAll(".pu").forEach(c => c.onclick = pnlCycle);
   }
   const now = Date.now() / 1000;
   for(const p of ps){
     const tr = tb.querySelector(`tr[data-id="${p.id}"]`); if(!tr) continue;
     const f = k => tr.querySelector(`[data-f="${k}"]`), e = p.est ? "≈" : "";
     f("ltp").textContent = fmt(p.ltp, p.tick) + (p.stale ? " ⚠" : "");
-    f("atsl").innerHTML = p.at_sl != null ? `<span class="${cls(p.at_sl)}">${e}${rsS(p.at_sl)}</span>` : "–";
-    f("attp").innerHTML = p.at_tp != null ? `<span class="${cls(p.at_tp)}">${e}${rsS(p.at_tp)}</span>` : "–";
+    f("atsl").innerHTML = p.at_sl != null ? `<span class="${cls(p.at_sl)}">${esc(pnlTxt(p.at_sl, p.init_risk, p.est))}</span>` : "–";
+    f("attp").innerHTML = p.at_tp != null ? `<span class="${cls(p.at_tp)}">${esc(pnlTxt(p.at_tp, p.init_risk, p.est))}</span>` : "–";
     f("be").textContent = fmt(p.be, p.tick);
-    f("net").innerHTML = `<b class="${cls(p.net)}">${rs(p.net)}</b>`;
-    f("r").innerHTML = p.r_now != null ? `<span class="${cls(p.r_now)}">${p.r_now > 0 ? "+" : ""}${p.r_now}R</span>` : "–";
+    f("net").innerHTML = `<b class="${cls(p.net)}">${esc(pnlPart(0, p.net, p.init_risk, rs))}</b>`;
+    f("r").innerHTML = `<span class="${cls(p.net)}">${esc(pnlPart(1, p.net, p.init_risk, rs))}</span>`;
     f("paid").textContent = rs(p.paid);
     f("age").textContent = durTxt(now - p.opened);
   }
@@ -149,7 +151,7 @@ function pgOrders(){
   const tb = pgq("#pgOrd"); if(!tb) return;
   const os = P.snap.orders;
   pgq("#pgOrdN").textContent = os.length ? `(${os.length})` : "";
-  const key = os.map(o => [o.id, o.price, o.sl, o.tp].join("|")).join(";");
+  const key = pnlUnits().join() + "#" + os.map(o => [o.id, o.price, o.sl, o.tp].join("|")).join(";");
   if(key !== PG.ordKey){
     PG.ordKey = key;
     if(!os.length){ tb.innerHTML = `<tr><td class="empty">No pending orders.</td></tr>`; return; }
@@ -159,8 +161,8 @@ function pgOrders(){
         return `<tr data-id="${o.id}"><td><a href="#" class="psym mono" data-open="${esc(o.s)}">${esc(short(o.s))}</a></td>
         <td><b class="${o.side > 0 ? "up" : "down"}">${o.side > 0 ? "BUY" : "SELL"} ${esc(o.type.toUpperCase())}</b></td><td class="r mono">${o.lots}</td><td>${esc(o.product)}</td>
         <td class="r mono ed" data-e="price">${fmt(o.price, tk)}</td><td class="r mono" data-f="ltp"></td><td class="r mono" data-f="away"></td>
-        <td class="r mono ed" data-e="sl">${o.sl != null ? fmt(o.sl, tk) : "add"}</td><td class="r mono down">${o.at_sl != null ? rsS(o.at_sl) : "–"}</td>
-        <td class="r mono ed" data-e="tp">${o.tp != null ? fmt(o.tp, tk) : "add"}</td><td class="r mono up">${o.at_tp != null ? rsS(o.at_tp) : "–"}</td>
+        <td class="r mono ed" data-e="sl">${o.sl != null ? fmt(o.sl, tk) : "add"}</td><td class="r mono down">${o.at_sl != null ? esc(pnlTxt(o.at_sl, ordR(o))) : "–"}</td>
+        <td class="r mono ed" data-e="tp">${o.tp != null ? fmt(o.tp, tk) : "add"}</td><td class="r mono up">${o.at_tp != null ? esc(pnlTxt(o.at_tp, ordR(o))) : "–"}</td>
         <td class="mono sm">${o.created ? istTime(o.created) : "–"}</td><td><button class="sm x" data-a="cancel" title="Cancel">✕</button></td></tr>`; }).join("") + `</tbody>`;
     tb.querySelectorAll("tr[data-id]").forEach(tr => { const id = tr.dataset.id;
       tr.querySelector('[data-a="cancel"]').onclick = () => papi("cancel", {id});

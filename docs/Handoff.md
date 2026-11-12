@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 12 Nov 2026, version **0.41.0** (the MT5 day-end close by each symbol's sessions, EA 1.23; 0.40.0: the MT5 day-end close, 8 b4; 0.39.1: each MT5 trade's candles kept for its replay, 8 c1b; 0.39.0: MT5 trades in the journal, 8 c1). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 12 Nov 2026, version **0.42.0** (P&L, SL and TP as an amount, % of the account or R, roadmap 22; 0.41.0: the MT5 day-end close by each symbol's sessions, EA 1.23; 0.40.0: the MT5 day-end close, 8 b4; 0.39.1: each MT5 trade's candles kept for its replay, 8 c1b; 0.39.0: MT5 trades in the journal, 8 c1). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -106,6 +106,16 @@ automatic pictures off itself (other suites turn them on).
 `indicator_settings_flow.js`'s "at the start of a contract's history it stops asking" failed once in 2 runs on 1 Nov
 (v0.22.0; passed on re-run, 37/37). Same advice. 11 Nov (v0.37.4): 2 fails in 4 runs (200 daily candles loaded, the
 "No older candles" note not yet up in its 4.5 s window); passed on v0.37.3's code too. Worth widening that window.
+
+## P&L units (v0.42.0, roadmap 22)
+
+All in the page, no server change. `web/paper.js` (top): `pnlUnits()` reads `pnlMain` / `pnlSecond` from the chart prefs
+(`CHART_DEFAULTS` in index.html: amt / r; saved on the server with the other chart prefs); `pnlTxt(v, oneR, est, amtFmt)`
+writes "main · second", `pnlPart(0|1, …)` one part (table columns, the phone), `openTotalTxt()` the Open P&L (R = sum of
+the trades' R), `ordR(o)` a pending order's 1R (−at_sl), `acctSize()` = `P.snap.rules.size`. `pnlCycle()` (U, clicks)
+and `pnlRefresh()` redraw everything (lines, panel, Trades page via `PG` keys, `mPnlRefresh()` in mobile.js,
+`mtAcctRefresh()` in mt5acct.js). The zones' labels record hit boxes (`P.zoneHits`) checked in the chart's click handler
+(not while a drawing tool is active or a drawing selected). Test: `tests/pnl_units_flow.js`.
 
 ## Alerts (v0.38.0, roadmap 21)
 
@@ -491,6 +501,10 @@ line of "FundingPips' day's starting balance".
   FundingPips (10 Nov): no hedging even in Hedge mode; his 21182752 is Phase 1 of the 2-Step; news: ForexFactory (owner).
 
 ## Next job
+
+**v0.42.0 (12 Nov):** the owner picks his units (Chart settings › P&L shown as, or U / a click on a figure) and checks one
+MT5 trade's SL / TP labels against its $ figures (e.g. SL −1.00R · −0.48% on a $5,000 account with 1R = $24.02).
+Ideas offered in roadmap 22, not asked for yet: points as a unit, History / journal in the same units, R-based day goals.
 
 **v0.41.0 (12 Nov):** the owner compiles FTM Bridge 1.23 and restarts it; within ~2 minutes each MT5 trade's ⏱ shows its
 symbol's own close time; check one against the symbol's Specification › Sessions in MT5.

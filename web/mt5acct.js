@@ -211,7 +211,7 @@ function mtAccountPage(){
   }
   const pc = n => n == null ? "–" : rs(n), on = M.online;
   const tr = M.trade || {};
-  const cards = [["Balance", pc(a.balance)], ["Equity", pc(a.equity)], ["Open P&L", `<span class="${cls(a.open_net)}">${pc(a.open_net)}</span>`],
+  const cards = [["Balance", pc(a.balance)], ["Equity", pc(a.equity)], ["Open P&L", `<span class="${cls(a.open_net)} pu" title="${esc(pnlTip())}">${a.open_net == null ? "–" : openTotalTxt()}</span>`],
     ["Margin in use", pc(I.margin)], ["Free margin", pc(I.free)], ["Leverage", I.leverage ? "1:" + I.leverage : "–"],
     ["MT5", on ? '<span class="up">connected</span>' : `<span class="down">not connected</span>`],
     ["EA", M.ea ? `${esc(M.ea)}${M.ea_ok ? "" : ` <span class="down">(needs ${esc(M.ea_min)})</span>`}` : "–"],
@@ -443,3 +443,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if(typeof mPosSheet === "function") window.mPosSheet = mPosSheet = sheet(mPosSheet, id => P.snap && P.snap.positions.find(p => p.id === id));
   if(typeof mOrdSheet === "function") window.mOrdSheet = mOrdSheet = sheet(mOrdSheet, id => P.snap && P.snap.orders.find(o => o.id === id));
 });
+
+/* v0.42.0: the Open P&L card follows the P&L unit (a click on it switches amount → % → R) */
+function mtAcctRefresh(){ if(typeof PG !== "undefined" && PG.page === "account" && isMtAcct()) try{ mtAccountPage(); }catch(e){} }
+document.addEventListener("click", e => { const t = e.target.closest && e.target.closest("#pg_account .pu"); if(t && isMtAcct()){ e.preventDefault(); pnlCycle(); } });

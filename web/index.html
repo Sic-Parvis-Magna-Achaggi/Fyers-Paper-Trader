@@ -401,6 +401,7 @@ a.btnlink{border:1px solid var(--line);border-radius:6px;padding:6px 12px;color:
 /* chart settings popover */
 #cfgPick{position:absolute;right:10px;top:42px;z-index:31;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;width:330px;max-height:calc(100% - 60px);overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.35);font-size:12.5px}
 #cfgPick .cfgh{display:flex;align-items:center;margin-bottom:6px}
+.pu{cursor:pointer}   /* a P&L figure: a click switches amount / % / R (v0.42.0) */
 #cfgPick .cfgh b{flex:1}
 #cfgPick .sec{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:10px 0 4px}
 #cfgPick .cr{display:grid;grid-template-columns:1fr 34px 92px 22px;gap:6px;align-items:center;padding:2px 0}
@@ -1122,7 +1123,7 @@ const CHART_DEFAULTS = {up:"#22a06b", down:"#e2483d", bg:"", grid:true,
   bidC:"#a3abb8", bidS:0, bidOn:true, askC:"#e2483d", askS:0, askOn:true, lastC:"#e0b341", lastS:2, lastOn:true,
   entryC:"", entryS:2, slC:"#e2483d", slS:0, tpC:"#22a06b", tpS:0, beC:"#4f8cff", beS:1, orderC:"#4f8cff", orderS:2,
   toolC:"#4f8cff", toolS:0, lossZ:"#e2483d", profitZ:"#22a06b", zoneA:20, volOn:true, timerOn:true, hideNoTrade:true, dataCheck:true,
-  btnCorner:"tl", btnX:8, btnY:8, lineC:"#4f8cff", toolGap:30};
+  btnCorner:"tl", btnX:8, btnY:8, lineC:"#4f8cff", toolGap:30, pnlMain:"amt", pnlSecond:"r"};
 function chartCfg(){ return {...CHART_DEFAULTS, ...(prefGet("chart", {}) || {})}; }
 function cfgColor(k){ const c = chartCfg()[k]; return c || cssVar(k === "entryC" ? "--text" : "--bg"); }
 function buildChart(){
@@ -1830,6 +1831,12 @@ function renderCfg(){
     <div class="cr" style="grid-template-columns:1fr 150px"><span>Zone strength</span><input type="range" min="5" max="50" data-k="zoneA" data-num="1" value="${C.zoneA}"></div>
     <div class="cr" style="grid-template-columns:1fr 70px"><span title="Space between the live candle's right edge and the new-trade tool, as LiveTrader's Tool gap">Tool gap after the live candle (px)</span>
       <input type="number" data-k="toolGap" data-num="1" min="0" max="400" value="${C.toolGap}" style="padding:2px 4px"></div>
+    <div class="sec">P&amp;L shown as</div>
+    <div class="cr" style="grid-template-columns:1fr 150px"><span title="The open P&amp;L, the SL / TP labels, the new-trade tool, the Trades panel and page, the phone. Every figure stays net of all charges">Main</span><select data-k="pnlMain" id="cfgPnlMain">
+      ${PNL_UNITS.map(u => `<option value="${u}" ${pnlUnits()[0] === u ? "selected" : ""}>${PNL_NAMES[u]}</option>`).join("")}</select></div>
+    <div class="cr" style="grid-template-columns:1fr 150px"><span title="Shown next to the main one (dimmed on the position bar)">Second</span><select data-k="pnlSecond" id="cfgPnlSecond">
+      ${["none", ...PNL_UNITS].map(u => `<option value="${u}" ${pnlUnits()[1] === u ? "selected" : ""}>${PNL_NAMES[u]}</option>`).join("")}</select></div>
+    <p class="help" style="margin:2px 0 0">% of account = of the account size (${acctSize() ? rs(acctSize()) : "the account's size"}); R = of the trade's net risk at its first stop. U on the chart, or a click on a P&amp;L / SL / TP figure, switches the main one.</p>
     <div class="sec">Chart</div>
     <div class="cr"><span>Background</span><input type="color" data-k="bg" value="${hex("bg")}"><span class="muted" style="font-size:11px">${C.bg ? "" : "theme"}</span><span></span></div>
     <div class="cr"><span>Grid lines</span><span></span><span></span><input type="checkbox" data-k="grid" ${C.grid ? "checked" : ""}></div>
@@ -1850,6 +1857,9 @@ function renderCfg(){
     cfg[k] = el.type === "checkbox" ? el.checked : el.dataset.num ? (+el.value || 0) : el.value;
     prefSet("chart", cfg); applyChartCfg();
     if(k === "dataCheck") dataCheck(true);
+    if(k === "pnlMain" || k === "pnlSecond"){
+      if(k === "pnlMain" && cfg.pnlSecond === cfg.pnlMain){ cfg.pnlSecond = "none"; prefSet("chart", cfg); const o = $("#cfgPnlSecond"); if(o) o.value = "none"; }
+      pnlRefresh(true); }
     if(k === "hideNoTrade"){ for(const x in pineCache) delete pineCache[x]; if(HROWS.length && curPlan) renderCandles(HROWS, curPlan); }
   }));
 }
@@ -2720,6 +2730,7 @@ document.addEventListener("keydown", e => {
   if(document.querySelector("#drawer.open")) return;                 // (the chart's keys don't reach through the Settings page)
   if(e.key === "f" || e.key === "F"){ e.preventDefault(); setFull(!document.body.classList.contains("chartfs"), e.shiftKey); }
   if(e.key === "p" || e.key === "P"){ e.preventDefault(); togglePanel(); }
+  if((e.key === "u" || e.key === "U") && !e.shiftKey && (typeof PG === "undefined" || PG.page === "chart" || PG.page === "trades")){ e.preventDefault(); pnlCycle(); }   // P&L as amount → % → R (v0.42.0)
   if(e.key === "/" && (typeof PG === "undefined" || PG.page === "chart")){ e.preventDefault(); indOpen(true); }   // TradingView's "/": the indicator search
   if(e.key === "Escape" && document.body.classList.contains("chartfs")) setFull(false);
 });

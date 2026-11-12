@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 12 Nov 2026 (v0.41.0: the MT5 day-end close by each symbol's trading hours, EA 1.23, item 8 b4). This is the one task list for the project.
+Updated 12 Nov 2026 (v0.42.0: P&L, SL and TP shown as an amount, % of the account or R, item 22). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -553,6 +553,20 @@ fallback"):** item 8 is built now, stage by stage. Stage a shipped in **v0.34.0*
       iPhone: Add to Home Screen first) and press Send a test; one real price alert and one RSI alert during market hours.
     - [ ] Email notifications (not built: needs an email account's SMTP login typed in Settings; say if wanted). SMS: not
       planned (India's DLT registration and a cost per message).
+22. [x] **P&L, SL and TP as an amount, a % of the account or an R multiple** — shipped in **v0.42.0** (asked 12 Nov 2026,
+    with a screenshot of an MT5 gold short: "options to show this as: 1. Amount 2. Percentage of account 3. R multiple").
+    Agreed 12 Nov (the owner's answers):
+    - **% of the account size** (FundingPips' own % rules count from it, and so do the app's).
+    - **A main unit and a second one** next to it (e.g. "SL −1.00R · −$24.02"; the second can be None).
+    - **Switching:** Chart settings › P&L shown as (saved on the server), **U** on the chart, and a click on a figure.
+    - **Where:** the position bar, the SL / TP lines' labels and zone labels, the new-trade tool, the trades panel and the
+      Trades page (Open P&L too), the phone.
+    - Claude's calls (the owner can change them): default Amount · R (what the position bar already showed); 1R = the net
+      risk at the first stop, so a trailed stop shows the R it locks in ("SL +0.50R"); a pending order's 1R = what its stop
+      would lose; the open total in R = the sum of each trade's R (as the journal adds R); a trade with no stop shows the
+      amount; one-line places (the tool's PLACE box, the phone's order bubble) show the main unit only.
+    - [ ] Ideas offered, not asked for yet: points / ticks as a fourth unit; History and the journal in the same units;
+      R-based day goals ("stop at +3R or −2R") as a lockout; open risk in R ("2.4R of 3R").
 
 ## Rules that shape live trading and other users (checked 30 Oct 2026)
 
@@ -616,6 +630,9 @@ marked before relying on it.
 
 ## Done
 
+- [x] **v0.42.0** (12 Nov): P&L, SL and TP shown as an amount, a % of the account size or an R multiple, a main unit and a
+  second one (item 22): the position bar, SL / TP labels, the new-trade tool, the trades panel, the Trades page, the phone;
+  Chart settings › P&L shown as, U, or a click on a figure.
 - [x] **v0.41.0** (12 Nov): the MT5 day-end close by each symbol's own trading hours (EA 1.23 sends MT5's sessions; item 8 b4);
   each trade's ⏱ shows its own time.
 - [x] **v0.40.0** (12 Nov): the MT5 day-end close (item 8 b4): X minutes before the broker's day ends (default 5), every day or

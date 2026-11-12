@@ -1,5 +1,44 @@
 # Changelog
 
+## v0.42.0 — 12 Nov 2026 — P&L, SL and TP as an amount, a % of the account or R
+
+Added
+- **Money shown as an amount, a % of the account size or an R multiple** (roadmap 22; owner: "options to show this as:
+  1. Amount 2. Percentage of account 3. R multiple", with a screenshot of an MT5 gold short). A **main** unit and a
+  **second** one next to it, e.g. on that short (1R = $24.02 net): **SL −1.00R · −$24.02**, **TP +3.81R · +$91.42**,
+  the position bar **+0.38R +$9.06**. Every figure is still net of all charges; only how it's written changes.
+  - **% of account** = of the account size (the paper account's size, the Live account's size from Fyers, the MT5 account's
+    starting size: FundingPips' % rules count from it).
+  - **R** = of the trade's net risk at its first stop (as the R already shown). A stop trailed past break-even shows the R it
+    locks in ("SL +0.50R"). A pending order's 1R is what its own stop would lose (its SL shows −1.00R).
+  - **Where:** the position bar on the entry line, the SL / TP lines' labels on the price scale and the zones' labels, the
+    new-trade tool's zones (SL −1.00R, TP at the tool's net RR) and its PLACE box (the main unit only, one line), the
+    trades panel (each trade, its SL / TP, the Open P&L), pending orders, the Trades page (its P&L columns follow the two
+    units; the Open P&L card), the MT5 Account page's Open P&L, and the phone (position chips, the position sheet, the
+    order sheet, the Trade tab, the order bubble: main unit only).
+  - **Switching:** Chart settings › **P&L shown as** (Main, Second: Amount / % of account / R multiple / None), saved on the
+    server per user (any device); **U** on the chart or the Trades page; a **click** on a P&L figure (the position bar, the
+    zones' labels, the panel, the Open P&L, the Trades page's headers; a tap on the phone's position sheet) cycles the main
+    unit Amount → % → R. A toast says what's shown.
+  - The open total in R is the sum of each trade's R (as the journal adds R); if a trade has no stop (no 1R), the total shows
+    the amount. A unit that can't be worked out (no stop for R) falls back to the amount.
+
+Changed
+- Default: Amount · R, so the position bar reads as before (the amount, then the R dimmed); the SL / TP labels now carry the
+  R after the amount ("SL −₹1,267 · −1.00R"). Set Second to None for the old labels.
+- The trades panel's R moved from the grey line under the P&L to the P&L itself ("−₹367.04 · −0.29R").
+
+Tests
+- New `tests/pnl_units_flow.js` (46, browser): the default; a CRUDEOIL trade's bar, SL / TP labels, zones, panel and Open
+  P&L in each unit with worked numbers (% of ₹10,00,000, R of the net 1R); U twice; a click on the bar and on a zone's
+  label; Chart settings (None, the same unit twice shown once); the tool's −1.00R / net RR; a pending order's −1.00R; the
+  Trades page and U there; saved on the server (a reload); the phone (chip, sheet, a tap cycles, the Trade tab).
+- Re-run: `rr_lock_flow` (36), `mobile_flow` (61), `mt5acct_flow` (52; its PLACE check failed once on timing, the tool's
+  market entry moving between the read and the click, then passed), `mt5dayend_flow` (19), `drawings_flow` (78),
+  `live_flow` (60), `pine_compat_flow` (271), `routes_check.py`.
+- **Not tested on the real MT5 / Fyers feed:** the figures come from the same net values as before, so only the
+  writing changed; check one MT5 trade's labels against its $ figures after the update.
+
 ## v0.41.0 — 12 Nov 2026 — MT5 day-end close by each symbol's own trading hours (EA 1.23)
 
 Changed
