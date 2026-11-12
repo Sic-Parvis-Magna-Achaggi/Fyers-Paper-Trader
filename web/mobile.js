@@ -160,7 +160,8 @@ function mChips(){
   const box = mq("#mChips"); if(!box || !P.snap) return;
   const ps = P.snap.positions, os = P.snap.orders;
   // the unit button (Chart settings › Unit button on the position bar, v0.43.2): the phone has no position bars, so it
-  // leads the chips (only with a trade open); a tap switches amount → % of account → R
+  // sits with the chips (only with a trade open), at the right end, away from the trade chips (v0.43.3: CSS order);
+  // a tap switches amount → % of account → R
   const um = pnlUnits()[0], ub = !!chartCfg().pnlBtn && ps.length > 0;
   const key = ps.map(p => p.id).join(",") + "|" + os.length + "|" + (ub ? um : "");
   if(box.dataset.k !== key){

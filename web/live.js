@@ -103,7 +103,7 @@ function liveBars(){
     let b = el.querySelector("button.nsl");
     if(p.nostop && liveOn()){
       if(!b){ b = document.createElement("button"); b.className = "nsl"; b.textContent = "NO STOP"; b.dataset.a = "mystop";
-        const x = el.querySelector('[data-a="close"]'); (x || el.firstChild).after(b);
+        const t = el.querySelector(".pt"); (t || el.lastChild).after(b);      // after the trade's figures, never next to ✕ (v0.43.3)
         b.onclick = e => { e.stopPropagation(); placeMyStop(p.id); }; }
       b.title = myStopTitle(p);
     } else if(b) b.remove();

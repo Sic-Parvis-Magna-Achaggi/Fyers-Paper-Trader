@@ -757,7 +757,7 @@ function toolRedraw(rebuild){
   toolOverlay(); posBars();
 }
 /* a control bar on each position's entry line (right side, clear of the price scale):
-   side · lots · net P&L, ✕ close, BE, BE-trail [R], trail [R]. Pending orders get a bar with ✕ cancel. */
+   ✕ close (alone at the left), side · lots · net P&L, [unit], BE, BE-trail [R], trail [R]. Pending orders: ✕ cancel at the left. */
 function posBars(){
   const host = $("#posbars");
   if(!host) return;
@@ -776,11 +776,11 @@ function posBars(){
   if(key !== P.barKey && !focused){
     P.barKey = key;
     host.innerHTML = items.map(i => {
-      if(i.kind === "ord") return `<div class="pbar" data-id="${i.id}"><span class="pt" data-f="t"></span><button class="bx" data-a="cancel" title="Cancel order">✕</button></div>`;
+      if(i.kind === "ord") return `<div class="pbar" data-id="${i.id}"><button class="bx" data-a="cancel" title="Cancel order">✕</button><span class="pt" data-f="t"></span></div>`;
       const t = i.p.tr, ts = trailTips(i.p);
-      return `<div class="pbar" data-id="${i.id}"><span class="pt" data-f="t"></span>
+      // ✕ sits alone at the far left, away from the buttons clicked often (unit, BE, BE-T, TRAIL) (v0.43.3)
+      return `<div class="pbar" data-id="${i.id}"><button class="bx" data-a="close" title="Close at market">✕</button><span class="pt" data-f="t"></span>
         ${ub ? `<button class="pbu" data-a="unit" title="${esc(pnlTip())}">${esc(ulab)}</button>` : ""}
-        <button class="bx" data-a="close" title="Close at market">✕</button>
         <button data-a="be" title="Stop to break-even + costs now">BE</button>
         <button class="tg ${t.be_on ? "on" : ""} ${ts.beDone ? "done" : ""}" data-a="be_on" title="${esc(ts.be)}">BE-T</button><input class="rr" data-a="be_r" value="${t.be_r}" inputmode="decimal" title="${esc(ts.beR)}">
         <button class="tg ${t.sl_on ? "on" : ""}" data-a="sl_on" title="${esc(ts.sl)}">TRAIL</button><input class="rr" data-a="sl_r" value="${t.sl_r}" inputmode="decimal" title="${esc(ts.slR)}">

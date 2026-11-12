@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.38.1)
+# Paper and live trading: how it works (v0.43.3)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -580,9 +580,10 @@ Phones get their own layout, like MT5's app (a desktop browser never does). **Mo
   - The stop distance you set is remembered per instrument and used next time.
   - The target defaults to your R (Settings: the ticket's R box), net of charges.
 - **PLACE** sends it; **✕** closes the tool. The side panel shows the same trade with more detail (charges, margin, BE + costs). You don't need it open to trade.
-- **Open positions** show their zones from the entry candle and SL / TP lines you can drag. A control bar sits on the entry line, just left of the price scale. It shows:
-  - side, lots, entry price, live net P&L and R;
-  - **✕** to close at market;
+- **Open positions** show their zones from the entry candle and SL / TP lines you can drag. A control bar sits on the entry line, just left of the price scale. From left to right:
+  - **✕** to close at market, alone at the far left with a gap after it, so a click meant for another button can't close
+    the trade (v0.43.3);
+  - side, lots, entry price, live net P&L and R (and the unit button, if it's on: see *P&L shown as* below);
   - **BE** to move the stop to break-even + costs now;
   - **BE-T** with its R box: trail to BE once the trade reaches that R. It turns blue-grey (**done**) once the stop is at
     break-even;
@@ -598,7 +599,7 @@ Phones get their own layout, like MT5's app (a desktop browser never does). **Mo
   - **Changing the panel's Trail BE** (its switch or its R) makes every open trade follow the panel's Trail BE again, with
     the switch and the R together. The same goes for Trail SL. The other trail keeps each trade's own setting (as in
     LiveTrader 1.24).
-- **Pending orders** have a bar with their type and lots, and **✕** to cancel.
+- **Pending orders** have a bar with **✕** to cancel (at the left, like a trade's), their type and lots.
 - **Bid and ask** are solid lines, as in MT5: grey for bid, red for ask, with their prices on the scale. A dashed **Last** line marks the last traded price, which is where the live candle closes. Candles are built from trades, so in a thin contract the candle can sit away from bid / ask until the next trade. Stops, targets and fills always use bid / ask.
 - **Chart settings (⚙):**
   - colour and style for every line: bid, ask, last, entry, SL, TP, BE, order and new-trade entry;
@@ -629,9 +630,9 @@ P&L and the phone (chips, the position and order sheets, the Trade tab; the orde
 Every figure is still net of all charges: only the writing changes.
 
 **The unit button (v0.43.1):** Chart settings › P&L shown as › **Unit button on the position bar** (off by default) puts a
-small button after each trade's P&L on its bar on the chart. It shows the main unit (₹ / $, % or R); a click switches it.
-On the phone (no position bars there) it's the first of the trade chips above SELL / BUY, while a trade is open; a tap
-switches it.
+small button after each trade's P&L on its bar on the chart (✕ is at the other end of the bar). It shows the main unit
+(₹ / $, % or R); a click switches it. On the phone (no position bars there) it sits at the right end of the row of trade
+chips above SELL / BUY, while a trade is open; a tap switches it.
 
 **Switching:** Chart settings › **P&L shown as** (Main and Second; Second can be None), **U** on the chart or the Trades page,
 or a click on a P&L figure (the position bar, a zone's label, the panel's P&L, the Open P&L, the Trades page's P&L headers;

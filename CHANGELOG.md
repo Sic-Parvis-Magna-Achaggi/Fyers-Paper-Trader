@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.43.3 — 12 Nov 2026 — ✕ away from the other buttons on the position bar
+
+Changed
+- **✕ (close at market) moved to the far left of each trade's bar on the chart**, with a clear gap after it (owner, with a
+  screenshot of a SHORT 0.03 bar: "The toggle button is too close to the close trade button. Very easy to close the
+  button wrongly"). v0.43.1 had put the unit button (R) right before ✕, so a slightly short click on R closed the trade.
+  The bar now reads ✕ · SHORT 0.03 @ 3,948.62 +0.45R +0.21% · R · BE · BE-T [1] · TRAIL [1]: every button you click
+  often is on the right, ✕ alone on the left, about 200 px from the nearest one. A pending order's ✕ (cancel) is at the
+  left too, so ✕ is always in the same place. A Live trade's red NO STOP button now comes after the trade's figures,
+  not next to ✕.
+- **The phone:** the unit button (₹ / $, %, R) moved from the start of the trade chips to the right end of that row, away
+  from the trade chips. (The phone had no ✕ beside it: a chip opens the trade's sheet, and Close at market there needs
+  two taps; a mis-tap opened the wrong sheet.)
+
+Tests
+- `tests/pnl_units_flow.js` (59): ✕ is the bar's first button with every other button to its right, at least 60 px away
+  (measured 214 px); the phone's unit button sits at the right end, after the trade chips. Re-run: `live_flow` (NO STOP
+  on the bar), `mt5acct_flow` (✕ on an MT5 trade's bar), `rr_lock_flow`, `mobile_flow`, `routes_check`.
+
 ## v0.43.2 — 12 Nov 2026 — The unit button on the phone
 
 Fixed

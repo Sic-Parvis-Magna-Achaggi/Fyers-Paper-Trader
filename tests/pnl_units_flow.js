@@ -115,6 +115,13 @@ let br;
   await pg.click('#cfgBody input[data-k="pnlBtn"]'); await pg.waitForTimeout(500);
   ok(await pg.isVisible("#posbars .pbu") && (await pg.textContent("#posbars .pbu")).trim() === "R", "switched on: a button on the position bar showing the main unit (R)");
   await pg.click("#bCfg");
+  // v0.43.3: ✕ alone at the far left of the bar, the unit / BE / BE-T / TRAIL buttons on the right, a clear gap between
+  { const g = await pg.evaluate(() => { const bar = document.querySelector("#posbars .pbar"), x = bar.querySelector('[data-a="close"]');
+      const others = [...bar.querySelectorAll("button, input")].filter(e => e !== x).map(e => e.getBoundingClientRect());
+      const xr = x.getBoundingClientRect(), u = bar.querySelector(".pbu").getBoundingClientRect();
+      return {first: bar.firstElementChild === x, gap: Math.min(...others.map(r => r.left - xr.right)), allRight: others.every(r => r.left > xr.right), unitGap: u.left - xr.right}; });
+    ok(g.first && g.allRight, "✕ is the bar's first button, every other button is to its right");
+    ok(g.gap >= 60 && g.unitGap >= 60, `✕ is well away from the nearest button (${Math.round(g.gap)} px) and from the unit button (${Math.round(g.unitGap)} px)`); }
   await pg.click("#posbars .pbu"); await pg.waitForTimeout(500);
   ok(await pg.evaluate(() => pnlUnits()[0]) === "amt" && (await pg.textContent("#posbars .pbu")).trim() === "₹", "a click: Amount (the button says ₹)");
   await pg.click("#posbars .pbu"); await pg.waitForTimeout(500);
@@ -191,7 +198,10 @@ let br;
   await m.waitForTimeout(1500);
   const chip = await m.evaluate(() => (document.querySelector('#mChips [data-f="n"]') || {}).textContent);
   ok(/%$/.test(chip || ""), "phone: the position chip in %: " + chip);
-  ok(await m.isVisible("#mChips .mpu"), "phone: the unit button leads the trade chips (the setting is saved on the server; the phone has no position bars)");
+  ok(await m.isVisible("#mChips .mpu"), "phone: the unit button is shown with the trade chips (the setting is saved on the server; the phone has no position bars)");
+  { const g = await m.evaluate(() => { const u = document.querySelector("#mChips .mpu").getBoundingClientRect(), c = [...document.querySelectorAll("#mChips [data-id]")].map(e => e.getBoundingClientRect());
+      return {right: c.every(r => r.right < u.left), gap: Math.min(...c.map(r => u.left - r.right)), edge: innerWidth - u.right}; });
+    ok(g.right && g.edge < 20, `phone: v0.43.3, the unit button sits at the right end, away from the trade chips (gap ${Math.round(g.gap)} px)`); }
   { const u0 = await m.evaluate(() => pnlUnits()[0]); await m.tap("#mChips .mpu"); await m.waitForTimeout(600);
     const u1 = await m.evaluate(() => [pnlUnits()[0], document.querySelector("#mChips .mpu").textContent.trim(), (document.querySelector('#mChips [data-f="n"]') || {}).textContent]);
     ok(u1[0] !== u0 && u1[1] === (u1[0] === "pct" ? "%" : u1[0] === "r" ? "R" : "₹"), `phone: a tap on it switches the unit: ${u0} → ${u1[0]} (button ${u1[1]}, chip ${u1[2]})`);

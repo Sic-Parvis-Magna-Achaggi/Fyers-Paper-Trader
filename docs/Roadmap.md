@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 12 Nov 2026 (v0.43.2: the unit button on the phone; v0.43.1: a unit button on the position bar, item 22; v0.43.0: strategies, item 23 stage a). This is the one task list for the project.
+Updated 12 Nov 2026 (v0.43.3: ✕ alone at the left of the position bar; v0.43.2: the unit button on the phone; v0.43.1: a unit button on the position bar, item 22; v0.43.0: strategies, item 23 stage a). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -571,7 +571,9 @@ fallback"):** item 8 is built now, stage by stage. Stage a shipped in **v0.34.0*
       on the trade preview as on or off. If I turn on, I need a button on the preview to toggle showing in amount, % of
       account or R multiple"): Chart settings › P&L shown as › Unit button on the position bar (off by default); the button
       after each trade's P&L shows the main unit and a click switches it. v0.43.2: on the phone it leads the trade chips
-      above SELL / BUY (the phone has no position bars).
+      above SELL / BUY (the phone has no position bars). v0.43.3 (owner: "too close to the close trade button"): ✕ moved
+      to the far left of the bar, the unit button and BE / BE-T / TRAIL on the right; on the phone the unit button at the
+      right end of the chips.
     - Claude's calls (the owner can change them): default Amount · R (what the position bar already showed); 1R = the net
       risk at the first stop, so a trailed stop shows the R it locks in ("SL +0.50R"); a pending order's 1R = what its stop
       would lose; the open total in R = the sum of each trade's R (as the journal adds R); a trade with no stop shows the
@@ -708,6 +710,8 @@ marked before relying on it.
 
 ## Done
 
+- [x] **v0.43.3** (12 Nov): ✕ on the position bar moved to the far left, away from R / BE / BE-T / TRAIL (a click meant for R
+  closed the trade); the phone's unit button at the right end of the chips.
 - [x] **v0.43.2** (12 Nov): the unit button on the phone (it leads the trade chips; the phone has no position bars).
 - [x] **v0.43.1** (12 Nov): a unit button on the position bar (amount / % / R), switched on in Chart settings (item 22).
 - [x] **v0.43.0** (12 Nov): strategies that trade by themselves (item 23 stage a): a Pine strategy() script's signals on
