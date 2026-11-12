@@ -1,11 +1,15 @@
 # Roadmap: the task list
 
-Updated 12 Nov 2026 (v0.42.0: P&L, SL and TP shown as an amount, % of the account or R, item 22). This is the one task list for the project.
+Updated 12 Nov 2026 (v0.42.1: items 23-29 added, strategies that trade by themselves first; v0.42.0: P&L as amount / % / R, item 22). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
 
 ## Next, in this order
+
+**Order change (owner, 12 Nov 2026):** items 23-29 added ("All your ideas are great. Add it to the roadmap"); **item 23
+(strategies that trade by themselves) is built next** ("We should first do strategy for Live, Paper and MT5"). The order
+of 24-29 is Claude's suggestion (the owner can change it). Item 10 stays, after 23-29 (owner: "Keep it, later").
 
 **Order change (owner, 5 Nov 2026):** item 16 (the Live account is the Fyers account) is built next, before item 1's
 first real trade. Built in **v0.33.0**: item 1's first real trade is now made on the new Live account.
@@ -351,7 +355,9 @@ fallback"):** item 8 is built now, stage by stage. Stage a shipped in **v0.34.0*
      XABCD patterns, show-on-timeframes per drawing (TradingView's Visibility tab), and drawings shared across a future's
      expiries (today: per contract; copy with Ctrl+C / Ctrl+V).
 
-10. [ ] **Keep the candles the app saw live** (asked 1 Nov 2026; design agreed 1 Nov). Asked because GOLDPETAL NOV's
+10. [ ] **Keep the candles the app saw live** (asked 1 Nov 2026; design agreed 1 Nov). **Kept, after items 23-29** (owner,
+    12 Nov, after asking whether it was the recorder that ruled out the footprint: no, that was item 2's order-flow check;
+    this item records 1-minute candles and was never built). Asked because GOLDPETAL NOV's
     30 Oct looked rewritten by Fyers; it wasn't (2 Nov: the app was getting Fyers' continuous series, fixed in v0.30.1).
     Still wanted for: recording every watchlist (item 11), seconds charts (item 12), replays finer than 1 minute, and a
     backup if Fyers' history ever has a gap or a wrong day. Next in the roadmap's order (the owner was asked on 2 Nov
@@ -565,8 +571,68 @@ fallback"):** item 8 is built now, stage by stage. Stage a shipped in **v0.34.0*
       risk at the first stop, so a trailed stop shows the R it locks in ("SL +0.50R"); a pending order's 1R = what its stop
       would lose; the open total in R = the sum of each trade's R (as the journal adds R); a trade with no stop shows the
       amount; one-line places (the tool's PLACE box, the phone's order bubble) show the main unit only.
-    - [ ] Ideas offered, not asked for yet: points / ticks as a fourth unit; History and the journal in the same units;
-      R-based day goals ("stop at +3R or −2R") as a lockout; open risk in R ("2.4R of 3R").
+
+23. [ ] **Strategies that trade by themselves, on Paper, Live and MT5, with a strategy tester** (asked 12 Nov 2026: "We
+    should first do strategy for Live, Paper and MT5. The strategy should be able to automatically take trades. We can
+    have a more user friendly interface for giving risk and other rules for a strategy. The one in Tradingview is very
+    confusing"). Owner's answers (12 Nov): signals from **both** a no-code builder and Pine `strategy()` scripts; exits by
+    **the app and the script**; **all three account types in one release** ("Why not all three at once?": the order path is
+    already shared, so yes). Proposed design (Claude, 12 Nov; the owner can change any of it):
+    - **Signals:** (a) **no-code builder**: long entry, short entry and exit conditions picked from menus, reusing the alert
+      conditions (TradingView's 13 operators, the built-in indicators, any Pine plot, P&F signals, up to 5 conditions, All /
+      Any); (b) **Pine `strategy()` scripts** from the Pine Editor: `strategy.entry`, `strategy.close`, `strategy.exit(stop=,
+      limit=)` read as signals. TradingView's Properties tab (capital, order size, pyramiding, commission, slippage, margin,
+      recalculate, fill options) is **not used**: the app's panel replaces it.
+    - **Runs on the server** (the alerts engine's Pine runner, every chart type), page open or not. Acts **on bar close** by
+      default; "as it happens, once per bar" per strategy.
+    - **The rules panel**, one screen in plain words:
+      - **Trades:** contract(s) or a watchlist, timeframe, chart type; long, short or both.
+      - **Accounts:** Paper / Live / MT5, each switched on per strategy; Live and MT5 need a fresh 2FA code.
+      - **Size:** risk % of the account, ₹ / $ amount, or lots (as the ticket).
+      - **Stop (always):** the script's stop, ATR × n, points, a Pine line, or the last swing low / high. No stop = no trade.
+      - **Target:** R multiple, the script's target, or none (exit by signal / trail only).
+      - **Manage:** BE at x R, trail from x R (the app's own BE / trailing, net of charges); the script may also close early.
+      - **Limits:** max trades a day, max open at once, the strategy's own daily loss (₹ / $ or R) after which it stops for
+        the day, trading hours, no new entries X min before the square-off / MT5 day-end, skip expiry days; one position per
+        contract (no pyramiding at first).
+    - **Same path as a click:** every order goes through the account's rules and guards, the journal's lockouts, the kill
+      switch, the square-off and day-end, MT5's news guard and no-hedging rule, and the Fyers / MT5 rate budgets. Each trade
+      is tagged with the strategy (journal set-up, History filter); Telegram on each entry and exit; Pause / Stop per
+      strategy, "Stop all strategies" on the top bar, and the kill switch stops them too. A strategy that errors pauses
+      itself and says why.
+    - **Strategy tester:** the same engine and panel run over the saved candles: fills by the paper rules (bid / ask,
+      stops on bid / ask, gaps), results net of all charges in ₹ / $ and R: trades on the chart, equity curve and drawdown,
+      win rate, expectancy, by month; compare two settings side by side. History is what Fyers Standard gives (more needs
+      Fyers Prime) or what MT5 holds.
+    - **Rules checked (12 Nov):** SEBI: a self-built algo on your own account under 10 orders a second is allowed (every
+      Fyers API order is already tagged as algo). Fyers needs the daily login: Live strategies wait for it each morning.
+      FundingPips' forbidden-strategies page allows third-party EAs only as trade / risk managers, says nothing about your
+      own, and bans HFT, tick scalping, hedging, server spamming, latency arbitrage and copy trading: the app enforces a
+      minimum gap between a strategy's orders and no hedging. **The owner asks FundingPips in writing** that the app's own
+      strategies through his own FTM Bridge EA are fine before switching one on for MT5.
+    - **Suggested (not required):** make item 1's first real manual Live trade before switching a strategy on for Live, so
+      the live order path has been seen working once with a person watching.
+    - Build in stages, each with all three account types: (a) the engine, the rules panel and Pine strategies, with the
+      tester; (b) the no-code builder; (c) side-by-side comparison and the tester's extras.
+24. [ ] **Server backup** (12 Nov 2026). Nothing backs up the whole server today (only the journal's own backup, by hand).
+    Nightly, encrypted: accounts, journal (pictures, kept candles), Pine scripts, layouts, drawings, alerts, settings, users
+    (secrets stay sealed). Off the droplet: DigitalOcean Spaces, Google Drive or the Telegram bot (to agree). Keep 14 days;
+    `python -m helper.backup restore` on a new droplet; Telegram if a night's backup fails. Fyers candles are left out
+    (fetched again).
+25. [ ] **Practice replay on any date** (12 Nov 2026). Pick a past day; the chart plays it candle by candle (play / pause /
+    step / speed); trade it on a practice account with the real tool, BE, trail and charges; trades go to the journal
+    marked practice. (Today's replay only shows your own past trades.)
+26. [ ] **Screener** (12 Nov 2026). A table of a watchlist with a column per condition (built-ins, Pine plots, P&F signals),
+    kept up to date on the server by the alerts engine; a click opens the chart; sort and filter.
+27. [ ] **Option Greeks, IV and a payoff chart** (12 Nov 2026). IV, delta, gamma, theta, vega in the option chain
+    (worked out on the server; MCX options on the future); a payoff chart at expiry and today for the open legs, net of
+    charges.
+28. [ ] **Tax report for Live trades** (12 Nov 2026). Per financial year: turnover (sum of absolute profits per trade),
+    net P&L, charges split into deductible and STT, flags for the tax-audit limits; CSV and PDF for the CA. Live only. Not
+    tax advice: the CA confirms.
+29. [ ] **Indian event calendar on the chart** (12 Nov 2026). RBI policy, CPI, expiry days, MCX crude's EIA inventory day,
+    holidays as chart markers; an optional guard refusing new orders on a contract from X minutes before its event (like
+    the MT5 news guard).
 
 ## Rules that shape live trading and other users (checked 30 Oct 2026)
 
@@ -630,6 +696,7 @@ marked before relying on it.
 
 ## Done
 
+- [x] **v0.42.1** (12 Nov): roadmap only: items 23-29 added (strategies that trade by themselves first), item 10 kept for later.
 - [x] **v0.42.0** (12 Nov): P&L, SL and TP shown as an amount, a % of the account size or an R multiple, a main unit and a
   second one (item 22): the position bar, SL / TP labels, the new-trade tool, the trades panel, the Trades page, the phone;
   Chart settings › P&L shown as, U, or a click on a figure.

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.42.1 — 12 Nov 2026 — Roadmap: strategies that trade by themselves, and six more
+
+Changed
+- **Roadmap only, no code changed.** Items 23-29 added (owner: "All your ideas are great. Add it to the roadmap"):
+  23 strategies that trade by themselves on Paper, Live and MT5, with a strategy tester (next: "We should first do
+  strategy for Live, Paper and MT5"), 24 server backup, 25 practice replay on any date, 26 screener, 27 option Greeks /
+  IV / payoff chart, 28 tax report for Live trades, 29 Indian event calendar on the chart. Item 23's proposed design (the
+  owner's answers: signals from a no-code builder and Pine strategy() scripts; exits by the app and the script; all three
+  account types at once) is in the roadmap.
+- Item 10 (candles recorded from the live feed) kept for after 23-29.
+
 ## v0.42.0 — 12 Nov 2026 — P&L, SL and TP as an amount, a % of the account or R
 
 Added

@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 12 Nov 2026, version **0.42.0** (P&L, SL and TP as an amount, % of the account or R, roadmap 22; 0.41.0: the MT5 day-end close by each symbol's sessions, EA 1.23; 0.40.0: the MT5 day-end close, 8 b4; 0.39.1: each MT5 trade's candles kept for its replay, 8 c1b; 0.39.0: MT5 trades in the journal, 8 c1). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 12 Nov 2026, version **0.42.1** (roadmap: items 23-29, strategies first; 0.42.0: P&L, SL and TP as an amount, % of the account or R, roadmap 22; 0.41.0: the MT5 day-end close by each symbol's sessions, EA 1.23; 0.40.0: the MT5 day-end close, 8 b4; 0.39.1: each MT5 trade's candles kept for its replay, 8 c1b; 0.39.0: MT5 trades in the journal, 8 c1). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -502,9 +502,14 @@ line of "FundingPips' day's starting balance".
 
 ## Next job
 
+**Next build: roadmap 23, strategies that trade by themselves** (Paper, Live and MT5 in one release; signals from a
+no-code builder and Pine `strategy()` scripts; the app's rules panel; the tester). The proposed design is in the roadmap;
+the owner may still change it. Start with stage (a). Reuse: the alerts engine's server-side Pine runner and conditions
+(`helper/chartalerts.py`, `helper/pine_node.mjs`), each engine's `plan()` / `place()` (sizing, guards, lockouts), the
+journal hooks. Before MT5 is switched on: the owner's written OK from FundingPips.
+
 **v0.42.0 (12 Nov):** the owner picks his units (Chart settings › P&L shown as, or U / a click on a figure) and checks one
 MT5 trade's SL / TP labels against its $ figures (e.g. SL −1.00R · −0.48% on a $5,000 account with 1R = $24.02).
-Ideas offered in roadmap 22, not asked for yet: points as a unit, History / journal in the same units, R-based day goals.
 
 **v0.41.0 (12 Nov):** the owner compiles FTM Bridge 1.23 and restarts it; within ~2 minutes each MT5 trade's ⏱ shows its
 symbol's own close time; check one against the symbol's Specification › Sessions in MT5.
