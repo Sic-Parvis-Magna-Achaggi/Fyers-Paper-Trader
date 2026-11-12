@@ -159,13 +159,18 @@ function mWarnings(){
 function mChips(){
   const box = mq("#mChips"); if(!box || !P.snap) return;
   const ps = P.snap.positions, os = P.snap.orders;
-  const key = ps.map(p => p.id).join(",") + "|" + os.length;
+  // the unit button (Chart settings › Unit button on the position bar, v0.43.2): the phone has no position bars, so it
+  // leads the chips (only with a trade open); a tap switches amount → % of account → R
+  const um = pnlUnits()[0], ub = !!chartCfg().pnlBtn && ps.length > 0;
+  const key = ps.map(p => p.id).join(",") + "|" + os.length + "|" + (ub ? um : "");
   if(box.dataset.k !== key){
     box.dataset.k = key;
-    box.innerHTML = ps.map(p => `<button data-id="${p.id}"><span class="side ${p.side > 0 ? "up" : "down"}">${p.side > 0 ? "L" : "S"}</span> ${esc(short(p.s))} <b data-f="n"></b></button>`).join("")
+    box.innerHTML = (ub ? `<button class="mpu" data-u="1" title="P&L shown as ${esc(PNL_NAMES[um])}: tap for amount → % of account → R">${esc(um === "pct" ? "%" : um === "r" ? "R" : CUR())}</button>` : "")
+      + ps.map(p => `<button data-id="${p.id}"><span class="side ${p.side > 0 ? "up" : "down"}">${p.side > 0 ? "L" : "S"}</span> ${esc(short(p.s))} <b data-f="n"></b></button>`).join("")
       + (os.length ? `<button data-o="1">${os.length} order${os.length > 1 ? "s" : ""}</button>` : "");
     box.querySelectorAll("[data-id]").forEach(b => b.onclick = () => mPosSheet(b.dataset.id));
     const o = box.querySelector("[data-o]"); if(o) o.onclick = () => mShow("trade");
+    const u = box.querySelector("[data-u]"); if(u) u.onclick = () => pnlCycle();
   }
   for(const p of ps){ const b = box.querySelector(`[data-id="${p.id}"] [data-f="n"]`); if(b){ b.textContent = pnlPart(0, p.net, p.init_risk); b.className = cls(p.net); } }
   const n = ps.length + os.length, nb = mq("#mNb");

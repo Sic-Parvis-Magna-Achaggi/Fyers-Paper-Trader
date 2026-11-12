@@ -191,7 +191,15 @@ let br;
   await m.waitForTimeout(1500);
   const chip = await m.evaluate(() => (document.querySelector('#mChips [data-f="n"]') || {}).textContent);
   ok(/%$/.test(chip || ""), "phone: the position chip in %: " + chip);
-  ok(await m.$("#posbars .pbu") !== null, "phone: the position bar's unit button (the setting is saved on the server)");
+  ok(await m.isVisible("#mChips .mpu"), "phone: the unit button leads the trade chips (the setting is saved on the server; the phone has no position bars)");
+  { const u0 = await m.evaluate(() => pnlUnits()[0]); await m.tap("#mChips .mpu"); await m.waitForTimeout(600);
+    const u1 = await m.evaluate(() => [pnlUnits()[0], document.querySelector("#mChips .mpu").textContent.trim(), (document.querySelector('#mChips [data-f="n"]') || {}).textContent]);
+    ok(u1[0] !== u0 && u1[1] === (u1[0] === "pct" ? "%" : u1[0] === "r" ? "R" : "₹"), `phone: a tap on it switches the unit: ${u0} → ${u1[0]} (button ${u1[1]}, chip ${u1[2]})`);
+    await m.tap("#mChips .mpu"); await m.waitForTimeout(400); await m.tap("#mChips .mpu"); await m.waitForTimeout(600);
+    ok(await m.evaluate(u => pnlUnits()[0] === u, u0), "phone: three taps: back where it started"); }
+  await m.screenshot({ path: SHOT + "units_07b_phone_button.png" });
+  await m.evaluate(() => { prefSet("chart", {...(prefGet("chart", {}) || {}), pnlMain: "pct", pnlSecond: "r"}); pnlRefresh(); });   // (the taps moved the second unit)
+  await m.waitForTimeout(400);
   await m.evaluate(() => mPosSheet(P.snap.positions[0].id));
   await m.waitForSelector('#mSheet [data-f="net"]');
   await m.waitForTimeout(600);

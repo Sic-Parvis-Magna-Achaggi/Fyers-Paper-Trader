@@ -55,6 +55,7 @@ body.mob.is-live #mBar{box-shadow:inset 0 2px 0 var(--down)}
 #mChips{position:fixed;left:0;right:0;bottom:calc(var(--mn) + var(--mb) + var(--sb));z-index:19;display:flex;gap:6px;overflow-x:auto;padding:0 8px 6px;pointer-events:none}
 #mChips button{pointer-events:auto;flex:0 0 auto;border-radius:999px;padding:6px 12px;font-size:12px;background:var(--panel);box-shadow:0 2px 8px rgba(0,0,0,.25);min-height:34px}
 #mChips button b{font-family:var(--mono)}
+#mChips button.mpu{min-width:34px;padding:6px 10px;font-family:var(--mono);font-weight:700;color:var(--accent);border:1px solid var(--accent)}   /* amount / % / R (v0.43.2) */
 body.mob:not([data-ms="chart"]) #mBar,body.mob:not([data-ms="chart"]) #mChips{display:none}
 
 /* the order shrunk to a bubble: it takes the SELL / BUY bar's place, so nothing covers the chart */

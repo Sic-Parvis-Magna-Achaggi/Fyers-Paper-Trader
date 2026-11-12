@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.43.2 — 12 Nov 2026 — The unit button on the phone
+
+Fixed
+- **The unit button on the phone** (owner: "Will this work on mobile too?"). v0.43.1 put it on the chart's position bars,
+  which the phone layout doesn't show (it shows each trade as a chip above SELL / BUY), so on the phone it was there but
+  hidden. Now, with Chart settings › Unit button on the position bar on, the phone's trade chips start with the same
+  button (₹ / $, % or R); a tap switches amount → % of account → R, and the chips, the SL / TP labels and the sheets
+  follow. It shows only while a trade is open. v0.43.1's test only checked that the button existed, not that it was visible.
+
+Tests
+- `tests/pnl_units_flow.js` (56): the phone's button is visible, a tap switches the unit (the button's label and the chip
+  follow), three taps come back to the start. Re-run: `mobile_flow` (61).
+
 ## v0.43.1 — 12 Nov 2026 — A unit button on the position bar
 
 Added

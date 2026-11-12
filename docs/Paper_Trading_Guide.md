@@ -630,6 +630,8 @@ Every figure is still net of all charges: only the writing changes.
 
 **The unit button (v0.43.1):** Chart settings › P&L shown as › **Unit button on the position bar** (off by default) puts a
 small button after each trade's P&L on its bar on the chart. It shows the main unit (₹ / $, % or R); a click switches it.
+On the phone (no position bars there) it's the first of the trade chips above SELL / BUY, while a trade is open; a tap
+switches it.
 
 **Switching:** Chart settings › **P&L shown as** (Main and Second; Second can be None), **U** on the chart or the Trades page,
 or a click on a P&L figure (the position bar, a zone's label, the panel's P&L, the Open P&L, the Trades page's P&L headers;
