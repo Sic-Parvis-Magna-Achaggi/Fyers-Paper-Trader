@@ -443,6 +443,7 @@ button.lk:disabled{opacity:.4}
 #posbars button.tg.on{background:var(--accent);border-color:var(--accent);color:#fff}
 #posbars button.tg.on.done,table.tbl button.tg.on.done{background:#326eaa;border-color:#326eaa;color:#fff}
 #posbars .ta{font-family:var(--mono);font-size:11px;padding:0 4px}
+#posbars button.pbu{min-width:24px;padding:2px 5px;font-family:var(--mono);color:var(--accent);border-color:var(--accent)}   /* amount / % / R (v0.43.1) */
 #posbars input.rr{width:38px;padding:2px 4px;font-size:11px;font-family:var(--mono);text-align:center;border-radius:4px}
 @media (max-width:760px){ #posbars .pbar{font-size:11px} #posbars input.rr{width:32px} }
 .navb{position:absolute;bottom:34px;z-index:5;width:28px;height:28px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:6px;background:var(--panel);border:1px solid var(--line);color:var(--muted);font-size:17px;line-height:1;cursor:pointer;opacity:.85}
@@ -1124,7 +1125,7 @@ const CHART_DEFAULTS = {up:"#22a06b", down:"#e2483d", bg:"", grid:true,
   bidC:"#a3abb8", bidS:0, bidOn:true, askC:"#e2483d", askS:0, askOn:true, lastC:"#e0b341", lastS:2, lastOn:true,
   entryC:"", entryS:2, slC:"#e2483d", slS:0, tpC:"#22a06b", tpS:0, beC:"#4f8cff", beS:1, orderC:"#4f8cff", orderS:2,
   toolC:"#4f8cff", toolS:0, lossZ:"#e2483d", profitZ:"#22a06b", zoneA:20, volOn:true, timerOn:true, hideNoTrade:true, dataCheck:true,
-  btnCorner:"tl", btnX:8, btnY:8, lineC:"#4f8cff", toolGap:30, pnlMain:"amt", pnlSecond:"r"};
+  btnCorner:"tl", btnX:8, btnY:8, lineC:"#4f8cff", toolGap:30, pnlMain:"amt", pnlSecond:"r", pnlBtn:false};
 function chartCfg(){ return {...CHART_DEFAULTS, ...(prefGet("chart", {}) || {})}; }
 function cfgColor(k){ const c = chartCfg()[k]; return c || cssVar(k === "entryC" ? "--text" : "--bg"); }
 function buildChart(){
@@ -1837,6 +1838,7 @@ function renderCfg(){
       ${PNL_UNITS.map(u => `<option value="${u}" ${pnlUnits()[0] === u ? "selected" : ""}>${PNL_NAMES[u]}</option>`).join("")}</select></div>
     <div class="cr" style="grid-template-columns:1fr 150px"><span title="Shown next to the main one (dimmed on the position bar)">Second</span><select data-k="pnlSecond" id="cfgPnlSecond">
       ${["none", ...PNL_UNITS].map(u => `<option value="${u}" ${pnlUnits()[1] === u ? "selected" : ""}>${PNL_NAMES[u]}</option>`).join("")}</select></div>
+    <div class="cr"><span title="A button on each trade's bar on the chart (next to its P&amp;L): it shows the main unit and a click switches it: amount → % of account → R">Unit button on the position bar</span><span></span><span></span><input type="checkbox" data-k="pnlBtn" ${C.pnlBtn ? "checked" : ""}></div>
     <p class="help" style="margin:2px 0 0">% of account = of the account size (${acctSize() ? rs(acctSize()) : "the account's size"}); R = of the trade's net risk at its first stop. U on the chart, or a click on a P&amp;L / SL / TP figure, switches the main one.</p>
     <div class="sec">Chart</div>
     <div class="cr"><span>Background</span><input type="color" data-k="bg" value="${hex("bg")}"><span class="muted" style="font-size:11px">${C.bg ? "" : "theme"}</span><span></span></div>
@@ -1858,6 +1860,7 @@ function renderCfg(){
     cfg[k] = el.type === "checkbox" ? el.checked : el.dataset.num ? (+el.value || 0) : el.value;
     prefSet("chart", cfg); applyChartCfg();
     if(k === "dataCheck") dataCheck(true);
+    if(k === "pnlBtn"){ P.barKey = ""; posBars(); }
     if(k === "pnlMain" || k === "pnlSecond"){
       if(k === "pnlMain" && cfg.pnlSecond === cfg.pnlMain){ cfg.pnlSecond = "none"; prefSet("chart", cfg); const o = $("#cfgPnlSecond"); if(o) o.value = "none"; }
       pnlRefresh(true); }

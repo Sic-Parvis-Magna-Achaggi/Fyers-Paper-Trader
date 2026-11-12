@@ -769,7 +769,9 @@ function posBars(){
     if(y0 != null) items.push({kind: "pos", id: p.id, price: y0, p});
   }
   for(const o of P.snap.orders) if(o.s === cur.s) items.push({kind: "ord", id: o.id, price: o.price, o});
-  const key = items.map(i => i.kind === "pos" ? [i.id, i.p.tr.be_on, i.p.tr.be_r, i.p.tr.sl_on, i.p.tr.sl_r, i.p.tr.own_be, i.p.tr.own_sl, i.p.lots, i.p.be_done, i.p.at_be].join("|") : i.id).join(";");
+  const ub = !!chartCfg().pnlBtn, um = pnlUnits()[0];
+  const ulab = um === "pct" ? "%" : um === "r" ? "R" : CUR();
+  const key = (ub ? "u" + um : "") + "#" + items.map(i => i.kind === "pos" ? [i.id, i.p.tr.be_on, i.p.tr.be_r, i.p.tr.sl_on, i.p.tr.sl_r, i.p.tr.own_be, i.p.tr.own_sl, i.p.lots, i.p.be_done, i.p.at_be].join("|") : i.id).join(";");
   const focused = host.contains(document.activeElement) && document.activeElement.tagName === "INPUT";
   if(key !== P.barKey && !focused){
     P.barKey = key;
@@ -777,6 +779,7 @@ function posBars(){
       if(i.kind === "ord") return `<div class="pbar" data-id="${i.id}"><span class="pt" data-f="t"></span><button class="bx" data-a="cancel" title="Cancel order">✕</button></div>`;
       const t = i.p.tr, ts = trailTips(i.p);
       return `<div class="pbar" data-id="${i.id}"><span class="pt" data-f="t"></span>
+        ${ub ? `<button class="pbu" data-a="unit" title="${esc(pnlTip())}">${esc(ulab)}</button>` : ""}
         <button class="bx" data-a="close" title="Close at market">✕</button>
         <button data-a="be" title="Stop to break-even + costs now">BE</button>
         <button class="tg ${t.be_on ? "on" : ""} ${ts.beDone ? "done" : ""}" data-a="be_on" title="${esc(ts.be)}">BE-T</button><input class="rr" data-a="be_r" value="${t.be_r}" inputmode="decimal" title="${esc(ts.beR)}">
@@ -789,6 +792,7 @@ function posBars(){
       const pos = () => P.snap.positions.find(x => x.id === id);
       el.querySelectorAll("button").forEach(b => b.onclick = e => { e.stopPropagation();
         const a = b.dataset.a;
+        if(a === "unit") return pnlCycle();             // amount → % of account → R (Chart settings › Unit button, v0.43.1)
         if(a === "close") return papi("close", {id});
         if(a === "cancel") return papi("cancel", {id});
         if(a === "be") return papi("be", {id});

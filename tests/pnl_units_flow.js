@@ -110,6 +110,24 @@ let br;
   s = await state();
   ok(s.slT === `SL ${fx(s.sl / s.R, 2)}R · −₹${Math.round(-s.sl).toLocaleString("en-IN")}`, "Main R, Second Amount: " + s.slT);
   await pg.screenshot({ path: SHOT + "units_04_settings.png" });
+  // v0.43.1: the unit button on the position bar (Chart settings, off by default)
+  ok(!(await pg.$("#posbars .pbu")), "the position bar's unit button is off by default");
+  await pg.click('#cfgBody input[data-k="pnlBtn"]'); await pg.waitForTimeout(500);
+  ok(await pg.isVisible("#posbars .pbu") && (await pg.textContent("#posbars .pbu")).trim() === "R", "switched on: a button on the position bar showing the main unit (R)");
+  await pg.click("#bCfg");
+  await pg.click("#posbars .pbu"); await pg.waitForTimeout(500);
+  ok(await pg.evaluate(() => pnlUnits()[0]) === "amt" && (await pg.textContent("#posbars .pbu")).trim() === "₹", "a click: Amount (the button says ₹)");
+  await pg.click("#posbars .pbu"); await pg.waitForTimeout(500);
+  ok(await pg.evaluate(() => pnlUnits()[0]) === "pct" && (await pg.textContent("#posbars .pbu")).trim() === "%" && /%/.test(await pg.textContent("#posbars .pbar .pu")),
+     "another click: % of account (" + (await pg.textContent("#posbars .pbar .pu")) + ")");
+  await pg.click("#posbars .pbu"); await pg.waitForTimeout(500);
+  ok(await pg.evaluate(() => pnlUnits()[0]) === "r" && (await pg.textContent("#posbars .pbu")).trim() === "R", "and back to R");
+  await pg.screenshot({ path: SHOT + "units_04b_button.png" });
+  ok(await pg.evaluate(async () => { await new Promise(r => setTimeout(r, 900)); return (await api("/api/prefs")).prefs.chart.pnlBtn === true; }), "the switch is saved on the server");
+  await pg.click("#bCfg");
+  await pg.click('#cfgBody input[data-k="pnlBtn"]'); await pg.waitForTimeout(500);
+  ok(!(await pg.$("#posbars .pbu")), "switched off: the button goes");
+  await pg.click('#cfgBody input[data-k="pnlBtn"]'); await pg.waitForTimeout(500);   // (on again: the phone checks it too)
   await pg.click("#bCfg");
 
   // ---- a click on a zone's money label cycles too
@@ -173,6 +191,7 @@ let br;
   await m.waitForTimeout(1500);
   const chip = await m.evaluate(() => (document.querySelector('#mChips [data-f="n"]') || {}).textContent);
   ok(/%$/.test(chip || ""), "phone: the position chip in %: " + chip);
+  ok(await m.$("#posbars .pbu") !== null, "phone: the position bar's unit button (the setting is saved on the server)");
   await m.evaluate(() => mPosSheet(P.snap.positions[0].id));
   await m.waitForSelector('#mSheet [data-f="net"]');
   await m.waitForTimeout(600);
@@ -193,7 +212,7 @@ let br;
   await ph.close();
 
   // ---- clean up: the default units, the trade and order closed, the test account archived
-  await pg.evaluate(() => { const c = {...(prefGet("chart", {}) || {})}; delete c.pnlMain; delete c.pnlSecond; prefSet("chart", c); });
+  await pg.evaluate(() => { const c = {...(prefGet("chart", {}) || {})}; delete c.pnlMain; delete c.pnlSecond; delete c.pnlBtn; prefSet("chart", c); });
   for(const id of await pg.evaluate(() => P.snap.orders.map(x => x.id))) await pg.evaluate(id => papi("cancel", {id}), id);
   for(const id of await pg.evaluate(() => P.snap.positions.map(x => x.id))) await pg.evaluate(id => papi("close", {id}), id);
   await pg.waitForTimeout(1000);

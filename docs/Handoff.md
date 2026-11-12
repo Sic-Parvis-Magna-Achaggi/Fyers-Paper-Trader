@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 12 Nov 2026, version **0.43.0** (strategies that trade by themselves, roadmap 23 a; 0.42.1: roadmap items 23-29; 0.42.0: P&L, SL and TP as an amount, % of the account or R, roadmap 22; 0.41.0: the MT5 day-end close by each symbol's sessions, EA 1.23; 0.40.0: the MT5 day-end close, 8 b4; 0.39.1: each MT5 trade's candles kept for its replay, 8 c1b; 0.39.0: MT5 trades in the journal, 8 c1). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 12 Nov 2026, version **0.43.1** (a unit button on the position bar, roadmap 22; 0.43.0: strategies that trade by themselves, roadmap 23 a; 0.42.1: roadmap items 23-29; 0.42.0: P&L, SL and TP as an amount, % of the account or R, roadmap 22; 0.41.0: the MT5 day-end close by each symbol's sessions, EA 1.23; 0.40.0: the MT5 day-end close, 8 b4; 0.39.1: each MT5 trade's candles kept for its replay, 8 c1b; 0.39.0: MT5 trades in the journal, 8 c1). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -154,6 +154,8 @@ the trades' R), `ordR(o)` a pending order's 1R (−at_sl), `acctSize()` = `P.sna
 and `pnlRefresh()` redraw everything (lines, panel, Trades page via `PG` keys, `mPnlRefresh()` in mobile.js,
 `mtAcctRefresh()` in mt5acct.js). The zones' labels record hit boxes (`P.zoneHits`) checked in the chart's click handler
 (not while a drawing tool is active or a drawing selected). Test: `tests/pnl_units_flow.js`.
+v0.43.1: chart pref `pnlBtn` (CHART_DEFAULTS false; a checkbox in Chart settings' "P&L shown as") -> `posBars()` adds
+`button.pbu` [data-a="unit"] (label ₹ / $ / % / R from `pnlUnits()[0]` and `CUR()`; part of `P.barKey`) -> `pnlCycle()`.
 
 ## Alerts (v0.38.0, roadmap 21)
 

@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 12 Nov 2026 (v0.43.0: strategies that trade by themselves, item 23 stage a; v0.42.1: items 23-29 added). This is the one task list for the project.
+Updated 12 Nov 2026 (v0.43.1: a unit button on the position bar, item 22; v0.43.0: strategies, item 23 stage a). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -567,6 +567,10 @@ fallback"):** item 8 is built now, stage by stage. Stage a shipped in **v0.34.0*
     - **Switching:** Chart settings › P&L shown as (saved on the server), **U** on the chart, and a click on a figure.
     - **Where:** the position bar, the SL / TP lines' labels and zone labels, the new-trade tool, the trades panel and the
       Trades page (Open P&L too), the phone.
+    - [x] **A unit button on the position bar** *(v0.43.1)* (asked 12 Nov: "an option to set the position display button
+      on the trade preview as on or off. If I turn on, I need a button on the preview to toggle showing in amount, % of
+      account or R multiple"): Chart settings › P&L shown as › Unit button on the position bar (off by default); the button
+      after each trade's P&L shows the main unit and a click switches it.
     - Claude's calls (the owner can change them): default Amount · R (what the position bar already showed); 1R = the net
       risk at the first stop, so a trailed stop shows the R it locks in ("SL +0.50R"); a pending order's 1R = what its stop
       would lose; the open total in R = the sum of each trade's R (as the journal adds R); a trade with no stop shows the
@@ -703,6 +707,7 @@ marked before relying on it.
 
 ## Done
 
+- [x] **v0.43.1** (12 Nov): a unit button on the position bar (amount / % / R), switched on in Chart settings (item 22).
 - [x] **v0.43.0** (12 Nov): strategies that trade by themselves (item 23 stage a): a Pine strategy() script's signals on
   bar close, the rules panel (size, a stop always, target, BE / trail, limits), Paper / Live / MT5 through the accounts' own
   rules, ⚡ tags, the log, Stop all, the tester (net of charges, R).

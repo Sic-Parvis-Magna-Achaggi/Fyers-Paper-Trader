@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.43.1 — 12 Nov 2026 — A unit button on the position bar
+
+Added
+- **Chart settings › P&L shown as › Unit button on the position bar** (owner, with a screenshot of an MT5 gold short: "give
+  me an option to set the position display button on the trade preview as on or off. If I turn on, I need a button on the
+  preview to toggle showing in amount, % of account or R multiple"). Off by default. When on, each trade's bar on the
+  chart has a small button after its P&L showing the main unit (₹ / $, %, R); a click switches it: amount → % of account
+  → R, the same as U or a click on the P&L (the SL / TP labels, the panel and the Trades page follow). Saved on the server
+  (every device, the phone too).
+
+Tests
+- `tests/pnl_units_flow.js` (54, was 46): off by default, on in Chart settings, its label, three clicks through the units,
+  saved on the server, off again, the phone shows it. Re-run: `rr_lock_flow` (36), `mobile_flow` (61), `mt5acct_flow` (52),
+  `routes_check.py`.
+
 ## v0.43.0 — 12 Nov 2026 — Strategies that trade by themselves, with a tester (roadmap 23, stage a)
 
 Added
