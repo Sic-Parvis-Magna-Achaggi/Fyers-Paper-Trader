@@ -455,9 +455,10 @@ function renderPositions(){
     if(!ps.length){ box.innerHTML = `<div class="empty">No open positions.</div>`; return; }
     box.innerHTML = ps.map(p => {
       const bt = p.basis === "underlying" ? ` <span class="tag">stops on ${esc(short(p.ref))}</span>` : "";
+      const sgt = p.strat ? ` <span class="tag sgtag" title="Placed by the strategy ${esc(p.strat.name)}">⚡ ${esc(p.strat.name)}</span>` : "";
       return `<div class="pos" data-id="${p.id}">
         <div class="ph"><span class="side ${p.side > 0 ? "up" : "down"}">${p.side > 0 ? "LONG" : "SHORT"}</span>
-          <a href="#" class="psym mono">${esc(short(p.s))}</a><span class="muted">${p.lots} lot @ ${fmt(p.avg, p.tick)}</span>${bt}
+          <a href="#" class="psym mono">${esc(short(p.s))}</a><span class="muted">${p.lots} lot @ ${fmt(p.avg, p.tick)}</span>${bt}${sgt}
           <span class="sp"></span><button class="x" data-a="close" title="Close at market">✕</button></div>
         <div class="pn"><b class="net pu" data-f="net"></b><span class="muted" data-f="sub"></span></div>
         <div class="pl">

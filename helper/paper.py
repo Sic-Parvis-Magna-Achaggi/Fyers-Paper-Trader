@@ -546,6 +546,15 @@ class Paper:
         if lock_note:
             out["lock_note"] = lock_note
             out["notes"].append(lock_note)
+        # a strategy's order (v0.43.0): its tag and the trade's own BE / trail, carried to the order and the position
+        if isinstance(req.get("strat"), dict) and req["strat"].get("id"):
+            out["strat"] = {"id": str(req["strat"]["id"])[:20], "name": str(req["strat"].get("name") or "")[:60],
+                            "eid": str(req["strat"].get("eid") or "")[:60]}
+        if isinstance(req.get("tr"), dict):
+            tr = dict(self.trail)
+            self._apply_trail(tr, {k: v for k, v in req["tr"].items() if k in ("be_on", "be_r", "sl_on", "sl_r")})
+            tr["own_be"] = tr["own_sl"] = True
+            out["tr"] = tr
         return out
 
     def _lock_sl(self, req: dict) -> tuple:
@@ -638,7 +647,7 @@ class Paper:
             self.fill(p, p["entry"], "market")
             return p
         o = {k: p.get(k) for k in ("s", "side", "type", "product", "basis", "qty", "lots", "sl", "tp", "ref",
-                                   "ref_price", "delta", "margin", "risk")}
+                                   "ref_price", "delta", "margin", "risk", "strat", "tr")}
         o.update(id=self._id("O"), price=p["entry"], created=now())
         self.orders.append(o)
         self._symbols_changed()
@@ -672,7 +681,9 @@ class Paper:
                    "basis_entry": ref_px if plan["basis"] == "underlying" else price,
                    "basis_best": ref_px if plan["basis"] == "underlying" else price,
                    "be_done": False, "trail": False, "own_stop": False, "margin": plan.get("margin", 0),
-                   "tr": dict(self.trail)}           # this trade's own trailing settings (start from the defaults)
+                   "tr": dict(plan.get("tr") or self.trail)}   # this trade's own trailing settings (start from the defaults)
+            if plan.get("strat"):
+                pos["strat"] = dict(plan["strat"])      # placed by a strategy (v0.43.0)
             self.positions.append(pos)
             self.day["trades"] = self.day.get("trades", 0) + 1
             verb = "Opened"
@@ -718,6 +729,7 @@ class Paper:
             "r": round(net / pos["init_risk"], 2) if pos["init_risk"] else None,
             "balance_after": bal, "day": self.trading_day(pos["opened"]),
             **({"src": "fyers"} if pos.get("outside") else {}), **({"holding": True} if pos.get("holding") else {}),
+            **({"strat": pos["strat"]} if pos.get("strat") else {}),
             "path": (pos.get("path") or [[pos["opened"], pos.get("first_sl"), pos.get("tp"), "open"]]) + (
                 [[now(), pos.get("sl"), pos.get("tp"), pos.pop("_pk", None) or "edit"]]
                 if pos.get("path") and (pos.get("sl"), pos.get("tp")) != tuple(pos["path"][-1][1:3]) else []),
@@ -1116,7 +1128,7 @@ class Paper:
         mark = self.exit_mark(pos)
         n = self.pos_net(pos, mark)
         v = {k: pos.get(k) for k in ("id", "s", "side", "product", "qty", "avg", "sl", "tp", "floor", "basis", "ref",
-                                      "first_sl", "be_done", "trail", "opened", "init_risk", "best", "worst", "paid")}
+                                      "first_sl", "be_done", "trail", "opened", "init_risk", "best", "worst", "paid", "strat")}
         v.update(lots=pos["qty"] // (row.get("lot") or 1), ltp=self.px(pos["s"]).get("ltp"), mark=mark,
                  gross=n["gross"], net=n["net"], charges_so_far=pos["paid"], exit_charges=n["exit_charges"],
                  be=self._be_price(pos), risk=round(self.pos_risk(pos), 2), stale=not self.fresh(pos["s"]),

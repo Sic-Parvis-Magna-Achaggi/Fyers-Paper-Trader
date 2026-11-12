@@ -50,6 +50,54 @@ const PT = await import(PINETS);
 // closed bar's final answer, which "once per bar close" needs. (PineTS keeps them per run; the page's chart never reads them.)
 const run0 = PT.PineTS.prototype.run;
 PT.PineTS.prototype.run = function (...a) { try { this.setAlertMode('all'); } catch (_) {} return run0.apply(this, a); };
+// Strategies (v0.43.0): a strategy() script's orders are recorded as it places them (strategy.entry / exit / close /
+// close_all), bar by bar, without using PineTS's own fills: the app turns them into signals and trades them itself.
+// Only while a strategy session runs (REC), so indicators' contexts are untouched.
+let REC = false;
+const init0 = PT.PineTS.prototype._initializeContext;
+PT.PineTS.prototype._initializeContext = function (...a) {
+  const r = init0.apply(this, a);
+  if (!REC) return r;
+  const fix = c => {
+    if (!c || typeof c !== 'object') return c;
+    // every strategy.entry the script makes is recorded, even while its own (simulated) position is open: the app's stop
+    // may have closed the real trade, and TradingView's pyramiding = 0 would hide the next entry in the same direction
+    c._propOverrides = { ...(c._propOverrides || {}), pyramiding: 1000000 };
+    const log = c.__orders = [];
+    const wrapArr = arr => {
+      if (!Array.isArray(arr) || arr.__w) return arr;
+      Object.defineProperty(arr, '__w', { value: 1 });
+      const push = arr.push;
+      arr.push = function (...x) {
+        for (const o of x) if (o && o.category && log.length < 200000)
+          log.push({ bar: o.bar, cat: o.category, id: o.id, dir: o.direction, from: o.from_entry || '', stop: o.stop, limit: o.limit, type: o.type });
+        return push.apply(this, x);
+      };
+      return arr;
+    };
+    const wrapS = v => {
+      if (!v || typeof v !== 'object' || v.__w) return v;
+      Object.defineProperty(v, '__w', { value: 1 });
+      let arr = wrapArr(v.pending_orders);
+      Object.defineProperty(v, 'pending_orders', { configurable: true, enumerable: true, get() { return arr; }, set(x) { arr = wrapArr(x); } });
+      return v;
+    };
+    let val = wrapS(c.strategy);
+    Object.defineProperty(c, 'strategy', { configurable: true, enumerable: true, get() { return val; }, set(v) { val = wrapS(v); } });
+    return c;
+  };
+  return r && typeof r.then === 'function' ? r.then(fix) : fix(r);
+};
+/* the recorded orders as [{t: the bar's time (IST-shifted s), i: bar index in the shown bars, ...}] from bar index `fromI` */
+function ordersOf(s, fromI) {
+  const W0 = W.sessions.get(s.key), ctx = W0 && W0.ctx, d = s.disp || [], off = s.off || 0, out = [];
+  for (const o of (ctx && ctx.__orders) || []) {
+    const i = off + (o.bar | 0);
+    if (i < fromI || i >= d.length) continue;
+    out.push({ t: d[i].time, i, cat: o.cat, id: String(o.id ?? ''), dir: o.dir, from: String(o.from ?? ''), stop: o.stop ?? null, limit: o.limit ?? null, type: o.type });
+  }
+  return out;
+}
 let src = readFileSync(path.join(WEB, 'pine_worker.js'), 'utf8');
 src = src.replace(/from\s+['"]\/vendor\/pinets\/pinets\.min\.browser\.es\.js['"]/, `from ${JSON.stringify(PINETS)}`);
 src += '\nexport { run, tick, sessions };\n';
@@ -195,6 +243,7 @@ function collect(s, res, full) {
   for (const [k, set] of s.ac || []) out.acs[k] = times.map(t => set.has(t) ? 1 : 0);
   out.acMsg = s.acMsg || {};
   out.calls = calls;
+  if (s.spec.strategy && full) out.orders = ordersOf(s, from);         // (only a full run's are exact: tails re-run the live bar)
   return out;
 }
 
@@ -202,13 +251,26 @@ async function fullRun(s) {
   s.disp = display(s);
   if (!s.spec.code) return collect(s, null, true);
   const candles = [];
-  const d = s.disp, off = Math.max(0, d.length - (s.spec.bars || 1500));
+  const d = s.disp, want = s.spec.bars || 1500;
+  let off = Math.max(0, d.length - want);
+  if (s.spec.strategy && d.length) {
+    // a strategy runs from a fixed first bar (moved on only every `want` bars), so bar_index and the script's state
+    // don't shift by one bar each time a bar closes, as on TradingView (whose bar_index counts from a fixed first bar)
+    if (s.anchorT != null) { const i = idxAt(d, s.anchorT); if (i >= 0 && d[i].time === s.anchorT && d.length - i <= 2 * want) off = i; }
+    s.anchorT = d[off].time;
+  }
+  s.off = off;
   for (let i = off; i < d.length; i++) candles.push(pineBar(s, d, i));
   if (!candles.length) return collect(s, null, true);
   const sp = s.spec;
-  const res = await ask(W.run, { sid: s.key, code: sp.code, inputs: sp.inputs || {}, props: sp.props, libs: sp.libs || {}, missing: sp.missing || [],
-    candles, ticker: sp.ticker, tf: sp.tf, info: sp.info }, 120000);
+  REC = !!sp.strategy;
+  let res;
+  try {
+    res = await ask(W.run, { sid: s.key, code: sp.code, inputs: sp.inputs || {}, props: sp.props, libs: sp.libs || {}, missing: sp.missing || [],
+      candles, ticker: sp.ticker, tf: sp.tf, info: sp.info }, 120000);
+  } finally { REC = false; }
   s.lastFull = Date.now(); s.fullMs = res.ms || 0;
+  s.lastErr = res.ok ? '' : res.error;
   return collect(s, res, true);
 }
 
@@ -272,6 +334,23 @@ async function pump() {
         const before = s.disp && s.disp.length ? s.disp[s.disp.length - 1].time : -Infinity;
         out = await fullRun(s);
         out.newBar = !!(s.disp.length && s.disp[s.disp.length - 1].time > before);
+      } else if (m.op === 'test') {                                   // the strategy tester: one run over the history, then gone
+        const key = 'T|' + (m.rid || 0);
+        const s = { key, spec: { ...(m.spec || {}), strategy: true, bars: (m.spec && m.spec.bars) || 20000 }, raw: rawBars(m.raw || []), tail: 3, box: null };
+        try {
+          await fullRun(s);
+          const d = s.disp;
+          const W0 = W.sessions.get(key), ctx = W0 && W0.ctx;
+          const plot = {};
+          if (m.plot && W0) {                                          // a Pine line for the stop, its value on every bar
+            const p = (ctx.plots || {})[m.plot];
+            const byT = new Map(((p && p.data) || []).map(x => [Math.round(x.time / 1000) + IST, x.value]));
+            plot.v = d.map(b => { const v = byT.get(b.time); return typeof v === 'number' && isFinite(v) ? v : null; });
+          }
+          const err = !W0 ? (s.lastErr || 'the script did not run') : null;
+          out = { n: d.length, bars: d.map(b => [b.time, b.open, b.high, b.low, b.close, b.vol || 0]), orders: ordersOf(s, 0),
+                  plot: plot.v || null, titles: Object.keys((ctx && ctx.plots) || {}).filter(k => !/^__\w+__$/.test(k)), err };
+        } finally { S.delete(key); W.sessions.delete(key); }
       } else if (m.op === 'draws') {
         const s = S.get(m.key);
         if (!s) throw Object.assign(new Error('no such session'), { gone: true });

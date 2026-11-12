@@ -458,7 +458,8 @@ async def main():
                   "mode": "lots", "lots": 0.01})
     ok("another symbol the other way is fine (owner, 10 Nov)", not pe2.get("blocked"), pe2.get("blocked"))
     n_pos = len(e.positions)
-    pl = e.place(dict(req))
+    pl = e.place({**req, "strat": {"id": "st1", "name": "Gold breakout", "eid": "L"},     # (v0.43.0: as a strategy places it)
+                  "tr": {"be_on": False, "be_r": 1.5, "sl_on": False, "sl_r": 2}})
     oc = [c for c in e.M["cmd"].values() if c["k"] == "OPEN"]
     ok("PLACE: an OPEN command with the plan's volume, SL and TP", len(oc) == 1 and f" {pl['lots']:.8g} " in " " + oc[0]["args"] + " "
        and e.snapshot()["mt5"]["opening"], oc)
@@ -468,6 +469,9 @@ async def main():
     ok("MT5 opened it: the app's trade (not 'placed in MT5'), its planned stop as 1R", len(e.positions) == n_pos + 1 and newp and
        newp[-1]["first_sl"] == req["sl"] and abs(newp[-1]["init_risk"] - pl["risk"]) < 1.0 and not e.M["opening"],
        (len(e.positions), newp and newp[-1].get("first_sl"), pl.get("risk")))
+    ok("v0.43.0: a strategy's order: the position carries its tag and its own BE / trail", newp and newp[-1].get("strat") ==
+       {"id": "st1", "name": "Gold breakout", "eid": "L"} and newp[-1]["tr"].get("own_be") and newp[-1]["tr"]["be_r"] == 1.5
+       and newp[-1]["tr"]["sl_r"] == 2, newp and (newp[-1].get("strat"), newp[-1].get("tr")))
     ok("... with MT5's real SL and TP from the start", newp and ea.positions[newp[-1]["ticket"]]["sl"] == req["sl"]
        and ea.positions[newp[-1]["ticket"]]["tp"] == pl["tp"], newp and ea.positions[newp[-1]["ticket"]])
     lp = {**req, "type": "limit", "price": round(bid - 3, 2), "sl": round(bid - 9, 2), "mode": "lots", "lots": 0.02}

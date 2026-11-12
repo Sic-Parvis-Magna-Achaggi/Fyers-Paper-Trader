@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 12 Nov 2026 (v0.42.1: items 23-29 added, strategies that trade by themselves first; v0.42.0: P&L as amount / % / R, item 22). This is the one task list for the project.
+Updated 12 Nov 2026 (v0.43.0: strategies that trade by themselves, item 23 stage a; v0.42.1: items 23-29 added). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -612,8 +612,15 @@ fallback"):** item 8 is built now, stage by stage. Stage a shipped in **v0.34.0*
       strategies through his own FTM Bridge EA are fine before switching one on for MT5.
     - **Suggested (not required):** make item 1's first real manual Live trade before switching a strategy on for Live, so
       the live order path has been seen working once with a person watching.
-    - Build in stages, each with all three account types: (a) the engine, the rules panel and Pine strategies, with the
-      tester; (b) the no-code builder; (c) side-by-side comparison and the tester's extras.
+    - Build in stages, each with all three account types:
+      - [x] (a) the engine, the rules panel and Pine strategies, with the tester *(v0.43.0)*. As built: signals on bar close
+        only, market entries only; the script's inputs are its defaults; a strategy keeps its own copy of the script.
+      - [ ] (b) the no-code builder (the alert conditions as long entry / short entry / exit).
+      - [ ] (c) side-by-side comparison of two settings; the tester's trades drawn on the chart; a History filter by
+        strategy; limit / stop entries; "as it happens" (once per bar, not waiting for the close); editing the script's
+        inputs in the rules panel.
+    - [ ] **The owner's checks:** a strategy on a paper account for a day on real prices; then (after item 1's first manual
+      Live trade, and FundingPips' written OK for MT5) one on Live or MT5 with a small size.
 24. [ ] **Server backup** (12 Nov 2026). Nothing backs up the whole server today (only the journal's own backup, by hand).
     Nightly, encrypted: accounts, journal (pictures, kept candles), Pine scripts, layouts, drawings, alerts, settings, users
     (secrets stay sealed). Off the droplet: DigitalOcean Spaces, Google Drive or the Telegram bot (to agree). Keep 14 days;
@@ -696,6 +703,9 @@ marked before relying on it.
 
 ## Done
 
+- [x] **v0.43.0** (12 Nov): strategies that trade by themselves (item 23 stage a): a Pine strategy() script's signals on
+  bar close, the rules panel (size, a stop always, target, BE / trail, limits), Paper / Live / MT5 through the accounts' own
+  rules, ⚡ tags, the log, Stop all, the tester (net of charges, R).
 - [x] **v0.42.1** (12 Nov): roadmap only: items 23-29 added (strategies that trade by themselves first), item 10 kept for later.
 - [x] **v0.42.0** (12 Nov): P&L, SL and TP shown as an amount, a % of the account size or an R multiple, a main unit and a
   second one (item 22): the position bar, SL / TP labels, the new-trade tool, the trades panel, the Trades page, the phone;

@@ -476,6 +476,59 @@ Technical alerts need candles: the server loads them from your saved candles (on
 timeframe, within the data budget) and builds the live bar from each price, as the chart does; every 10 minutes it checks
 Fyers' candles again. Before the first price after a restart, a crossing between the two can't be seen.
 
+## Strategies that trade by themselves (⚡, v0.43.0)
+
+A strategy is a Pine **`strategy()`** script from the Pine Editor plus **your rules**. When a bar closes, the app reads what
+the script did on that bar and trades it on the accounts you switch on, page open or not.
+
+**What the script decides** (only these):
+- `strategy.entry("L", strategy.long)` / `strategy.short`: open a trade at market on the first price after the bar's close.
+  An entry the other way **reverses** (the trade is closed first). With *Long only* / *Short only*, an entry the other way
+  just closes the trade.
+- `strategy.close(...)` / `strategy.close_all()`: close the strategy's trade.
+- `strategy.exit(stop = ..., limit = ...)`: the stop and target, if you choose "from the script" below.
+- Limit / stop entries (`strategy.entry(..., limit = ...)`) aren't traded yet (the log says so). The script's own settings
+  (capital, order size, pyramiding, commission, slippage...) aren't used. Its inputs are the defaults (change them in the
+  Pine Editor; the strategy keeps its own copy until you **take the new version**).
+
+**What your rules decide** (⚡ › + New strategy, one screen):
+- **What it trades:** up to 10 contracts (Fyers, or MT5 symbols, not both), the timeframe, the chart type (Renko, range
+  and P&F use ATR boxes), long and short / long only / short only.
+- **Accounts:** any of your paper accounts, Live (your Fyers account) and each MT5 account. **Switching Live or MT5 on asks
+  for a fresh 2FA code.**
+- **Size:** risk % of the account, a risk amount, or fixed lots (MT5: 0.01 steps).
+- **Stop, always** (no stop, no trade): ATR × n, points from the entry, the last swing low / high over N bars, a line the
+  script plots, or the script's own `strategy.exit` stop (optionally **followed** as the script moves it, only ever
+  tighter); plus a few ticks.
+- **Target:** an R multiple (net of every charge, like the ticket), the script's `limit`, or none.
+- **BE at x R** and **trail from x R:** each trade's own settings, as the BE-T / TRAIL on its entry line.
+- **Limits for the strategy:** trades a day, open at once, stop for the day after losing X (₹ / $ or R), trading hours
+  (IST), no new trades X minutes before the square-off (MT5: the day-end close), skip expiry days.
+- **Telegram** on each trade (the bot in Settings › Telegram alerts).
+
+**Every order goes through the account's own rules**, exactly like a click: risk cap, margin, max trades, daily / max loss,
+the journal's lockouts, the kill switch, the square-off, MT5's news guard and no hedging. If the account says no, the log
+says why. A strategy only touches the trades it opened; your own trades are never touched. Switching it off or deleting it
+leaves its open trades as they are, with their stops, BE and trail.
+
+**On the page** (phone: More › Strategies): each strategy's card (ON / OFF, its accounts with today's trades and net), Switch on / off, Edit, Test,
+Log, Delete; **Stop all strategies**. The log lists every signal and what each account did with it (opened, closed,
+refused and why), live. Trades show **⚡ name** on the trades panel, the Trades page and the phone; the History keeps it,
+and the journal gets the strategy's name as a set-up tag. A script error switches the strategy off with the reason.
+Switched on, it starts with the next bar that closes (the history isn't traded).
+
+**The tester** (Test on a card, or in the rules panel before saving): the same script and rules over the saved candles,
+7 days to a year. Market fills at the next bar's open; a stop or target fills when the bar's range reaches it (at the open
+if the bar gaps through it; the stop first if both are in one bar); BE / trail move from the next bar on. Sized and counted
+net of every charge with your account's own rates. Results: trades, win rate, net (₹ / $ and %), expectancy and total R,
+profit factor, max drawdown, charges, the worst losing streak, the equity curve, by month, every trade, and the signals not
+taken (and why). Long periods on 1-minute bars use Fyers' data budget.
+
+**Rules to know:** a self-built strategy on your own account under 10 orders a second is allowed by SEBI (every Fyers API
+order is tagged as algo anyway); Live strategies need the daily Fyers login. FundingPips allows third-party EAs only as
+trade / risk managers and bans HFT, tick scalping, hedging and server spamming: get their written OK before switching a
+strategy on for MT5.
+
 ## On a phone
 
 Phones get their own layout, like MT5's app (a desktop browser never does). **More → Desktop layout** switches to the desktop page on that phone; **Settings → Layout** switches back (Automatic / Phone / Desktop).

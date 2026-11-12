@@ -1,5 +1,70 @@
 # Changelog
 
+## v0.43.0 — 12 Nov 2026 — Strategies that trade by themselves, with a tester (roadmap 23, stage a)
+
+Added
+- **Strategies** (roadmap 23 a; owner: "first do strategy for Live, Paper and MT5. The strategy should be able to
+  automatically take trades ... a more user friendly interface for giving risk and other rules"). A new page, **⚡** in the
+  top bar (the phone: More › Strategies). A strategy = a Pine `strategy()` script from the Pine Editor + your rules:
+  - **Signals:** when a bar closes, the script's `strategy.entry` opens a trade, `strategy.close` / `strategy.close_all`
+    closes it, an entry the other way reverses it, and `strategy.exit(stop =, limit =)` can give the stop and the target.
+    The script runs on the server (the alerts' Pine runner), page open or not, on any chart type.
+  - **The rules panel, one screen in plain words** (TradingView's Properties tab isn't used): contracts (up to 10), timeframe,
+    chart type, long / short / both; the accounts it trades (Paper, Live, each MT5 account; Live and MT5 ask for a fresh
+    2FA code when switched on); size by risk %, an amount or lots; **a stop always** (ATR × n, points, the last swing, a
+    line of the script, or the script's own stop, optionally followed as the script moves it, only ever tighter; + ticks);
+    target as a net R multiple, the script's, or none; BE at x R and trail from x R (each trade's own settings); limits:
+    trades a day, open at once, stop for the day after losing X (₹ / $ or R), trading hours (IST), no new trades X min
+    before the square-off / MT5 day-end, skip expiry days; Telegram on each trade.
+  - **The same path as a click:** every order goes through the account's own plan() / place(): its rules and guards, the
+    journal's lockouts, the kill switch, the square-off, MT5's news guard and no-hedging rule, Fyers' / MT5's rate limits.
+    A strategy only touches the trades it opened; switched off or deleted, its open trades stay, with their stops.
+  - Trades are tagged **⚡ <strategy>** on the trades panel, the Trades page and the phone; History records carry it; the
+    journal gets the strategy's name as a set-up tag. Each card shows today's trades and net per account.
+  - **The log:** every signal and what each account did with it (opened, closed, refused and why), live on the page, with
+    a pop-up for each trade.
+  - **Stop all strategies** on the page. A script error switches the strategy off and says why (and on Telegram).
+  - **The tester:** the same script and rules over the saved candles (7 days to a year), fills by the paper rules (market
+    at the next bar's open; stops and targets when the bar's range reaches them, a gap at the open, the stop first if
+    both in one bar), sized and counted net of every charge with the account's own rates: trades, win rate, net (₹ / $
+    and %), expectancy and total R, profit factor, max drawdown, charges, losing streak, the equity curve, by month, the
+    trade list, and the signals not taken (and why). From the rules panel (before saving) or each card.
+- Routes: `GET /api/strategies`, `GET /api/strategies/log`, `POST /api/strategies/save`, `/action`, `/stop_all`, `/test`.
+
+Changed
+- The engines carry a strategy's tag and the trade's own BE / trail from the order to the position and its History record
+  (Paper, Live: the order at Fyers, MT5: the OPEN's metadata) (`plan()` takes `strat` and `tr`).
+- The Pine runner (helper/pine_node.mjs) records a strategy script's orders bar by bar (not PineTS's fills); every
+  `strategy.entry` counts (pyramiding lifted, so a signal after the app's stop closed a trade isn't hidden), and a
+  strategy runs from a fixed first bar, so `bar_index` and its state don't shift by one each time a bar closes.
+- The top bar: 1 px less padding per item to fit the ⚡ at 1500 px with the MT5 price pill (12 px spare now).
+
+Judgement calls (the owner can change them)
+- Bar close only (TradingView's default): the trade goes at market on the first price after the close. Market entries
+  only: limit / stop entries (`strategy.entry(limit =)`) are logged, not traded, in this stage.
+- Switched on: the history isn't traded; it starts with the next bar that closes.
+- The script's inputs are its defaults (change them in the Pine Editor); a strategy keeps its own copy of the script
+  ("take the new version" when the Pine Editor's has changed).
+- A new strategy starts with: ATR 14 × 2 stop, target 2R, BE at 1R, 3 trades a day, 1 open at once, stop for the day
+  after −2R, no new trades 10 min before the close, skip expiry days, 0.5% risk, Telegram on.
+
+Tests
+- New `tests/strategies_test.py` (57, Node + two real paper engines): the definition's checks, 2FA for Live / MT5, history
+  not traded, a closed bar's entry opening a trade on the switched-on account only (tag, script stop, 3R net, 0.5% risk,
+  its own BE), the script's stop followed only tighter, strategy.close, Long only, a reversal, every limit, the kill
+  switch, the stop sources, a script error switching it off, the tester (fills, net = sum, charges = the engine's own,
+  1R target, 1 trade a day, a broken script), the journal's tag.
+- New `tests/strategies_flow.js` (26, browser): the ⚡ (header on one line), the rules panel from a saved script, the
+  tester's results, Save and switch on, a real trade from the mock's live prices on a fresh paper account (⚡ on the panel,
+  the log, closed by strategy.close on the next bar, History's tag), Live asking for the 2FA code (cancelled: not saved),
+  Switch off, the phone.
+- `mt5acct_test.py` (205): a strategy's OPEN carries its tag and BE / trail to the MT5 position. `live_test.py`: the same
+  for an order at the fake Fyers.
+- Re-run: `chartalerts_test` (74), `rr_lock_flow` (36), `mobile_flow` (61), `live_flow` (60), `journal_flow` (43),
+  `mt5acct_flow` (52), `mt5_flow` (44), `chartalerts_flow` (53), `pine_compat_flow` (271), `routes_check.py`.
+- **Not tested on real Fyers / MT5:** a strategy trading the Live account or an MT5 account for real (the order paths are
+  the ones already used by a click, checked against the fakes), and a full trading day of a strategy on real prices.
+
 ## v0.42.1 — 12 Nov 2026 — Roadmap: strategies that trade by themselves, and six more
 
 Changed

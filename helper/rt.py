@@ -11,7 +11,7 @@ import secrets
 import shutil
 import time
 
-from . import chartalerts, journal, mt5, mt5acct, store, users
+from . import chartalerts, journal, mt5, mt5acct, store, strategies, users
 from .feedcheck import FC
 from .feed import Feed
 from .fyers_link import FyersLink
@@ -173,6 +173,10 @@ class UserRT:
             chartalerts.start(self, loop)           # price and technical alerts (v0.38.0), page open or not
         except Exception as ex:
             log.exception("[%s] alerts didn't start: %s", self.label, ex)
+        try:
+            strategies.start(self, loop)            # strategies that trade by themselves (v0.43.0)
+        except Exception as ex:
+            log.exception("[%s] strategies didn't start: %s", self.label, ex)
 
     def set_mode(self, aid: str, mode: str, capital: float | None = None) -> dict:
         """Before v0.33.0 a paper account could be switched to Live. Live is now the Fyers account itself (ensure_live),
@@ -344,6 +348,9 @@ class UserRT:
         out = set()
         for e in self.engines.values():
             out |= set(e.watch_symbols())
+        sb = strategies.BOOKS.get(self.uid)          # a running strategy's contracts: it needs their live prices to trade
+        if sb:
+            out |= set(sb.symbols())
         if self.role == "admin":                   # the order-flow check records the admin's feed (feedcheck.py)
             out |= set(FC.symbols())
         return sorted(out)
@@ -365,6 +372,12 @@ class UserRT:
                 b.on_tick(t)
             except Exception as ex:
                 log.exception("[%s] alerts tick: %s", self.label, ex)
+        sb = strategies.BOOKS.get(self.uid)
+        if sb:
+            try:
+                sb.on_tick(t)
+            except Exception as ex:
+                log.exception("[%s] strategies tick: %s", self.label, ex)
 
     def housekeeping(self):
         for e in list(self.engines.values()):
@@ -375,6 +388,7 @@ class UserRT:
 
     def stop(self):
         chartalerts.drop(self.uid)
+        strategies.drop(self.uid)
         self.feed.stop()
         if self.ostream:
             self.ostream.stop()

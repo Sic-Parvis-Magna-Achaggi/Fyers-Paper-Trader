@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 12 Nov 2026, version **0.42.1** (roadmap: items 23-29, strategies first; 0.42.0: P&L, SL and TP as an amount, % of the account or R, roadmap 22; 0.41.0: the MT5 day-end close by each symbol's sessions, EA 1.23; 0.40.0: the MT5 day-end close, 8 b4; 0.39.1: each MT5 trade's candles kept for its replay, 8 c1b; 0.39.0: MT5 trades in the journal, 8 c1). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 12 Nov 2026, version **0.43.0** (strategies that trade by themselves, roadmap 23 a; 0.42.1: roadmap items 23-29; 0.42.0: P&L, SL and TP as an amount, % of the account or R, roadmap 22; 0.41.0: the MT5 day-end close by each symbol's sessions, EA 1.23; 0.40.0: the MT5 day-end close, 8 b4; 0.39.1: each MT5 trade's candles kept for its replay, 8 c1b; 0.39.0: MT5 trades in the journal, 8 c1). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -106,6 +106,44 @@ automatic pictures off itself (other suites turn them on).
 `indicator_settings_flow.js`'s "at the start of a contract's history it stops asking" failed once in 2 runs on 1 Nov
 (v0.22.0; passed on re-run, 37/37). Same advice. 11 Nov (v0.37.4): 2 fails in 4 runs (200 daily candles loaded, the
 "No older candles" note not yet up in its 4.5 s window); passed on v0.37.3's code too. Worth widening that window.
+
+## Strategies (v0.43.0, roadmap 23 a)
+
+- **`helper/strategies.py`** (one `Book` per user, `BOOKS`; `rt.UserRT.attach` starts it, `on_tick` feeds it, `stop` drops
+  it; `rt.watch_symbols` adds running strategies' contracts so the engines get their prices). `clean()` (the rules; `Bad`
+  for the page), `needs_stepup()` (Live / MT5 switched on). Files `u/<uid>/strategies.json` {strategies, state: {count:
+  {"sid|aid": {day: n}}}}, `strategies_log.jsonl` (also broadcast as `strat_log`; `strats_changed`).
+  - Sessions: one `CA.Sess` per strategy + contract (key "Q|", spec `strategy: True`, tail 60), own `CA.Series` (ticks from
+    `on_tick`), run only when a bar closes: timed charts on the first tick of the next bar (op "bars" -> Node's newBar ->
+    full run) or `bar_end + 2 s` (op "full", `closed_last`); Renko / range / LB / P&F when the series changes (3 s). Only a
+    full run's `orders` count. `done[(sid, sym)]` = the last closed bar acted on; set to the bar before the live one at
+    open (history isn't traded).
+  - `on_bar()`: `read_orders()` (the bar's last market entry, closes, brackets per entry id, other entries) -> per switched-on
+    account: closes (close / close_all / an entry the other way), then `_open_trade()` (`_guard()`: kill switch (`L` / `M`
+    halted), hours, trades a day (state count), open at once, the day's loss from the engine's History (`strat.id`, `day`),
+    expiry, the cut-off before `_times()`'s square-off / MT5 `dayend_for`), `stop_for()` (script / ATR / points / line /
+    swing + buf ticks, the right side), `fetch_margin` in a thread, `e.place(req)` with `strat` {id, name, eid} and `tr`;
+    then the script's stop followed with `modify_pos` (tighter only). `held()` = positions / orders with `strat.id`.
+  - `test()` -> Node op "test" (all bars, `orders`, a plot's values) -> `simulate()` (pure: fills, BE / trail like
+    `Paper._trail_pos` but from the next bar, limits, `charges.size_for_risk` / `net_at` / `breakeven` with the cost
+    account's `row`) -> `stats()`.
+- **`helper/pine_node.mjs`:** `REC` (only during a strategy's run): `_initializeContext` wrapped: `pyramiding` 1e6 in
+  `_propOverrides` (every entry counts) and the context's `strategy.pending_orders` pushes recorded into `ctx.__orders`
+  ({bar, cat, id, dir, from, stop, limit, type}); `ordersOf(s, fromI)` maps them to the shown bars' times (`s.off`).
+  `fullRun` pins a strategy's first bar (`s.anchorT`, moved on only after 2 × bars) so `bar_index` doesn't shift each bar.
+  Op "test" (a throwaway session "T|rid").
+- **Engines:** `Paper.plan` puts `strat` / `tr` (validated, own_be / own_sl) in the plan; `fill` -> `pos["tr"]`,
+  `pos["strat"]`; pending orders and `LiveEngine.place`'s order carry them (`fill(plan)` from `{**o}`); MT5 `place` ->
+  `M.placed[tag]` {tr, strat} -> `_adopt`; `Paper.close` / MT5 `_record` copy `strat`; `pos_view` has it. Journal
+  `upsert_open`: `t.strategy` + set-up tag.
+- **app.py:** `/api/strategies` (summary, the accounts a strategy can trade, log), `/save` (step-up when `needs_stepup`;
+  audit), `/action` (on needs step-up with Live / MT5 on), `/stop_all`, `/test`, `/log`.
+- **Page:** `web/strategies.js` + `.css` (after calerts.js): `PAGES` gets "strategies" before "alerts"; ⚡ `.canav.sgnav` in
+  `#nav` (count `#nbStrats`, after login via `refreshState`); `sgRender` (cards, log), `sgEdit` (the rules panel; script
+  libraries via `pineLibs`; contract search `/api/symbols`; `stepUp` for 428), `sgTest` / `sgResult` / `sgCurve` (SVG);
+  ws `strat_log` / `strats_changed`; the phone's More row. `.sgtag` ⚡ on `#posList` (paper.js), `#pgPos` (pages.js), the
+  phone's Trade tab (mobile.js). The top bar has 12 px spare at 1500 px with the MT5 pill (nav padding 6 px).
+- **Tests:** `tests/strategies_test.py` (57), `tests/strategies_flow.js` (26); `mt5acct_test.py` / `live_test.py` check the tag.
 
 ## P&L units (v0.42.0, roadmap 22)
 
@@ -502,11 +540,10 @@ line of "FundingPips' day's starting balance".
 
 ## Next job
 
-**Next build: roadmap 23, strategies that trade by themselves** (Paper, Live and MT5 in one release; signals from a
-no-code builder and Pine `strategy()` scripts; the app's rules panel; the tester). The proposed design is in the roadmap;
-the owner may still change it. Start with stage (a). Reuse: the alerts engine's server-side Pine runner and conditions
-(`helper/chartalerts.py`, `helper/pine_node.mjs`), each engine's `plan()` / `place()` (sizing, guards, lockouts), the
-journal hooks. Before MT5 is switched on: the owner's written OK from FundingPips.
+**v0.43.0 (12 Nov), strategies (roadmap 23 a):** the owner writes a `strategy()` script in the Pine Editor, makes a strategy
+on the ⚡ page, runs the tester, then switches it on for a paper account for a day on real prices. Live / MT5 only after
+item 1's first manual Live trade and FundingPips' written OK. **Next build: 23 (b), the no-code builder** (the alert
+conditions as long entry / short entry / exit), then (c).
 
 **v0.42.0 (12 Nov):** the owner picks his units (Chart settings › P&L shown as, or U / a click on a figure) and checks one
 MT5 trade's SL / TP labels against its $ figures (e.g. SL −1.00R · −0.48% on a $5,000 account with 1R = $24.02).

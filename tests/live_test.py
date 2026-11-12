@@ -109,9 +109,14 @@ async def main():
     fb = FakeBroker()
     e = make("t1/", fb)
     tick(e, fb, CRUDE, 5600)
-    await buy(e, CRUDE, sl=5580)
+    e.place({"s": CRUDE, "side": 1, "type": "market", "sl": 5580, "mode": "lots", "lots": 1, "product": "MARGIN",
+             "strat": {"id": "st9", "name": "Crude breakout", "eid": "L"}, "tr": {"be_on": False, "be_r": 1.5, "sl_on": False, "sl_r": 2}})
+    await wait(1.0)
     p = pos_of(e, CRUDE)
     check("entry fills from Fyers at the ask", p is not None and p["avg"] == 5601, p and p["avg"])
+    check("v0.43.0: a strategy's order at Fyers: the filled position carries its tag and its own BE / trail",
+          p is not None and p.get("strat") == {"id": "st9", "name": "Crude breakout", "eid": "L"} and p["tr"].get("own_be")
+          and p["tr"]["be_r"] == 1.5, p and (p.get("strat"), p.get("tr")))
     so = fb.open_orders(CRUDE)
     check("a stop-limit sell sits at Fyers from the start", len(so) == 1 and so[0]["type"] == 4 and so[0]["side"] == -1
           and so[0]["stopPrice"] == 5580 and so[0]["limitPrice"] < 5580, so)

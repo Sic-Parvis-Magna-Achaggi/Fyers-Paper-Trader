@@ -563,6 +563,9 @@ class Journal:
                 self.d["trades"][key] = t
             if pos.get("outside"):
                 t["outside"] = True
+            if pos.get("strat") and not t.get("strategy"):     # placed by a strategy (v0.43.0): its name as a set-up tag
+                t["strategy"] = pos["strat"].get("name") or pos["strat"].get("id")
+                t["setup"] = split_tags(list(t.get("setup") or []) + [t["strategy"]])
             if t["closes"]:                              # partly closed already: the closes carry the money
                 t["status"] = "open"
                 t["open_qty"] = pos.get("qty")

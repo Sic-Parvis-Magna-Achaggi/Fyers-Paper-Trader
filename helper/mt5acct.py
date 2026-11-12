@@ -904,6 +904,7 @@ class Mt5Engine(Paper):
                 "init_risk": risk, "r": round(net / risk, 2) if risk else None, "balance_after": self.balance(),
                 "day": self.trading_day(closed), "src": "mt5" if pos.get("outside") else "app", "ticket": pos.get("ticket"),
                 "pid_mt": pos.get("pid_mt"), "deals": [x["t"] for x in ds], "ccy": self.ccy(), "part": bool(part),
+                **({"strat": pos["strat"]} if pos.get("strat") else {}),
                 "comm_est": bool(pos.get("comm_est")), "path": path + ([[closed, pos.get("sl"), pos.get("tp"), "edit"]]
                                                                         if path and (pos.get("sl"), pos.get("tp")) != tuple(path[-1][1:3]) else [])}
 
@@ -1035,6 +1036,8 @@ class Mt5Engine(Paper):
             pos["sl"] = pos["first_sl"] = meta.get("sl") if meta.get("sl") is not None else sl
             pos["tp"] = meta.get("tp") if meta.get("tp") is not None else tp
             pos["tr"] = dict(meta.get("tr") or self.trail)
+            if meta.get("strat"):
+                pos["strat"] = dict(meta["strat"])     # placed by a strategy (v0.43.0)
         self.positions.append(pos)
         if pos["sl"] is not None:
             pos["init_risk"] = round(self.pos_risk(pos), 2)
@@ -1506,7 +1509,8 @@ class Mt5Engine(Paper):
               "price": price, "sl": p.get("sl"), "tp": p.get("tp"), "risk": p.get("risk"), "made": time.time(), "ticket": None}
         self.M["opening"][c["tag"]] = op
         self.M["placed"][c["tag"]] = {"s": p["s"], "side": p["side"], "sl": p.get("sl"), "tp": p.get("tp"),
-                                      "tr": dict(self.trail), "at": time.time(),
+                                      "tr": dict(p.get("tr") or self.trail), "at": time.time(),
+                                      **({"strat": p["strat"]} if p.get("strat") else {}),
                                       "dayend": bool(req["dayend"]) if req.get("dayend") is not None else bool(self.ticket.get("dayend"))}
         self.changed(f"{self._op_text(op)} sent to MT5" + (f", SL {p['sl']:g}" if p.get("sl") is not None else "")
                      + (f", TP {p['tp']:g}" if p.get("tp") is not None else "") + (f", risk {p['risk']:,.2f} {self.ccy()} net"

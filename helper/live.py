@@ -442,7 +442,7 @@ class LiveEngine(Paper):
         if any(o["s"] == p["s"] and o["side"] != side for o in self.orders):
             raise Refused("there's an opposite pending order on this contract - cancel it first")
         o = {k: p.get(k) for k in ("s", "side", "type", "product", "basis", "qty", "lots", "sl", "tp", "ref",
-                                   "ref_price", "delta", "margin", "risk")}
+                                   "ref_price", "delta", "margin", "risk", "strat", "tr")}
         o.update(id=self._id("O"), price=p["entry"], created=now(), live=True, state="sending", filled=0,
                  fill_cost=0.0, tag=new_tag("E"))
         self.L["tags"][o["tag"]] = ["entry", o["id"]]

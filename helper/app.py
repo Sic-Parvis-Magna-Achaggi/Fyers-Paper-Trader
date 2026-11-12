@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 
 from fastapi.staticfiles import StaticFiles
 
-from . import alerts, charges, charges_watch, chartalerts, fyers_link, journal, jreplay, jshots, logbuf, mt5, mt5acct, news, rt, store, symbols, telegram, users, webpush
+from . import alerts, charges, charges_watch, chartalerts, fyers_link, journal, jreplay, jshots, logbuf, mt5, mt5acct, news, rt, store, strategies, symbols, telegram, users, webpush
 from .feedcheck import FC
 from . import candles as candles_store
 from .paper import Refused
@@ -1408,6 +1408,100 @@ async def alerts_action(request: Request):
 
 
 MAX_BULK = 500
+
+
+# ------------------------------------------------------------------ strategies that trade by themselves (v0.43.0, roadmap 23)
+def _strats(request: Request):
+    u, r = _urt(request)
+    return u, r, strategies.book(r)
+
+
+def _strat_accounts(u, r) -> list:
+    """The accounts a strategy can trade: the paper accounts, and for the admin the Live account and each MT5 account."""
+    out = [{"aid": a["id"], "name": a.get("name") or a["id"], "mode": "paper"} for a in r.accounts()
+           if not a.get("archived") and a.get("mode", "paper") == "paper"]
+    if u["role"] == "admin":
+        out.append({"aid": "live", "name": "Live (your Fyers account)", "mode": "live"})
+        for aid in r.mt5_ids():
+            e = r.engines.get(aid)
+            if e is not None and not getattr(e, "none", False):
+                out.append({"aid": aid, "name": "MT5 " + aid[4:], "mode": "mt5", "ccy": e.ccy() if hasattr(e, "ccy") else "USD"})
+    return out
+
+
+@app.get("/api/strategies")
+async def strategies_list(request: Request):
+    u, r, b = _strats(request)
+    return {"ok": True, **b.summary(), "accounts": _strat_accounts(u, r), "log": b.read_log(150), "periods": list(strategies.PERIODS)}
+
+
+@app.post("/api/strategies/save")
+async def strategies_save(request: Request):
+    """{strategy}: a new strategy (no id) or a change. Switching a strategy on for Live or MT5 needs a fresh 2FA code."""
+    _same_origin(request)
+    u, r, b = _strats(request)
+    body = await _body(request)
+    try:
+        s, old, step = b.upsert(body.get("strategy") or {}, u["role"] == "admin")
+    except chartalerts.Bad as e:
+        return _err(e)
+    if step:
+        _stepped(request)
+    if old and old.get("status") == "on":
+        s["status"] = "on"
+    s = b.commit(s, old)
+    if step:
+        users.audit(u["uid"], "strategy saved with Live / MT5 accounts on", s["name"])
+    return {"ok": True, "strategy": b.public(s)}
+
+
+@app.post("/api/strategies/action")
+async def strategies_action(request: Request):
+    """{id, do: on | off | delete}. Switching on a strategy that trades Live or MT5 needs a fresh 2FA code."""
+    _same_origin(request)
+    u, r, b = _strats(request)
+    body = await _body(request)
+    sid, do = str(body.get("id") or ""), str(body.get("do") or "")
+    s = b.get(sid)
+    if s and do == "on" and any(a.get("on") and (a["aid"] == "live" or a["aid"].startswith("mt5-")) for a in s["accounts"]):
+        _stepped(request)
+        users.audit(u["uid"], "strategy switched on (Live / MT5)", s["name"])
+    try:
+        s = b.action(sid, do, u["role"] == "admin")
+    except chartalerts.Bad as e:
+        return _err(e)
+    return {"ok": True, "strategy": b.public(s) if s else None}
+
+
+@app.post("/api/strategies/stop_all")
+async def strategies_stop_all(request: Request):
+    _same_origin(request)
+    u, r, b = _strats(request)
+    return {"ok": True, "stopped": b.stop_all()}
+
+
+@app.post("/api/strategies/test")
+async def strategies_test(request: Request):
+    """{strategy, sym, days, capital}: the strategy tester over the saved candles."""
+    _same_origin(request)
+    u, r, b = _strats(request)
+    body = await _body(request)
+    try:
+        cap = float(body.get("capital") or 0) or None
+        res = await b.test(body.get("strategy") or {}, u["role"] == "admin", body.get("sym"), int(body.get("days") or 60), cap)
+    except chartalerts.Bad as e:
+        return _err(e)
+    except (Refused, PermissionError) as e:
+        return _err(e)
+    except (TypeError, ValueError) as e:
+        return _err(f"bad request: {e}")
+    return {"ok": True, "result": res}
+
+
+@app.get("/api/strategies/log")
+async def strategies_log(request: Request):
+    u, r, b = _strats(request)
+    return {"ok": True, "log": b.read_log(500, request.query_params.get("sid") or "")}
 
 
 @app.post("/api/alerts/limits")

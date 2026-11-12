@@ -582,7 +582,7 @@ function mTrade(){
       <div class="mcard ${live ? "live" : ""}"><div class="mgrid" id="mtAcct"></div></div>
       <div class="mh">Positions (${ps.length})<span class="sp"></span>${ps.length ? `<button class="sm" id="mtBeAll">BE all</button><button class="sm danger" id="mtCloseAll">Close all</button>` : ""}</div>
       ${ps.length ? ps.map(p => `<button class="mpos" data-id="${p.id}">
-          <div class="r1"><span class="side ${p.side > 0 ? "up" : "down"}">${p.side > 0 ? "LONG" : "SHORT"}</span><span class="sym">${esc(short(p.s))}</span><span class="net" data-f="net"></span></div>
+          <div class="r1"><span class="side ${p.side > 0 ? "up" : "down"}">${p.side > 0 ? "LONG" : "SHORT"}</span><span class="sym">${esc(short(p.s))}</span>${p.strat ? `<span class="tag sgtag">⚡ ${esc(p.strat.name)}</span>` : ""}<span class="net" data-f="net"></span></div>
           <div class="r2"><span>${p.lots} lot @ <b>${fmt(p.avg, p.tick)}</b></span><span>LTP <b data-f="ltp"></b></span><span>SL <b data-f="sl"></b></span><span>TP <b data-f="tp"></b></span><span data-f="r"></span></div>
           <div class="fy" data-f="fy"></div></button>`).join("") : `<div class="mempty">No open positions. Open a chart and tap BUY or SELL.</div>`}
       <div class="mh">Pending orders (${os.length})<span class="sp"></span>${os.length ? `<button class="sm" id="mtCancelAll">Cancel all</button>` : ""}</div>

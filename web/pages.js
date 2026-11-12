@@ -110,7 +110,7 @@ function pgPositions(){
       <th class="r pu" title="${esc(pnlTip())}">Net P&L${U[0] === "amt" ? "" : U[0] === "pct" ? " %" : " R"}</th><th class="r pu" title="${esc(pnlTip())}">${U[1] === "none" ? "" : U[1] === "amt" ? "Net P&L" : U[1] === "pct" ? "% of account" : "R"}</th><th class="r">Charges paid</th><th>Opened</th><th>Trail BE</th><th>Trail SL</th><th></th></tr></thead><tbody>` +
       ps.map(p => { const tr = p.tr || {}, tk = p.tick, ts = trailTips(p);
         return `<tr data-id="${p.id}">
-        <td><a href="#" class="psym mono" data-open="${esc(p.basis === "underlying" ? p.ref : p.s)}">${esc(short(p.s))}</a>${p.basis === "underlying" ? `<div class="muted sm">stops on ${esc(short(p.ref))}</div>` : ""}</td>
+        <td><a href="#" class="psym mono" data-open="${esc(p.basis === "underlying" ? p.ref : p.s)}">${esc(short(p.s))}</a>${p.basis === "underlying" ? `<div class="muted sm">stops on ${esc(short(p.ref))}</div>` : ""}${p.strat ? `<div class="sm"><span class="tag sgtag" title="Placed by a strategy">⚡ ${esc(p.strat.name)}</span></div>` : ""}</td>
         <td><b class="${p.side > 0 ? "up" : "down"}">${p.side > 0 ? "LONG" : "SHORT"}</b></td>
         <td class="r mono">${p.lots}</td><td>${esc(p.product)}</td><td class="r mono">${fmt(p.avg, tk)}</td><td class="r mono" data-f="ltp"></td>
         <td class="r mono ed" data-e="sl" title="Click to change">${p.sl != null ? fmt(p.sl, tk) : "add"}${p.trail ? ' <span class="tag">TRAIL</span>' : ""}${p.at_be ? ' <span class="tag">BE</span>' : ""}</td><td class="r mono" data-f="atsl"></td>
