@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.43.5)
+# Paper and live trading: how it works (v0.43.6)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -604,7 +604,7 @@ Phones get their own layout, like MT5's app (a desktop browser never does). **Mo
   bars and zones*) hides every trade's and pending order's bar and the shaded SL / TP zones with their labels. The SL, TP
   and entry lines stay, with their tags on the price scale, and you can still drag them; the new-trade tool (BUY / SELL)
   always shows. 👁 is amber while they're hidden; click it (or H) to bring them back. Saved with the chart, so every device
-  opens the same way. On the phone it's the same 👁 on the chart's top bar (the trade chips above SELL / BUY stay).
+  opens the same way. On the phone it's the first button on the chart's top bar, 👁 (the trade chips above SELL / BUY stay).
 - **Bid and ask** are solid lines, as in MT5: grey for bid, red for ask, with their prices on the scale. A dashed **Last** line marks the last traded price, which is where the live candle closes. Candles are built from trades, so in a thin contract the candle can sit away from bid / ask until the next trade. Stops, targets and fills always use bid / ask.
 - **Chart settings (⚙):**
   - colour and style for every line: bid, ask, last, entry, SL, TP, BE, order and new-trade entry;

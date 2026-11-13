@@ -790,7 +790,8 @@ function tradeVisToggle(){
   const cfg = {...(prefGet("chart", {}) || {})}; cfg.tradeHide = !cfg.tradeHide;
   prefSet("chart", cfg); if(typeof applyChartCfg === "function") applyChartCfg();
   tradeVisApply();
-  toast(cfg.tradeHide ? "Trades' bars and zones hidden (👁 or H shows them)" : "Trades' bars and zones shown");
+  const mob = document.body.classList.contains("mob");
+  toast(cfg.tradeHide ? (mob ? "Trade zones hidden (tap 👁 to show them)" : "Trades' bars and zones hidden (👁 or H shows them)") : (mob ? "Trade zones shown" : "Trades' bars and zones shown"));
 }
 function posBars(){
   const host = $("#posbars");

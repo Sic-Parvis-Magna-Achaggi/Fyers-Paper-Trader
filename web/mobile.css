@@ -12,6 +12,7 @@ body.mob section.chartwrap{position:fixed;left:0;right:0;top:var(--mo);bottom:ca
 body.mob .charthead{flex-wrap:nowrap;overflow-x:auto;gap:4px;padding:4px 6px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 body.mob .charthead::-webkit-scrollbar{display:none}
 body.mob .charthead > *{flex:0 0 auto}
+body.mob #bTradeVis{order:-1}   /* v0.43.5 follow-up: 👁 first on the phone's chart bar, always in view (the bar scrolls sideways) */
 body.mob .charthead button{min-height:34px;padding:4px 10px}
 body.mob #tf{flex-wrap:nowrap}
 body.mob #cTimer{font-size:11px}

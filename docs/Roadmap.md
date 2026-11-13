@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 13 Nov 2026 (v0.43.5: 👁 / H hides the trades' bars and zones; v0.43.4: with the unit button on, only its unit is shown; v0.43.3: ✕ alone at the left of the position bar; v0.43.2: the unit button on the phone; v0.43.1: a unit button on the position bar, item 22; v0.43.0: strategies, item 23 stage a). This is the one task list for the project.
+Updated 13 Nov 2026 (v0.43.6: 👁 first on the phone's chart bar; v0.43.5: 👁 / H hides the trades' bars and zones; v0.43.4: with the unit button on, only its unit is shown; v0.43.3: ✕ alone at the left of the position bar; v0.43.2: the unit button on the phone; v0.43.1: a unit button on the position bar, item 22; v0.43.0: strategies, item 23 stage a). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -579,7 +579,8 @@ fallback"):** item 8 is built now, stage by stage. Stage a shipped in **v0.34.0*
     - [x] **Hide the trade's bar and zones on the chart** *(v0.43.5)* (owner, 13 Nov: "an option to hide the trade preview -
       somewhere on the chart. Sometimes, it is difficult to see the candles"): 👁 on the chart's top bar, H, or Chart settings
       hides each trade's and order's bar and the shaded SL / TP zones with their labels; the lines and their price tags stay,
-      the new-trade tool always shows; saved with the chart; the phone too.
+      the new-trade tool always shows; saved with the chart; the phone too (v0.43.6: 👁 moved to the start of the phone's
+      chart bar, which scrolls sideways; it was off the screen).
     - Claude's calls (the owner can change them): default Amount · R (what the position bar already showed); 1R = the net
       risk at the first stop, so a trailed stop shows the R it locks in ("SL +0.50R"); a pending order's 1R = what its stop
       would lose; the open total in R = the sum of each trade's R (as the journal adds R); a trade with no stop shows the
@@ -716,6 +717,7 @@ marked before relying on it.
 
 ## Done
 
+- [x] **v0.43.6** (13 Nov): 👁 first on the phone's chart bar (it was past the screen's edge).
 - [x] **v0.43.5** (13 Nov): 👁 on the chart's top bar (or H, or Chart settings) hides the trades' bars and shaded zones so the
   candles show; the SL / TP / entry lines stay.
 - [x] **v0.43.4** (13 Nov): with the unit button on, only the button's unit is shown (no second unit, so no amount unless the

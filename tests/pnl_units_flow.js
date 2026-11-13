@@ -229,8 +229,8 @@ let br;
     await m.tap("#mChips .mpu"); await m.waitForTimeout(400); await m.tap("#mChips .mpu"); await m.waitForTimeout(600);
     ok(await m.evaluate(u => pnlUnits()[0] === u, u0), "phone: three taps: back where it started"); }
   await m.screenshot({ path: SHOT + "units_07b_phone_button.png" });
-  { await m.evaluate(() => document.querySelector("#bTradeVis").scrollIntoView({inline: "center"}));
-    ok(await m.isVisible("#bTradeVis"), "phone: 👁 is on the chart's top bar");
+  { const r = await m.evaluate(() => { const b = document.querySelector("#bTradeVis").getBoundingClientRect(), h = document.querySelector(".charthead").getBoundingClientRect(); return {l: b.left, r: b.right, hl: h.left, hr: h.right}; });
+    ok(await m.isVisible("#bTradeVis") && r.l >= r.hl && r.r <= r.hr, `phone: 👁 is on the chart's top bar, in view without scrolling the bar (${Math.round(r.l)}-${Math.round(r.r)} px)`);
     await m.tap("#bTradeVis"); await m.waitForTimeout(600);
     ok(await m.evaluate(() => (P.zoneHits || []).length === 0 && document.querySelector("#bTradeVis").classList.contains("off")), "phone: a tap hides the zones");
     await m.screenshot({ path: SHOT + "units_07c_phone_hidden.png" });

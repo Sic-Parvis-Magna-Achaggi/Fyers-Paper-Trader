@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.43.6 — 13 Nov 2026 — 👁 in view on the phone
+
+Fixed
+- **The phone: 👁 was off the screen** (owner: "This will also work on mobile?"). The phone's chart bar scrolls sideways
+  and v0.43.5 put 👁 near its right end, past ▦ and ▢, so it could only be reached by swiping the bar. It's now the first
+  button on the phone's chart bar, always in view. The message after a tap no longer mentions the H key on the phone.
+
+Tests
+- `tests/pnl_units_flow.js` (72): the phone's 👁 is inside the chart bar's visible width without scrolling (v0.43.5's test
+  scrolled to it first, so it didn't catch this). Re-run: `mobile_flow`.
+
 ## v0.43.5 — 13 Nov 2026 — Hide the trade's bar and zones on the chart
 
 Added
