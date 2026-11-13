@@ -17,6 +17,7 @@ ROADMAP (THE TASK LIST)
 
 HOW TO DELIVER CODE
 - Give me a zip of the WHOLE repo (never a changes-only zip), with the top folder "Fyers-Paper-Trader/".
+- Ensure every release works on desktop, tablet and mobile screens. Test everything before delivering the zip file.
 - I upload it with tools/github_upload.html ("Release to GitHub", opened from disk): one commit through GitHub's API, only changed files sent, no 100-file limit, nothing deleted unless I tick it. It uses my fine-grained token (resource owner: the Sic-Parvis-Magna-Achaggi organization; only this repo; Contents: Read and write), typed only into that page. Setup steps: README › Releasing a new version. Dragging into github.com is the fallback (at most 100 files a drag, so two drags).
 - If a release deletes a file, say so: the tool only deletes when I tick its box.
 - EVERY zip comes with: (1) changelog text I can paste, (2) a one-line commit message, (3) the new version number. Keep VERSION and CHANGELOG.md updated in the repo.

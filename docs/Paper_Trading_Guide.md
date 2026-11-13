@@ -748,7 +748,10 @@ The button after the timeframes (it shows the current type, e.g. **Candles**, **
 
 ### Box and range sizes on the chart bar (v0.44.0)
 
-On Renko, range bars and Point & Figure, buttons next to the chart type pick the size, like the timeframe buttons:
+On Renko, range bars and Point & Figure, buttons next to the chart type pick the size, like the timeframe buttons. On
+these chart types the **timeframe is a dropdown** (v0.44.1): its ▾ names the timeframe in use (e.g. **15m ▾**) and opens the
+usual list. The bars are still built from that timeframe's candles (range 10 on 15m differs from range 10 on 1m), so pick
+it there; the room on the bar goes to your pinned sizes. Other chart types show the timeframe buttons as before.
 
 - **ATR** (the ATR of the candles loaded; the button shows what it makes, e.g. **ATR 7**) and your pinned sizes in
   points. A click redraws the bars at that size. Sizes are saved per underlying (CRUDEOIL's don't follow you to NIFTY;
@@ -761,7 +764,8 @@ On Renko, range bars and Point & Figure, buttons next to the chart type pick the
   message says so. A typed size is pinned.
 - Until you use one, a contract shows ATR plus the round sizes nearest half, one and two ATRs; from the first one you
   use, the buttons stay put (they don't move as the ATR changes).
-- When the bar has no room, ▾ shows the size in use (e.g. **ATR 7 ▾** or **10 ▾**).
+- As many pinned sizes as the bar has room for are shown, in order (a 1,060 px chart bar, e.g. a 1680 px window with the
+  trade panel open, shows five); when the one in use doesn't fit, ▾ shows it (e.g. **ATR 7 ▾** or **10 ▾**).
 - **Very small sizes:** Renko and range bars keep to the latest **20,000 bars**. A size far below the candles' moves (a
   1-point range on gold's 1m candles) would make hundreds of thousands; the chart then starts at a later candle, and ▾
   and the chart type menu say from when. Scrolling back doesn't load older candles at that size. A bigger size or a

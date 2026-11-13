@@ -142,11 +142,16 @@ section.chartwrap{display:grid;grid-template-rows:auto minmax(0,1fr) auto;min-wi
 .charthead{display:flex;align-items:center;gap:6px;padding:6px 10px 6px 14px;border-bottom:1px solid var(--line);flex-wrap:nowrap;min-width:0;overflow:hidden;overflow:clip}
 .charthead .sym,.charthead .ltp{flex:0 0 auto}
 .charthead .spacer{flex:1 1 0;min-width:0}
-.charthead .tf{flex:0 1 auto;min-width:0;flex-wrap:wrap;height:26px;overflow:hidden;overflow:clip}   /* buttons that don't fit drop out whole; ▾ has them all */
+.charthead .tf{flex:0 0 auto;min-width:0;flex-wrap:wrap;height:26px;overflow:hidden;overflow:clip}   /* buttons that don't fit drop out whole (barFit works out how many); ▾ has them all */
 .charthead .meta{flex:0 100 auto}   /* the bid / ask text gives way first (they're on the price scale anyway) */
 .charthead .fsb,.charthead .tfmore{flex:0 0 auto}
-.charthead .szb{flex:0 2 auto}   /* v0.44.0: Renko / range / P&F sizes, like the timeframes (they drop out whole, before the timeframes; ▾ has them all) */
-.charthead .tf button.cut{visibility:hidden}   /* (a button only partly in view) */
+.charthead .szb{flex:0 0 auto}   /* v0.44.0: Renko / range / P&F sizes, like the timeframes (they drop out whole; ▾ has them all) */
+/* v0.44.1 (owner: "reduce the timeframe selection to dropdown when showing these chart types ... That way, you can keep
+   both"): on Renko, range and P&F the timeframe buttons give way to their ▾, which names the one in use ("15m ▾") and
+   opens the same list; the room goes to the size buttons. Other chart types are unchanged. */
+.charthead.sized #tf{display:none}
+.charthead.sized #bTf{color:var(--text)}
+.charthead .tf button.cut{display:none}   /* (a button that doesn't fit: v0.44.1, its room goes to the rest) */
 .tfmore b{font-weight:500;color:var(--text);margin-right:3px}
 #szPick#szPick{width:270px}
 #szPick .h + .grid{margin-top:6px}
@@ -1481,21 +1486,21 @@ function dispApply(old, nd, from, oldAt = 0){
   while(k < nd.length && k < oldLen && same(o(k), nd[k])) k++;
   DISP = nd;
   if(k >= nd.length && k >= oldLen) return;
-  let r = k;                                                 // bars k..r-1: still there (same time), changed
+  let r = k;                                                 // bars k..r-1: still there (same time)
   while(r < oldLen && r < nd.length && o(r).time === nd[r].time) r++;
   const gone = oldLen - r;                                   // bars from r on that went
-  if((r - k) + gone + (nd.length - r) > 40){ dispSet(); indAfter(0, gone, true); return; }
+  // v0.44.1: of the bars still there, only those that changed are redrawn (a tick changes the live candle's first bar -
+  // its volume - and its last; not the ones between)
+  const changed = []; for(let i = k; i < r; i++) if(!same(o(i), nd[i])) changed.push(i);
+  if(changed.length + gone + (nd.length - r) > 40){ dispSet(); indAfter(0, gone, true); return; }
   const lastEx = gone ? r - 1 : oldLen - 1;                  // the chart's last bar once those are off
   DISP_BATCH = {p: undefined};
   try{
     if(gone){ series.pop(gone); if(volSeries) volSeries.pop(gone); }
-    for(let i = k; i < nd.length; i++){
-      const b = nd[i], hist = i < r && i < lastEx;
-      volData[b.time] = b.vol || 0;
-      series.update(serOne(i), hist);
-      if(volSeries) volSeries.update(volPoint(b), hist);
-    }
-    if(INDS.length) indAfter(k, gone, false, r, lastEx);
+    const put = (i, hist) => { const b = nd[i]; volData[b.time] = b.vol || 0; series.update(serOne(i), hist); if(volSeries) volSeries.update(volPoint(b), hist); };
+    for(const i of changed) put(i, i < lastEx);
+    for(let i = r; i < nd.length; i++) put(i, false);
+    if(INDS.length) indAfter(k, gone, false, r, lastEx, changed);
   }catch(e){ DISP_BATCH = null; dispSet(); indData(); return; }
   const p = DISP_BATCH.p; DISP_BATCH = null;
   if(p !== undefined){ legendHover = !!(p && p.time != null && p.point); legendFill(legendHover ? p : null); }
@@ -1503,7 +1508,7 @@ function dispApply(old, nd, from, oldAt = 0){
 /* the indicators after dispApply: bars from k on changed (r, lastEx as there), `gone` bars went; whole = the chart was
    drawn whole. Volume follows bar for bar (or whole); Pine scripts run again in full only when bars went (bars that are
    still there, changed, are the live part their next run takes in). */
-function indAfter(k, gone, whole, r, lastEx){
+function indAfter(k, gone, whole, r, lastEx, changed){
   for(const x of INDS){
     if(x.cfg.type === "pftools"){ pfToolsCalc(x); continue; }
     if(x.cfg.type === "pine"){ if(!x.cfg.hidden){ if(gone) pineRun(x); else pineTick(x); } continue; }
@@ -1512,7 +1517,11 @@ function indAfter(k, gone, whole, r, lastEx){
       const n = Math.max(1, +x.cfg.maLen || 20);
       try{
         if(gone){ x.hist.pop(gone); if(x.ma){ const m = r + gone - Math.max(r, n - 1); if(m > 0) x.ma.pop(m); } }
-        for(let i = k; i < DISP.length; i++) volAt(x, i, i < r && i < lastEx);
+        // the changed bars (and the average over the next n bars after each), then the new ones
+        const ch = new Set(changed || []), todo = new Set(ch);
+        if(x.ma) for(const c of ch) for(let i = c + 1; i < Math.min(r, c + n); i++) todo.add(i);
+        for(const i of [...todo].sort((a, b) => a - b)) volAt(x, i, i < lastEx, !ch.has(i));
+        for(let i = r; i < DISP.length; i++) volAt(x, i, false);
       }catch(e){ volSet(x); }
     }
   }
@@ -1751,9 +1760,9 @@ function indTick(bar){
 /* Volume on one bar and its average, from DISP (v0.44.0: not the series' whole data each tick, which grew with the bars);
    hist: a bar before the last one, changed in place */
 function volTick(r, bar){ let i = DISP.length - 1; while(i >= 0 && DISP[i].time !== bar.time) i--; if(i >= 0) volAt(r, i, false); }
-function volAt(r, i, hist){
+function volAt(r, i, hist, maOnly){
   const bar = DISP[i];
-  r.hist.update({time:bar.time, value:volData[bar.time] || 0, color:volColorR(r, bar)}, hist);
+  if(!maOnly) r.hist.update({time:bar.time, value:volData[bar.time] || 0, color:volColorR(r, bar)}, hist);
   if(!r.ma) return;
   const n = Math.max(1, +r.cfg.maLen || 20);
   if(i < n - 1) return;
@@ -2105,7 +2114,9 @@ function szButtons(){
   const box = $("#ctSz"), more = $("#bSz"); if(!box) return;
   const sp = szSpec();
   box.classList.toggle("hide", !sp); more.classList.toggle("hide", !sp);
-  if(!sp){ if(box.innerHTML) box.innerHTML = ""; $("#szPick").classList.add("hide"); return; }
+  box.parentElement.classList.toggle("sized", !!sp);
+  $("#bTf").title = sp ? `Timeframe: the ${{renko: "bricks", range: "bars", pf: "columns"}[sp.t]} are built from these candles` : "All timeframes and custom";
+  if(!sp){ if(box.innerHTML) box.innerHTML = ""; box.dataset.h = ""; $("#szPick").classList.add("hide"); return; }   // (v0.44.1: the copy too, or they never came back)
   const now = szNow(), favs = szFavs(), list = favs.some(v => szEq(v, now)) ? favs : szSort([...favs, now]);
   const tick = szTick(), c = ctCfg();
   const html = list.map(v => `<button data-sz="${v}" class="${szEq(v, now) ? "on" : ""}" title="${v === "atr"
@@ -2120,25 +2131,58 @@ function szButtons(){
    out (or isn't pinned), its ▾ says which it is: "5m ▾", "ATR 7 ▾" - as TradingView's toolbar */
 function barFit(){
   cancelAnimationFrame(barFit.f);
-  barFit.f = requestAnimationFrame(() => {
-    for(const [box, more, label] of [[$("#tf"), $("#bTf"), () => tfLabel(tf)], [$("#ctSz"), $("#bSz"), () => { const v = szNow(); return v === "atr" ? "ATR" + (CT_SIZE ? " " + szLabel(CT_SIZE) : "") : szLabel(v); }]]){
-      if(!box || !more) continue;
-      for(let pass = 0; pass < 3; pass++){           // (the ▾'s own label takes room from the buttons: check again)
-        const R = box.getBoundingClientRect();
-        let onShown = false;
-        for(const b of box.querySelectorAll("button")){
-          const r = b.getBoundingClientRect(), fits = r.top - R.top < 4 && r.right <= R.right + 1 && r.width > 0;
-          b.classList.toggle("cut", !fits);
-          if(fits && b.classList.contains("on")) onShown = true;
-        }
-        const want = box.classList.contains("hide") || onShown ? "▾" : `<b>${esc(label())}</b>▾`;
-        if(more.innerHTML === want) break;
-        more.innerHTML = want;
-      }
-    }
-  });
+  barFit.f = requestAnimationFrame(barFitNow);
 }
-if(typeof ResizeObserver !== "undefined") new ResizeObserver(() => barFit()).observe(document.querySelector(".charthead"));
+/* v0.44.1: worked out, not left to the browser's squeezing (with the bar's other buttons already wider than the bar, it
+   kept squeezing whichever group was left, so pins went missing and gaps showed): the room = the bar less every other
+   item as it stands (the bid / ask text and the layout's name give way first, as before), then as many pins as fit, in
+   order. On Renko / range / P&F the timeframe buttons are hidden and their ▾ names the timeframe. The phone's bar scrolls
+   sideways: every button stays there. */
+function barFitNow(){
+  const head = document.querySelector(".charthead"); if(!head) return;
+  const G = [[$("#tf"), $("#bTf"), () => tfLabel(tf)],
+    [$("#ctSz"), $("#bSz"), () => { const v = szNow(); return v === "atr" ? "ATR" + (CT_SIZE ? " " + szLabel(CT_SIZE) : "") : szLabel(v); }]];
+  const tag = (more, l) => { const w = l ? `<b>${esc(l)}</b>▾` : "▾"; if(more.innerHTML !== w) more.innerHTML = w; };
+  const vis = el => !!el && !el.classList.contains("hide") && getComputedStyle(el).display !== "none";
+  for(const [box] of G) if(box) box.querySelectorAll("button.cut").forEach(x => x.classList.remove("cut"));
+  for(const [box, more, label] of G){             // a group not shown (the timeframes on Renko...): its ▾ names it
+    if(box && more && !vis(box) && box.id === "tf") tag(more, label());
+  }
+  const shownG = G.filter(([box, more]) => vis(box) && more);
+  if(document.body.classList.contains("mob")){ for(const [, more] of shownG) tag(more, null); return; }
+  if(!shownG.length) return;
+  for(const [, more] of shownG) tag(more, null);
+  const cs = getComputedStyle(head), gap = parseFloat(cs.columnGap) || 0;
+  const W = head.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+  const kids = [...head.children].filter(vis);
+  const groups = new Set(shownG.map(g => g[0]));
+  // the rest at their smallest: the filler (it grows) counts nothing; what gives way first (the bid / ask text, the
+  // layout's name: flex-shrink > 1) at its narrowest; the rest as they are
+  const rest = kids.filter(k => !groups.has(k));
+  const giving = rest.filter(k => parseFloat(getComputedStyle(k).flexShrink) > 1);
+  for(const k of giving) k.style.flexBasis = "0px";
+  const others = rest.reduce((t, k) => t + (parseFloat(getComputedStyle(k).flexGrow) > 0 ? 0 : k.getBoundingClientRect().width), 0);
+  for(const k of giving) k.style.flexBasis = "";
+  let room = W - others - gap * (kids.length - 1) - 1;
+  for(const [box, more, label] of shownG){
+    const bs = [...box.querySelectorAll("button")], ig = parseFloat(getComputedStyle(box).columnGap) || 0;
+    const ws = bs.map(x => x.getBoundingClientRect().width), on = bs.findIndex(x => x.classList.contains("on"));
+    const howMany = r => { let k = 0, t = 0; while(k < ws.length && t + ws[k] + (k ? ig : 0) <= r){ t += ws[k] + (k ? ig : 0); k++; } return [k, t]; };
+    let [k, used] = howMany(room);
+    if(on >= k){                                   // the one in use doesn't fit: its ▾ names it (a little wider)
+      for(const k of giving) k.style.flexBasis = "0px";
+      const w0 = more.getBoundingClientRect().width; tag(more, label());
+      room -= more.getBoundingClientRect().width - w0;
+      for(const k of giving) k.style.flexBasis = "";
+      [k, used] = howMany(room);
+    }
+    bs.forEach((x, i) => x.classList.toggle("cut", i >= k));
+    room -= used;
+  }
+}
+// (the bar, and each group: a group changes width when the bar's other contents do - the contract's name, the bid / ask
+// text - and its buttons must be checked again then, v0.44.1)
+if(typeof ResizeObserver !== "undefined"){ const ro = new ResizeObserver(() => barFit()); for(const el of [document.querySelector(".charthead"), $("#tf"), $("#ctSz")]) ro.observe(el); }
 function szWire(b, v, use){                    // click: use it · right-click / long-press: pin or unpin (as the timeframes)
   b.onclick = use;
   b.oncontextmenu = e => { e.preventDefault(); szPin(v); };

@@ -25,6 +25,7 @@ let br;
   await pg.evaluate(async () => {
     const c = {...(prefGet("ctype", {}) || {})}; for(const k of ["szFav", "rangeSize", "renkoBox", "pfBox"]) delete c[k];
     Object.assign(c, {type: "candles", rangeMode: "atr", renkoMode: "atr", pfMode: "atr", rangeAtr: 14, renkoAtr: 14}); prefSet("ctype", c);
+    ctSave({type: "candles"});                                              // (drawn as candles whatever the last run left)
     if(!document.body.classList.contains("nopanel")) togglePanel();      // (room on the chart bar; the cramped bar is checked below)
     await pineLoad(true);
     const old = PINE.scripts.find(s => s.name === "T SMA");
@@ -92,6 +93,37 @@ let br;
   await pg.dispatchEvent(`#ctSz button[data-sz="${unpinned.v}"]`, "contextmenu");      // (it may have dropped out of view: 7 pins)
   await pg.waitForTimeout(300);
   ok(await pg.evaluate(v => !document.querySelector(`#ctSz button[data-sz="${v}"]`) && !((ctCfg().szFav || {})["range|" + ctKey()] || []).includes(+v), unpinned.v), "right-click on a bar button unpins it");
+  // v0.44.1 (owner: the timeframes as a dropdown on these types, so the pinned sizes show like the timeframes)
+  const dd = await pg.evaluate(async () => {
+    tfFav = ["1m", "2m", "5m", "15m", "1h", "4h"]; prefSet("tfs", tfFav); tfButtons();
+    const c = prefGet("ctype", {}) || {}; prefSet("ctype", {...c, szFav: {...(c.szFav || {}), ["range|" + ctKey()]: ["atr", 2, 3, 5, 10]}}); szButtons();
+    await new Promise(r => setTimeout(r, 400));
+    const chips = [...document.querySelectorAll("#ctSz button")];
+    return {tfHidden: getComputedStyle($("#tf")).display === "none", tfMore: $("#bTf").textContent, tfNow: tf,
+      shown: chips.filter(b => !b.classList.contains("cut") && b.offsetParent).map(b => b.dataset.sz), all: chips.map(b => b.dataset.sz),
+      bar: Math.round(document.querySelector(".charthead").getBoundingClientRect().width)};
+  });
+  ok(dd.tfHidden && dd.tfMore === dd.tfNow + "▾", `on range bars the timeframes are a dropdown naming the one in use ("${dd.tfMore}")`);
+  ok(dd.shown.length === dd.all.length, `every pinned size is on the bar (${dd.shown.join(" ")} of ${dd.all.join(" ")}, a ${dd.bar} px bar)`);
+  await pg.click("#bTf"); await pg.waitForSelector("#tfPick:not(.hide)");
+  const pk = await pg.evaluate(() => { const p = $("#tfPick").getBoundingClientRect(), b = $("#bTf").getBoundingClientRect(); return {dx: Math.round(p.left - b.left), dy: Math.round(p.top - b.bottom)}; });
+  ok(Math.abs(pk.dx) < 2 && pk.dy >= 0 && pk.dy < 10, `its list opens under it (${JSON.stringify(pk)})`);
+  await pg.click('#tfPick .grid button:text-is("1h")');
+  await pg.waitForFunction(() => tf === "1h" && ctType() === "range" && curPlan && DISP.length > 3, null, { timeout: 15000 })
+    .then(() => ok(true, "a timeframe picked there: range bars built from 1h candles")).catch(() => ok(false, "a timeframe picked from the dropdown"));
+  const say1h = await pg.evaluate(async () => { await new Promise(r => setTimeout(r, 300)); return $("#bTf").textContent; });
+  ok(say1h === "1h▾", `…and the dropdown says 1h ("${say1h}")`);
+  // candles: the timeframe buttons as before; back to range: the size buttons back (v0.44.0 left them empty)
+  await pg.evaluate(() => ctSave({type: "candles"}));
+  await pg.waitForTimeout(500);
+  ok(await pg.evaluate(() => getComputedStyle($("#tf")).display !== "none" && $("#ctSz").classList.contains("hide") && $("#bTf").textContent === "▾"
+    && [...document.querySelectorAll("#tf button")].filter(b => !b.classList.contains("cut")).length >= 5), "candles: the timeframe buttons as before");
+  await pg.evaluate(() => ctSave({type: "range"}));
+  await pg.waitForTimeout(500);
+  ok(await pg.evaluate(() => document.querySelectorAll("#ctSz button").length === 5 && [...document.querySelectorAll("#ctSz button")].every(b => !b.classList.contains("cut"))),
+    "candles -> range again: the size buttons are back (v0.44.0 left the bar empty)");
+  await pg.evaluate(() => setTf("5m"));
+  await pg.waitForFunction(() => curPlan && curPlan.res === "5" && DISP.length > 3, null, { timeout: 15000 }).catch(() => {});
   // the pins are per contract and type: Renko has its own
   await pg.evaluate(() => ctSave({type: "renko"}));
   await pg.waitForFunction(() => ctType() === "renko" && DISP.length > 3, null, { timeout: 15000 });
@@ -187,7 +219,7 @@ let br;
   const cramp = await pg.evaluate(async () => { await new Promise(r => setTimeout(r, 300));
     const half = [...document.querySelectorAll(".charthead .tf button")].filter(b => { if(b.classList.contains("cut")) return false; const r = b.getBoundingClientRect(), R = b.parentElement.getBoundingClientRect(); return r.right > R.right + 1; });
     const tfOn = $("#tf button.on"), szOn = $("#ctSz button.on");
-    const shown = b => b && !b.classList.contains("cut");
+    const shown = b => b && !b.classList.contains("cut") && b.offsetParent !== null;
     return {half: half.length, tf: shown(tfOn) ? "button" : $("#bTf").textContent, sz: shown(szOn) ? "button" : $("#bSz").textContent, tfNow: tf}; });
   ok(cramp.half === 0, "no button is shown cut in half");
   ok(cramp.tf === "button" || cramp.tf === cramp.tfNow + "▾", `the timeframe in use is always in view (${cramp.tf})`);
@@ -223,5 +255,33 @@ let br;
   await ph.waitForFunction(v => CT_SIZE === +v, v, { timeout: 10000 }).then(() => ok(true, `phone: a size from the sheet is used (${v})`)).catch(() => ok(false, "phone: a size from the sheet is used"));
   await ph.evaluate(() => ctSave({type: "candles"}));
   ok(perrs.length === 0, "phone: no script errors" + (perrs.length ? ": " + perrs.slice(0, 3).join(" / ") : ""));
+  // ---- tablets (v0.44.1): iPad portrait / landscape get the desktop page with touch, a small Android tablet the phone's
+  for(const dev of ["iPad (gen 7)", "iPad (gen 7) landscape", "Galaxy Tab S9"]){
+    const tb = await (await br.newContext({ ...devices[dev] })).newPage();
+    const terrs = []; tb.on("pageerror", e => terrs.push(e.message));
+    await tb.goto("http://localhost:8766/"); await LOGIN(tb);
+    await tb.waitForFunction(() => typeof ctSave === "function" && cur && typeof LAY !== "undefined" && LAY.ready && !LAY.applying, null, { timeout: 60000 });
+    await tb.evaluate(async () => { await openBySymbol("MCX:CRUDEOIL26NOVFUT"); ctSave({type: "range"}); });
+    await tb.waitForFunction(() => DISP.length > 3 && !$("#ctSz").classList.contains("hide"), null, { timeout: 20000 });
+    await tb.waitForTimeout(600);
+    const st = await tb.evaluate(() => { const mob = document.body.classList.contains("mob"), on = $("#ctSz button.on");
+      const half = [...document.querySelectorAll("#ctSz button")].filter(b => !b.classList.contains("cut") && b.offsetParent && b.getBoundingClientRect().right > b.parentElement.getBoundingClientRect().right + 1).length;
+      return {mob, tfHidden: getComputedStyle($("#tf")).display === "none", tfMore: $("#bTf").textContent, tfNow: tf, half,
+        sizeInView: (on && !on.classList.contains("cut") && on.offsetParent) ? "button" : $("#bSz").textContent}; });
+    ok(st.tfHidden && st.tfMore === st.tfNow + "▾", `${dev} (${st.mob ? "phone" : "desktop"} page): the timeframe is a dropdown ("${st.tfMore}")`);
+    ok(st.half === 0 && (st.sizeInView === "button" || /.▾$/.test(st.sizeInView)), `${dev}: the size in use is in view (${st.sizeInView}), nothing cut in half`);
+    await tb.evaluate(() => $("#bSz").scrollIntoView({inline: "center"}));
+    await tb.tap("#bSz"); await tb.waitForTimeout(300);
+    const pk = await tb.evaluate(() => { const r = $("#szPick").getBoundingClientRect(); return {shown: !$("#szPick").classList.contains("hide"), l: Math.round(r.left), r: Math.round(r.right), b: Math.round(r.bottom), w: innerWidth, h: innerHeight}; });
+    ok(pk.shown && pk.l >= 0 && pk.r <= pk.w && pk.b <= pk.h, `${dev}: the size menu opens on the screen (${JSON.stringify(pk)})`);
+    const v = await tb.evaluate(() => [...document.querySelectorAll("#szGrid button")].map(b => b.dataset.sz).find(x => x !== "atr" && +x !== CT_SIZE));
+    await tb.tap(`#szGrid button[data-sz="${v}"]`);
+    await tb.waitForFunction(v => CT_SIZE === +v, v, { timeout: 10000 }).then(() => ok(true, `${dev}: a size tapped in the menu is used (${v})`)).catch(() => ok(false, `${dev}: a size tapped in the menu is used`));
+    await tb.screenshot({ path: SHOT + `sizes_${dev.replace(/\W+/g, "_")}.png` });
+    await tb.evaluate(() => ctSave({type: "candles"}));
+    await tb.waitForTimeout(700);
+    ok(terrs.length === 0, `${dev}: no script errors` + (terrs.length ? ": " + terrs.slice(0, 3).join(" / ") : ""));
+    await tb.context().close();
+  }
   await br.close();
 })().catch(async e => { ok(false, e.message.split("\n")[0]); if(br) await br.close(); });

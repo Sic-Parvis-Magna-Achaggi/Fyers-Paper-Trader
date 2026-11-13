@@ -1,6 +1,7 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 13 Nov 2026, version **0.44.0** (Renko / range / P&F sizes on the chart bar like the timeframes, roadmap 30; size
+Updated 13 Nov 2026, version **0.44.1** (on Renko / range / P&F the timeframe is a dropdown so the pinned sizes show;
+0.44.0: Renko / range / P&F sizes on the chart bar like the timeframes, roadmap 30; size
 changes no longer hang: incremental chart-type builders, a 20,000-bar cap, Fixed starting from the chart's size; the
 timeframe / chart type / size menus under their buttons; 0.43.6: 👁 first on the phone's chart bar; 0.43.5: 👁 / H hides the trades' bars and zones; 0.43.4: with the unit button on, only its unit is shown; 0.43.3: ✕ moved to the far left of the position bar, the phone's unit button to the right end of the chips; 0.43.2: the unit button on the phone; 0.43.1: a unit button on the position bar, roadmap 22; 0.43.0: strategies that trade by themselves, roadmap 23 a; 0.42.1: roadmap items 23-29; 0.42.0: P&L, SL and TP as an amount, % of the account or R, roadmap 22; 0.41.0: the MT5 day-end close by each symbol's sessions, EA 1.23; 0.40.0: the MT5 day-end close, 8 b4; 0.39.1: each MT5 trade's candles kept for its replay, 8 c1b; 0.39.0: MT5 trades in the journal, 8 c1). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
@@ -152,11 +153,21 @@ Asked 13 Nov (screenshot: XAUUSD 1m, Range 10; "preset and custom ranges for ran
 - **`popUnder(pick, btn)`:** `#tfPick`, `#ctPick`, `#szPick` open under their buttons, clamped inside section.chartwrap
   (not on the phone). **`barFit()`** (rAF; a ResizeObserver on `.charthead`, `tfButtons`, `szButtons`): buttons that don't
   fit get `.cut` (hidden whole); when the one in use isn't shown, ▾ reads "5m ▾" / "ATR 7 ▾".
+- **v0.44.1:** `szButtons()` toggles `.charthead.sized` (CSS hides `#tf`; `#bTf` then names the timeframe, its title says
+  the bars are built from it) and clears `#ctSz.dataset.h` with the buttons (v0.44.0 left the bar empty after candles ->
+  range). `barFit()` -> rAF -> **`barFitNow()`**: un-cuts every button, measures the room = the bar's inner width − the other
+  visible items (the filler: 0; items with flex-shrink > 1, `#cMeta` and `#bLay`, at their narrowest via flexBasis 0px) −
+  gaps; then per shown group as many buttons as fit, in order (`.cut` = display:none, so a dropped button takes no room); the
+  ▾ names the one in use when it's cut (its extra width taken off the room first). `.charthead .tf` / `.szb` are flex 0 0
+  auto (barFitNow decides, the browser doesn't squeeze). Phone: nothing cut (its bar scrolls). ResizeObserver on the bar,
+  `#tf`, `#ctSz`. `dispApply` redraws only the bars that changed among those still there (`changed`), then appends;
+  `indAfter(..., changed)` updates Volume on those and its average on the n bars after each (`volAt(r, i, hist, maOnly)`);
+  > 40 operations -> `dispSet()`.
 - `histMore()` doesn't load older candles while CT_START > 0 (they'd be cut off again); says so.
 - **`ctKey()`** = the row's `u`, else `cur.u` (v0.44.0: `openSymbol` keeps `u` in `cur`), else the contract. At boot the chart
   draws from IndexedDB before `/api/symbol` answers; that callback redraws (`CT_SIZE = null; showRaw()`) if the key changed
   (old prefs without `cur.u`). Before, a fixed Renko / range size was missed on every reload and 1 tick was drawn.
-- **Tests:** `tests/chartsizes_flow.js` (51). Not seen on the real server: MT5's tick rate on XAUUSD with small sizes.
+- **Tests:** `tests/chartsizes_flow.js` (73, desktop, tablets, phone). Not seen on the real server: MT5's tick rate on XAUUSD with small sizes.
 
 ## Strategies (v0.43.0, roadmap 23 a)
 
@@ -608,6 +619,7 @@ line of "FundingPips' day's starting balance".
 
 ## Next job
 
+**v0.44.1 (13 Nov):** on a Range chart all the pinned sizes on the bar and the timeframe as "15m ▾"; then as for v0.44.0:
 **v0.44.0 (13 Nov):** the owner opens XAUUSD 1m on MT5, Range: picks sizes from the new buttons (ATR, 5, 10...), types one
 in ▾ (e.g. 2, 20t), and checks a change is quick and the page doesn't freeze while ticks come in; the timeframe ▾ opens
 under itself. Then back to roadmap 23 (b).

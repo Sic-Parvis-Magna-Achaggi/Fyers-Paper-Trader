@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.44.1 — 13 Nov 2026 — Pinned sizes show on the bar: the timeframe becomes a dropdown on Renko, range and P&F
+
+Changed
+- **On Renko, range bars and P&F the timeframe is a dropdown** (owner: "We can reduce the timeframe selection to dropdown
+  when showing these chart types. User can still select timeframes, but from a dropdown. That way, you can keep both").
+  The timeframe buttons give way to their ▾, which names the one in use (**15m ▾**) and opens the same list; the bars are
+  still built from that timeframe's candles. The room goes to your pinned sizes. Candles, Heikin-Ashi, line break and the
+  other types are unchanged.
+
+Fixed
+- **Pinned sizes weren't on the bar** (owner, with a screenshot: ★ on 2.5 and 5, only ATR and 2 shown: "What is the point of
+  favouriting it if you are not going to show like the timeframes?"). The sizes gave way first whenever the bar was full.
+  With the timeframes in their dropdown, a 1,060 px chart bar (1680 px window, trade panel open) shows ATR 2 2.5 5 10.
+- **Switching to candles and back to range left the size buttons empty** (v0.44.0): clearing them didn't clear their saved
+  copy, so they weren't drawn again until something about them changed.
+- **How many buttons fit is worked out, not left to the browser.** With the bar's other buttons already wider than the bar,
+  the browser kept squeezing the button group, so buttons went missing and a gap showed where a hidden one sat. Now the
+  room is measured (the bid / ask text and the layout's name still give way first, as before) and as many pinned buttons
+  as fit are shown, in order; one that doesn't fit takes no room. On candle charts this sometimes shows one more timeframe
+  than before.
+- **Live ticks on small Renko / range sizes were slow again** (about 220 ms a tick with 12,000 bars): every bar from the live
+  candle's first one was redrawn, as its volume changes each tick. Only the bars that changed are redrawn now (about 20-40
+  ms), and the Volume pane's average only where it moved.
+
+Docs
+- `docs/Project_Instructions.md`: every release works on desktop, tablet and mobile screens (the owner's project
+  instructions, 13 Nov).
+
+Tests
+- `tests/chartsizes_flow.js` (73): the timeframe dropdown on range bars (names the timeframe, opens under itself, a timeframe
+  picked there keeps range bars), every pinned size on a 1,240 px bar, candles unchanged, candles -> range -> size buttons
+  back, the clean start drawn as candles; tablets: iPad portrait and landscape (the desktop page by touch) and a Galaxy Tab S9
+  (the phone's page): the dropdown, the size in use in view, the size menu on the screen, a tapped size used.
+
 ## v0.44.0 — 13 Nov 2026 — Renko and range sizes on the chart bar; quicker size changes; menus under their buttons
 
 Added
