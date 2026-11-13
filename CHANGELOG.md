@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.44.2 — 13 Nov 2026 — The tool holds the stop and target you place; only the entry follows the market
+
+Fixed
+- **A stop or target you placed on the long / short tool moved with the live price** (owner: "When I drag and place a stop
+  at a level, the live price can move, but the SL has to hold at that level until I move it. It is creating wrong entries
+  with stop losses where I don't want it to be"). The tool kept the SL and TP as a *distance* from the entry, so every tick
+  carried them along, and PLACE sent wherever they had drifted to. Now a stop or target you drag, type in the ticket or
+  step with − / + on the phone is **held at that price** until you move it again. The entry keeps following the market
+  (or stays where you dragged it) and the **lots are worked out again** from the new entry-to-stop distance, so the money
+  at risk stays as set. The order goes out with exactly those prices.
+  - Until you place them, SL and TP still follow the entry at their usual distances (as before).
+  - A target you haven't placed stays at your RR, so it moves as the entry-to-stop distance changes.
+  - A fresh tool (BUY / SELL pressed again, the other side, another contract, the option's stop basis switched, or after
+    PLACE) starts with nothing held.
+  - **If the price goes past a held stop or target**, PLACE is off and the tool says so ("The price has gone past your stop
+    at 5,623: move the stop to place this trade"); move it and PLACE is back.
+  - **RR lock:** the line you moved last holds and the other keeps the RR: drag the stop and the target follows the RR as
+    the entry moves; drag the target and the stop does. Unlocking leaves both where they are. With the lock, the target is
+    now placed exactly where you dropped it (before, the server's target could land a tick off it); when your rules or the
+    charges stop the stop short of that target, the stop stays there and the target goes back to the RR from it (with the
+    message, as before).
+
+Tests
+- `tests/held_levels_flow.js` (34, new): desktop drags (held through price moves up and down and 6 s of ticks; the lots
+  follow the distance; PLACE sends those exact prices; past a held stop: PLACE off with the message, a typed stop clears
+  it; a fresh tool follows again; BUY -> SELL forgets them; the RR lock both ways; unlocking), an iPad (the desktop page by
+  touch, typed prices) and a Pixel 7 (the order sheet's − / +).
+- `tests/rr_lock_flow.js`: follows the new names (the held target, the plan's lock answer); 36/36.
+- `tests/pnl_units_flow.js`: also clears the unit button at the start (a crashed earlier run left it on, failing 18 checks).
+
 ## v0.44.1 — 13 Nov 2026 — Pinned sizes show on the bar: the timeframe becomes a dropdown on Renko, range and P&F
 
 Changed

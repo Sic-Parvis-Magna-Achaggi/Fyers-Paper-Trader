@@ -56,12 +56,14 @@ let br;
   const chartBox = await pg.$eval("#chart", e => { const r = e.getBoundingClientRect(); return {x: r.x, y: r.y, w: r.width, h: r.height}; });
   const X = chartBox.x + chartBox.w * 0.42;
   const yOf = price => pg.evaluate(p => series.priceToCoordinate(p), price);
-  const settle = async () => { await pg.waitForTimeout(400); await pg.waitForFunction(() => P.T.lockTp == null && P.plan && !P.dragging, null, { timeout: 10000 }); await pg.waitForTimeout(1600); };
+  // (v0.44.2: a placed target is held as P.T.tpAt; with the lock, the plan carries the stop worked out for it once the server answers)
+  const settle = async () => { await pg.waitForTimeout(400); await pg.waitForFunction(() => P.plan && !P.dragging
+    && !(P.T.rr_lock && P.T.lockBy === "tp" && P.T.tpAt != null && P.plan.lockTp !== P.T.tpAt), null, { timeout: 10000 }); await pg.waitForTimeout(1600); };
   async function drag(fromPrice, toPrice){       // aimed at a price on every step: the price scale rescales while a line moves
     await pg.mouse.move(X, chartBox.y + await yOf(fromPrice)); await pg.mouse.down();
     for(let k = 1; k <= 8; k++) await pg.mouse.move(X, chartBox.y + await yOf(fromPrice + (toPrice - fromPrice) * k / 8));
     for(let k = 0; k < 3; k++) await pg.mouse.move(X, chartBox.y + await yOf(toPrice));
-    const at = await pg.evaluate(() => P.T.lockTp);   // the price scale rescales while a line moves: where it really is
+    const at = await pg.evaluate(() => P.T.tpAt);     // the price scale rescales while a line moves: where it really is
     await pg.mouse.up();
     return at;
   }

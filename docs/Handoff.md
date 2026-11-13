@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 13 Nov 2026, version **0.44.1** (on Renko / range / P&F the timeframe is a dropdown so the pinned sizes show;
+Updated 13 Nov 2026, version **0.44.2** (the long / short tool holds a stop / target you place, only the entry follows the market; 0.44.1: on Renko / range / P&F the timeframe is a dropdown so the pinned sizes show;
 0.44.0: Renko / range / P&F sizes on the chart bar like the timeframes, roadmap 30; size
 changes no longer hang: incremental chart-type builders, a 20,000-bar cap, Fixed starting from the chart's size; the
 timeframe / chart type / size menus under their buttons; 0.43.6: 👁 first on the phone's chart bar; 0.43.5: 👁 / H hides the trades' bars and zones; 0.43.4: with the unit button on, only its unit is shown; 0.43.3: ✕ moved to the far left of the position bar, the phone's unit button to the right end of the chips; 0.43.2: the unit button on the phone; 0.43.1: a unit button on the position bar, roadmap 22; 0.43.0: strategies that trade by themselves, roadmap 23 a; 0.42.1: roadmap items 23-29; 0.42.0: P&L, SL and TP as an amount, % of the account or R, roadmap 22; 0.41.0: the MT5 day-end close by each symbol's sessions, EA 1.23; 0.40.0: the MT5 day-end close, 8 b4; 0.39.1: each MT5 trade's candles kept for its replay, 8 c1b; 0.39.0: MT5 trades in the journal, 8 c1). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
@@ -55,7 +55,10 @@ and roadmap updated too.
   real. `dispTimeAt(t)` maps a real time to the bar it falls in (Renko etc.).
 - `web/vendor/lightweight-charts.standalone.production.js` is 5.2.1 with one patch (the histogram hover guard,
   noted at the top of the file): keep it if the library is ever updated, unless the new version fixes the bug.
-- `web/index.html` (main page and chart), `web/paper.js` (ticket, chart tool, positions), `web/pages.js` (Trades,
+- `web/index.html` (main page and chart), `web/paper.js` (ticket, chart tool, positions; v0.44.2: the tool's placed
+  levels are prices, `P.T.slAt` / `P.T.tpAt`, set by `slPlace()` / `tpPlace()`, cleared by `unplace()`; `slNow()` / `tpNow()`
+  return them, else the distance from the entry; RR lock: `P.T.lockBy` says which line holds, a held target is sent as
+  `lock_tp` on every preview and the server's `plan()` keeps it as the target unless `lock_note`), `web/pages.js` (Trades,
   History, Book, Account, Log pages), `web/pine.js` + `web/pine_worker.js` (Pine Script, PineTS), `web/indset.js`
   (every indicator's settings dialog: Inputs / Style / Visibility; `indVisOn()` decides visibility by timeframe),
   `web/pine_libs/` (Pine libraries built into the app: `TradingView_ta.pine`), `web/security.js`

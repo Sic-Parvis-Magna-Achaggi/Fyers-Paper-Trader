@@ -361,11 +361,14 @@ class Paper:
         req: s, side (1/-1), type (market/limit/stop), price, sl, tp, tp_r, basis (self/underlying),
              mode (pct/amt/lots), risk_pct, risk_amt, lots, product
              lock_tp: the RR lock (LiveTrader 1.24): the target was moved to this price, so the stop is worked out
-             (with tp_r) to keep that net RR at the lots it sizes to; the plan then has that sl and its tp from tp_r"""
+             (with tp_r) to keep that net RR at the lots it sizes to; the plan then has that sl and lock_tp as its tp
+             (its tp from tp_r when the rules or the charges stop the stop short: lock_note)"""
         lock_note = None
         if req.get("lock_tp") not in (None, "", 0) and not req.get("_inner"):
             sl_l, lock_note = self._lock_sl(req)
-            req = {**req, "sl": sl_l, "lock_tp": None}
+            # v0.44.2: the target stays exactly where it was put (the stop was found for it); when the rules or the charges
+            # stopped the stop short (lock_note), the target goes back to tp_r from that stop
+            req = {**req, "sl": sl_l, "lock_tp": None, "tp": None if lock_note else float(req["lock_tp"])}
         self.roll_day()
         R = self.rules
         row0 = self.row(req["s"])

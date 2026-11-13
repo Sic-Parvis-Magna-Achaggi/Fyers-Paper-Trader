@@ -5,7 +5,8 @@ const P = {
   snap: null, plan: null, armed: false, pvTimer: null, pvSeq: 0, drags: [], posDrags: [], toolDrags: [], dragging: null,
   posLines: [], toolLines: null, prim: null, primSeries: null, hits: [], posKey: "", ordKey: "", tab: "pos",
   T: {s: null, side: 1, follow: true, price: null, slDist: null, tpDist: null, tp_r: 2, tpMode: "r", basis: "self", ref: null,
-      mode: "pct", risk_pct: 1, risk_amt: 250, lots: 1, product: "INTRADAY", rr_lock: false, lockTp: null}
+      mode: "pct", risk_pct: 1, risk_amt: 250, lots: 1, product: "INTRADAY", rr_lock: false,
+      slAt: null, tpAt: null, lockBy: "sl"}
 };
 /* money in the account's currency: ₹ for paper and Fyers, the MT5 account's own ($) on the MT5 side (v0.36.0) */
 const CUR = () => { const c = P.snap && P.snap.ccy; return !c || c === "INR" ? "₹" : c === "USD" ? "$" : c === "EUR" ? "€" : c === "GBP" ? "£" : c + " "; };
@@ -150,8 +151,12 @@ function renderAcct(){
 
 /* ---------------------------------------------------------------- ticket (the long / short tool)
    The entry follows the market until you drag it (or type a price). Dragged below the market a buy becomes a
-   limit, above it a stop (the other way round for a sell). SL and TP keep their distance from the entry, so the
-   whole tool moves with the price. Distances you set are remembered per underlying. */
+   limit, above it a stop (the other way round for a sell). Until you place them, SL and TP keep their distance from
+   the entry, so the whole tool moves with the price. v0.44.2 (owner: "When I drag and place a stop at a level, the live
+   price can move, but the SL has to hold at that level until I move it"): a stop or target you drag or type is held at
+   that price (T.slAt / T.tpAt) while the entry moves; the lots are worked out again from the new entry-to-stop distance.
+   With the RR lock on, the line you moved last holds (T.lockBy) and the other keeps the RR. Stop distances you set are
+   remembered per underlying (for the next tool). */
 function tkRow(){ return sym[P.T.s] || null; }
 function basisSym(){ return P.T.basis === "underlying" ? P.T.ref : P.T.s; }
 function ltpOf(s){ return last[s] ? last[s].ltp : null; }
@@ -168,18 +173,48 @@ function orderType(){
   return P.T.side * (P.T.price - l) <= 0 ? "limit" : "stop";
 }
 function basisNow(){ return P.T.basis === "underlying" ? (ltpOf(P.T.ref) || (P.plan && P.plan.ref_price)) : entryNow(); }
-function slNow(){ const b = basisNow(); return b == null || P.T.slDist == null ? null : roundTick(b - udir() * P.T.slDist, tickOf(basisSym())); }
+function slNow(){
+  const T = P.T, b = basisNow(), tk = tickOf(basisSym());
+  if(lockOn() && T.lockBy === "tp" && T.tpAt != null){           // RR lock, the target placed: the stop keeps the RR
+    if(b == null) return null;
+    const p = P.plan;                                             // the server's exact stop for this target and entry
+    if(p && p.sl != null && p.lockTp === T.tpAt && p.entry === entryNow()) return p.sl;
+    return roundTick(b - udir() * Math.max(tk, Math.abs(T.tpAt - b) / rrK()), tk);
+  }
+  if(T.slAt != null) return T.slAt;                               // placed: held at that price
+  return b == null || T.slDist == null ? null : roundTick(b - udir() * T.slDist, tk);
+}
+function slGap(){ const b = basisNow(), s = slNow(); return b == null || s == null ? null : Math.abs(b - s); }
 function tpNow(){
-  const b = basisNow(); if(b == null) return null;
-  if(P.T.lockTp != null) return roundTick(P.T.lockTp, tickOf(basisSym()));          // RR lock: the target you're moving
-  if(P.T.tpMode === "dist" && P.T.tpDist != null) return roundTick(b + udir() * P.T.tpDist, tickOf(basisSym()));
+  const T = P.T, b = basisNow(); if(b == null) return null;
+  const tk = tickOf(basisSym()), g = slGap();
+  if(T.tpAt != null) return T.tpAt;                               // placed: held at that price
+  if(T.tpMode === "dist" && T.tpDist != null) return roundTick(b + udir() * T.tpDist, tk);
   // the target as an R: the last exact figure from the server, scaled to the stop now (so it follows a stop being dragged)
-  if(P.plan && P.plan.tp != null && P.plan.entry != null && P.plan.sl != null && P.T.slDist != null && P.T.basis === "self")
-    return roundTick(b + udir() * P.T.slDist * rrK(), tickOf(basisSym()));
-  if(P.plan && P.plan.tp != null && P.plan.entry != null) return roundTick(b + udir() * Math.abs(P.plan.tp - P.plan.entry), tickOf(basisSym()));
-  if(P.T.slDist != null) return roundTick(b + udir() * P.T.slDist * (P.T.tp_r || 2), tickOf(basisSym()));   // until the server has worked it out
+  if(P.plan && P.plan.tp != null && P.plan.entry != null && P.plan.sl != null && g != null && T.basis === "self")
+    return roundTick(b + udir() * g * rrK(), tk);
+  if(P.plan && P.plan.tp != null && P.plan.entry != null) return roundTick(b + udir() * Math.abs(P.plan.tp - P.plan.entry), tk);
+  if(g != null) return roundTick(b + udir() * g * (T.tp_r || 2), tk);   // until the server has worked it out
   return null;
 }
+/* a stop / target placed by a drag, a typed price or the phone's - / + (v0.44.2): held there until moved again */
+function slPlace(v){
+  const T = P.T, b = basisNow(), tk = tickOf(basisSym());
+  if(b == null || v == null || udir() * (b - v) <= 0) return false;
+  T.slAt = roundTick(v, tk); T.slDist = Math.max(tk, roundTick(Math.abs(b - T.slAt), tk));
+  if(lockOn()){ T.lockBy = "sl"; T.tpAt = null; T.tpMode = "r"; }   // RR lock: the target keeps the RR from this stop
+  return true;
+}
+function tpPlace(v){
+  const T = P.T, b = basisNow(), tk = tickOf(basisSym());
+  if(b == null || v == null || udir() * (v - b) <= 0) return false;
+  T.tpAt = roundTick(v, tk);
+  if(lockOn()){ T.lockBy = "tp"; T.slAt = null; T.tpMode = "r"; }   // RR lock: the stop keeps the RR to this target
+  else { T.tpMode = "dist"; T.tpDist = Math.abs(T.tpAt - b); }
+  return true;
+}
+/* back to a fresh tool: SL and TP follow the entry at their distances (a new contract, side or stop basis, or the tool closed) */
+function unplace(){ Object.assign(P.T, {slAt: null, tpAt: null, lockBy: "sl"}); }
 /* RR lock (LiveTrader 1.24): the tool keeps its net RR (Target R) whether you move the stop (the target follows) or the
    target (the stop follows). The exact stop comes from the server (lock_tp: net of every charge, at the lots it sizes to). */
 function lockOn(){ return !!P.T.rr_lock && P.T.basis === "self"; }
@@ -188,22 +223,21 @@ function rrK(){            // target distance / stop distance in price, from the
   if(p && p.tp != null && p.sl != null && p.entry != null && Math.abs(p.entry - p.sl) > 0) return Math.abs(p.tp - p.entry) / Math.abs(p.entry - p.sl);
   return P.T.tp_r || 2;
 }
-function lockTo(tp){       // the target was moved to tp with the lock on: the stop follows (exactly once the server answers)
-  const b = basisNow(), T = P.T; if(b == null || tp == null) return;
-  if(udir() * (tp - b) <= 0) return toast("The target must be on the profit side of the entry");
-  T.tpMode = "r"; T.lockTp = tp;
-  T.slDist = Math.max(tickOf(basisSym()), roundTick(Math.abs(tp - b) / rrK(), tickOf(basisSym())));
-}
 function setRR(v, quiet){
   v = num(String(v).replace(/^\s*RR\s*/i, "").replace(",", "."));
   if(v == null || v < 0.1 || v > 50){ if(!quiet) toast("RR: a number from 0.1 to 50"); renderTicket(); return; }
-  P.T.tp_r = Math.round(v * 10) / 10; P.T.tpMode = "r"; P.T.lockTp = null;
+  P.T.tp_r = Math.round(v * 10) / 10; P.T.tpMode = "r"; P.T.tpAt = null; P.T.lockBy = "sl";
   saveTicketDefaults(); renderTicket(); toolRedraw(); preview(0);
 }
 function rrLockToggle(){
   if(P.T.basis === "underlying") return toast("The RR lock works on the contract's own price, not the underlying's");
-  P.T.rr_lock = !P.T.rr_lock;
-  if(P.T.rr_lock){ P.T.tpMode = "r"; P.T.lockTp = null; }       // locking puts the target at the RR now
+  const T = P.T;
+  if(T.rr_lock && T.lockBy === "tp" && T.tpAt != null){            // unlocking: the stop the lock put there stays there
+    const s = slNow(); if(s != null) T.slAt = s;
+    const b = basisNow(); T.tpMode = "dist"; if(b != null) T.tpDist = Math.abs(T.tpAt - b);
+  }
+  T.rr_lock = !T.rr_lock; T.lockBy = "sl";
+  if(T.rr_lock){ T.tpMode = "r"; T.tpAt = null; }               // locking puts the target at the RR now (a placed stop stays)
   setStatus(P.T.rr_lock ? `RR locked at ${P.T.tp_r}: moving the stop moves the target, moving the target moves the stop` : "RR unlocked");
   saveTicketDefaults(); renderTicket(); toolRedraw(); preview(0);
 }
@@ -245,7 +279,7 @@ function paperOnSymbol(row){
   if(P.T.basis === "underlying" && row.s === P.T.ref){ renderTicket(); toolRedraw(); return; }
   if(P.T.s !== row.s){
     P.T.s = row.s; P.T.basis = "self"; P.T.ref = null; P.T.follow = true; P.T.price = null; P.plan = null;
-    P.T.slDist = null; P.T.tpMode = "r";
+    P.T.slDist = null; P.T.tpMode = "r"; unplace();
     if(P.armed) setDefaults();
   }
   renderTicket(); drawLines(); preview();
@@ -256,12 +290,12 @@ function arm(side){
   if(P.armed && P.T.side === side){ disarm(); return; }
   const flip = P.armed && P.T.side !== side;
   P.T.side = side; P.armed = true;
-  if(flip){ P.T.follow = true; P.T.price = null; }
+  if(flip){ P.T.follow = true; P.T.price = null; unplace(); }
   if(P.T.slDist == null || flip){ if(!setDefaults()) P.needDefaults = true; }
   P.plan = null;
   renderTicket(); drawLines(); preview(0); sendWant();
 }
-function disarm(){ P.armed = false; P.plan = null; P.T.follow = true; P.T.price = null; renderTicket(); drawLines(); sendWant(); }
+function disarm(){ P.armed = false; P.plan = null; P.T.follow = true; P.T.price = null; unplace(); renderTicket(); drawLines(); sendWant(); }
 function wantSymbols(){ return P.armed ? [P.T.s, P.T.ref].filter(Boolean) : []; }
 function toMarket(){ P.T.follow = true; P.T.price = null; renderTicket(); toolRedraw(); preview(0); }
 
@@ -340,10 +374,10 @@ function breakdown(c, title){
 }
 function ticketBody(){
   const T = P.T, typ = orderType();
-  const useR = T.tpMode === "r" && T.basis === "self";
+  const lockTp = lockOn() && T.lockBy === "tp" && T.tpAt != null ? T.tpAt : null;   // RR lock, target placed: the server finds the stop
+  const useR = T.basis === "self" && (lockTp != null || (T.tpMode === "r" && T.tpAt == null));
   return {s: T.s, side: T.side, type: typ, price: typ === "market" ? null : T.price, sl: slNow(),
-    tp: useR ? null : tpNow(), tp_r: useR ? T.tp_r : null,
-    lock_tp: useR && lockOn() && T.lockTp != null ? T.lockTp : null,
+    tp: useR ? null : tpNow(), tp_r: useR ? T.tp_r : null, lock_tp: lockTp,
     basis: T.basis, mode: T.mode, risk_pct: T.risk_pct, risk_amt: T.risk_amt, lots: T.lots, product: T.product};
 }
 function preview(delay = 250){
@@ -353,15 +387,22 @@ function preview(delay = 250){
     if(P.needDefaults && setDefaults()) P.needDefaults = false;
     const my = ++P.pvSeq, body = ticketBody();
     const j = await api("/api/paper/preview", {body});
-    if(body.lock_tp != null && P.T.lockTp === body.lock_tp){             // the RR lock's answer: the exact stop for that target
-      P.T.lockTp = null;
-      if(j.ok && j.plan.sl != null && j.plan.entry != null){
-        P.T.slDist = Math.max(tickOf(basisSym()), roundTick(Math.abs(j.plan.entry - j.plan.sl), tickOf(basisSym()))); rememberDist();
-        if(j.plan.lock_note) toast(j.plan.lock_note); }
-      else if(!j.ok) toast(j.error);
-    }
     if(my !== P.pvSeq || !P.armed) return;
+    if(body.lock_tp != null && j.ok){                                    // the RR lock's answer: the exact stop for that target
+      j.plan.lockTp = body.lock_tp;
+      if(j.plan.sl != null && j.plan.entry != null){ P.T.slDist = Math.max(tickOf(basisSym()), roundTick(Math.abs(j.plan.entry - j.plan.sl), tickOf(basisSym())));
+        if(P.lockNoteFor !== body.lock_tp){ P.lockNoteFor = body.lock_tp; rememberDist(); if(j.plan.lock_note) toast(j.plan.lock_note); }
+        // the rules (or the charges) stopped the stop short of that target: the stop stays there and the target goes back to
+        // the RR from it, as the message says
+        if(j.plan.lock_note && P.T.tpAt === body.lock_tp){ Object.assign(P.T, {slAt: j.plan.sl, tpAt: null, lockBy: "sl", tpMode: "r"}); j.plan.lockTp = null; } }
+    }
     if(!j.ok){
+      // a held stop / target the price has now gone past (v0.44.2): say which, so it's clear what to move
+      const T = P.T, tk = tickOf(basisSym());
+      if(/stop loss is on the wrong side/.test(j.error || "") && T.slAt != null)
+        j.error = `The price has gone past your stop at ${fmt(T.slAt, tk)}: move the stop to place this trade`;
+      else if(/target is on the wrong side/.test(j.error || "") && T.tpAt != null)
+        j.error = `The price has gone past your target at ${fmt(T.tpAt, tk)}: move the target to place this trade`;
       P.plan = null; P.pvErr = j.error;
       const waiting = /^waiting/.test(j.error || "");
       $("#tkPv").innerHTML = `<div class="note ${waiting ? "" : "down"}">${esc(j.error)}</div>`;
@@ -408,7 +449,7 @@ function wireTicket(){
   });
   document.querySelectorAll("#tkMode button").forEach(b => b.onclick = () => { P.T.mode = b.dataset.v; renderTicket(); preview(); saveTicketDefaults(); });
   document.querySelectorAll("#tkBasis button").forEach(b => b.onclick = () => {
-    P.T.basis = b.dataset.v; P.T.slDist = null; P.plan = null;
+    P.T.basis = b.dataset.v; P.T.slDist = null; P.plan = null; unplace();
     P.T.tpMode = P.T.basis === "underlying" ? "dist" : "r";
     if(!setDefaults()) P.needDefaults = true;
     renderTicket(); drawLines(); preview(0);
@@ -416,14 +457,13 @@ function wireTicket(){
   const on = (id, fn) => { $(id).addEventListener("change", fn); $(id).addEventListener("keydown", e => { if(e.key === "Enter") fn(); }); };
   on("#tkPrice", () => { const v = num($("#tkPrice").value); if(v){ P.T.follow = false; P.T.price = roundTick(v, tickOf(P.T.s)); } else toMarket(); toolRedraw(); preview(); });
   on("#tkSl", () => { const v = num($("#tkSl").value), b = basisNow(); if(v == null || b == null) return;
-    if(udir() * (b - v) <= 0) return toast("The stop must be on the losing side of the entry");
-    P.T.slDist = roundTick(Math.abs(b - v), tickOf(basisSym())); rememberDist(); toolRedraw(); preview(); });
+    if(!slPlace(v)){ renderTicket(); return toast("The stop must be on the losing side of the entry"); }
+    rememberDist(); renderTicket(); toolRedraw(); preview(0); });
   on("#tkTp", () => { const v = num($("#tkTp").value), b = basisNow();
-    if(v == null){ P.T.tpMode = "r"; P.T.lockTp = null; }
-    else if(lockOn()){ lockTo(roundTick(v, tickOf(basisSym()))); toolRedraw(); return preview(0); }   // RR locked: the stop follows
-    else if(b != null){ P.T.tpMode = "dist"; P.T.tpDist = Math.abs(v - b); }
-    toolRedraw(); preview(); });
-  on("#tkTpR", () => { const v = num($("#tkTpR").value); if(v){ P.T.tp_r = v; P.T.tpMode = "r"; P.T.lockTp = null; saveTicketDefaults(); renderLock(); preview(); } });
+    if(v == null){ P.T.tpMode = "r"; P.T.tpAt = null; P.T.lockBy = "sl"; }                // empty: back to the RR
+    else if(b != null && !tpPlace(v)){ renderTicket(); return toast("The target must be on the profit side of the entry"); }
+    renderTicket(); toolRedraw(); preview(0); });
+  on("#tkTpR", () => { const v = num($("#tkTpR").value); if(v){ P.T.tp_r = v; P.T.tpMode = "r"; P.T.tpAt = null; P.T.lockBy = "sl"; saveTicketDefaults(); renderLock(); preview(); } });
   // the RR box and padlock under the chart's BUY / SELL (LiveTrader 1.24), and the ticket's padlock
   const rr = $("#cRR");
   if(rr){ rr.addEventListener("keydown", e => { e.stopPropagation(); if(e.key === "Enter"){ setRR(rr.value); rr.blur(); } if(e.key === "Escape"){ rr.blur(); renderLock(); } });
@@ -758,11 +798,9 @@ function toolRedraw(rebuild){
     set(L.be, onOwn && pl && pl.be != null ? pl.be : null, "BE+costs");
     if(onOwn) P.toolDrags.push({line: L.entry, price: () => entryNow(), tick: tickOf(T.s), move: v => { T.follow = false; T.price = v; }, drop: () => { renderTicket(); preview(0); }});
     if(onBasis && sl != null) P.toolDrags.push({line: L.sl, price: () => slNow(), tick: tickOf(bs),
-      move: v => { const b = basisNow(); if(udir() * (b - v) > 0) T.slDist = Math.max(tickOf(bs), roundTick(Math.abs(b - v), tickOf(bs))); }, drop: () => { rememberDist(); renderTicket(); preview(0); }});
+      move: v => { slPlace(v); }, drop: () => { rememberDist(); renderTicket(); preview(0); }});   // held at that price (v0.44.2)
     if(onBasis && tp != null) P.toolDrags.push({line: L.tp, price: () => tpNow(), tick: tickOf(bs),
-      move: v => { const b = basisNow(); if(udir() * (v - b) <= 0) return;
-        if(lockOn()) lockTo(v);                                       // RR locked: the stop follows the target
-        else { T.tpMode = "dist"; T.tpDist = roundTick(Math.abs(v - b), tickOf(bs)); } },
+      move: v => { tpPlace(v); },                                     // RR locked: the stop follows the target
       drop: () => { renderTicket(); preview(0); }});
   }
   P.drags = [...(P.posDrags || []), ...P.toolDrags, ...(P.alertDrags || [])];   // (alerts: calerts.js)

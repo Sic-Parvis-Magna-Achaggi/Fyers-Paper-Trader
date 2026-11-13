@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 13 Nov 2026 (v0.44.1: the timeframe as a dropdown on Renko / range / P&F so the pinned sizes show, item 30; v0.44.0: Renko / range / P&F sizes on the chart bar like the timeframes, item 30; size changes no longer hang; menus under their buttons; v0.43.6: 👁 first on the phone's chart bar; v0.43.5: 👁 / H hides the trades' bars and zones; v0.43.4: with the unit button on, only its unit is shown; v0.43.3: ✕ alone at the left of the position bar; v0.43.2: the unit button on the phone; v0.43.1: a unit button on the position bar, item 22; v0.43.0: strategies, item 23 stage a). This is the one task list for the project.
+Updated 13 Nov 2026 (v0.44.2: the tool holds a stop / target you place while the entry follows the market; v0.44.1: the timeframe as a dropdown on Renko / range / P&F so the pinned sizes show, item 30; v0.44.0: Renko / range / P&F sizes on the chart bar like the timeframes, item 30; size changes no longer hang; menus under their buttons; v0.43.6: 👁 first on the phone's chart bar; v0.43.5: 👁 / H hides the trades' bars and zones; v0.43.4: with the unit button on, only its unit is shown; v0.43.3: ✕ alone at the left of the position bar; v0.43.2: the unit button on the phone; v0.43.1: a unit button on the position bar, item 22; v0.43.0: strategies, item 23 stage a). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -739,6 +739,10 @@ marked before relying on it.
 
 ## Done
 
+- [x] **v0.44.2** (13 Nov, owner's request): the long / short tool holds a stop or target you drag / type / step at its
+  price; only the entry follows the market and the lots are worked out again from the new distance; past a held level
+  PLACE is off with a message; RR lock: the line moved last holds, the other keeps the RR; the locked target exactly where
+  dropped.
 - [x] **v0.44.1** (13 Nov): on Renko / range / P&F the timeframe is a dropdown (15m ▾) so the pinned sizes show on the bar;
   the size buttons no longer vanish after candles -> range; live redraws only the bars that changed.
 - [x] **v0.44.0** (13 Nov): Renko / range / P&F sizes as buttons on the chart bar like the timeframes (presets, pins, typed

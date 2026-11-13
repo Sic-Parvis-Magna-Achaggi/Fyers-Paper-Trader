@@ -26,7 +26,7 @@ let br;
   const ta = await pg.evaluate(async size => { const r = await api("/api/accounts/create", {body: {name: "Units test " + (Date.now() % 1e6), capital: size}});
     S.accounts = r.accounts; acctSetup(); acctSwitch(r.account.id); return r.account.id; }, SIZE);
   await pg.waitForFunction(id => P.snap && ACCT === id, ta, { timeout: 10000 });
-  await pg.evaluate(() => { const c = {...(prefGet("chart", {}) || {})}; delete c.pnlMain; delete c.pnlSecond; prefSet("chart", c); });
+  await pg.evaluate(() => { const c = {...(prefGet("chart", {}) || {})}; delete c.pnlMain; delete c.pnlSecond; delete c.pnlBtn; prefSet("chart", c); });
   await pg.evaluate(() => papi("ticket", {tp_r: 2, rr_lock: false, mode: "lots", lots: 1}));
   await pg.evaluate(() => { P.ticketLoaded = false; return papi("trail", {be_on: false, sl_on: false, be_r: 1, sl_r: 1}); });
   await pg.evaluate(c => openBySymbol(c), CRUDE);

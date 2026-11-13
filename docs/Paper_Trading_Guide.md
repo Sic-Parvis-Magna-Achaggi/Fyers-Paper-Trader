@@ -562,7 +562,8 @@ Phones get their own layout, like MT5's app (a desktop browser never does). **Mo
     - **move the target** (or type a target in the ticket): the stop follows, to the stop that gives that net RR at the
       lots it then sizes to (a wider stop means fewer lots, and the charges then weigh more, so it's worked out on the
       server, not by a plain price ratio);
-    - **move the entry:** both follow.
+    - **the entry moves** (the market, or a drag): the line you moved last stays where you put it and the other one
+      follows to keep the RR (nothing placed yet: both follow). Unlocking leaves both where they are.
   - **Limits of the lock:**
     - **The rules can stop it:** if your rules (risk %, risk cap, margin) stop the stop going wider, it stops there, and the
       target goes back to the RR from that stop. A message says so.
@@ -571,14 +572,20 @@ Phones get their own layout, like MT5's app (a desktop browser never does). **Mo
   - **When it works:** the lock works on the contract's own price (not when an option's stops follow its future). The RR
     and the lock are saved with your ticket defaults.
   - **Unlocked:** as before. The target stays at your R as the stop moves until you drag the target yourself; from then on,
-    moving the stop leaves the target where it is. (LiveTrader unlocked leaves the target where it is from the start.)
+    it stays at that price. (LiveTrader unlocked leaves the target where it is from the start.)
 - **The entry follows the live price** (a market order) until you drag it:
   - drag a buy's entry **below** the market and it becomes a **limit**; drag it **above** and it becomes a **stop** (the other way round for a sell);
   - **MKT** on the PLACE box snaps it back to market.
-- **SL and TP keep their distance** from the entry, so the whole tool moves with the price.
-  - Drag either line to change its distance.
-  - The stop distance you set is remembered per instrument and used next time.
-  - The target defaults to your R (Settings: the ticket's R box), net of charges.
+- **Until you place them, SL and TP keep their distance** from the entry, so the whole tool moves with the price.
+- **A stop or target you place stays at that price** (v0.44.2): drag the line, type the price in the ticket, or use − / +
+  on the phone. The live price can move: only the entry follows it, and the **lots are worked out again** from the new
+  entry-to-stop distance (a wider stop, fewer lots), so the money at risk stays as you set it. PLACE sends exactly those
+  prices. Move the line again to change it.
+  - A target you haven't placed stays at your R (the ticket's R box, net of charges), so it moves as the entry-to-stop
+    distance changes.
+  - If the price goes **past** a held stop or target, PLACE is off and the tool says so; move the line and it's back.
+  - Pressing BUY / SELL again, switching side or contract, or placing the trade starts a fresh tool (nothing held).
+  - The stop distance you set is remembered per instrument and used for the next tool.
 - **PLACE** sends it; **✕** closes the tool. The side panel shows the same trade with more detail (charges, margin, BE + costs). You don't need it open to trade.
 - **Open positions** show their zones from the entry candle and SL / TP lines you can drag. A control bar sits on the entry line, just left of the price scale. From left to right:
   - **✕** to close at market, alone at the far left with a gap after it, so a click meant for another button can't close
