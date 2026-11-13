@@ -632,6 +632,7 @@ function drawZones(ctx, size){
   const C = chartCfg(), UP = C.profitZ, DOWN = C.lossZ, A = (+C.zoneA || 20) / 100;
   P.toolX = null; P.zoneHits = [];
   for(const z of zoneList()){
+    if(C.tradeHide && !z.tool) continue;    // 👁 / H: the trades' zones hidden (v0.43.5); the new-trade tool always shows
     const ye = series.priceToCoordinate(z.entry); if(ye == null) continue;
     let x0 = zoneX(z.x0, size.width);
     if(z.tool){                    // LiveTrader 1.24: a gap (Chart settings, 30 px) after the live candle's right edge
@@ -770,10 +771,32 @@ function toolRedraw(rebuild){
 }
 /* a control bar on each position's entry line (right side, clear of the price scale):
    ✕ close (alone at the left), side · lots · net P&L, [unit], BE, BE-trail [R], trail [R]. Pending orders: ✕ cancel at the left. */
+/* 👁 on the chart's top bar / H / Chart settings (v0.43.5, owner: "Sometimes, it is difficult to see the candles"): hide or
+   show the trades' bars and shaded zones on the chart. Lines, price tags and the new-trade tool stay. Saved with the chart. */
+function tradeVisBtn(){
+  const off = !!(typeof chartCfg === "function" && chartCfg().tradeHide), b = $("#bTradeVis");
+  if(b && b.classList.contains("off") !== off){ b.classList.toggle("off", off);
+    b.title = off ? "Trades' bars and zones hidden: click (or H) to show them again" : "Hide the trades' bars and shaded zones on this chart, to see the candles (H). The SL / TP / entry lines stay"; }
+  return off;
+}
+function tradeVisApply(){
+  const off = tradeVisBtn();
+  const c = $('#cfgBody input[data-k="tradeHide"]'); if(c) c.checked = off;
+  posBars();
+  try{ drawLines(); }catch(e){}
+  try{ P.prim && P.prim.update(); }catch(e){}           // repaint the zones now
+}
+function tradeVisToggle(){
+  const cfg = {...(prefGet("chart", {}) || {})}; cfg.tradeHide = !cfg.tradeHide;
+  prefSet("chart", cfg); if(typeof applyChartCfg === "function") applyChartCfg();
+  tradeVisApply();
+  toast(cfg.tradeHide ? "Trades' bars and zones hidden (👁 or H shows them)" : "Trades' bars and zones shown");
+}
 function posBars(){
   const host = $("#posbars");
   if(!host) return;
   if(!host.dataset.pu){ host.dataset.pu = "1"; host.addEventListener("click", e => { if(e.target.closest(".pu")){ e.stopPropagation(); pnlCycle(); } }); }
+  host.classList.toggle("hide", tradeVisBtn());      // 👁 / H (v0.43.5): the bars are kept, just not shown
   if(!series || !cur || !P.snap){ host.innerHTML = ""; P.barKey = ""; return; }
   const items = [];
   for(const p of P.snap.positions){

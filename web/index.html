@@ -443,6 +443,7 @@ button.lk:disabled{opacity:.4}
 #posbars button.tg.on{background:var(--accent);border-color:var(--accent);color:#fff}
 #posbars button.tg.on.done,table.tbl button.tg.on.done{background:#326eaa;border-color:#326eaa;color:#fff}
 #posbars .ta{font-family:var(--mono);font-size:11px;padding:0 4px}
+#bTradeVis.off{background:var(--warn,#d99a1e);border-color:var(--warn,#d99a1e);color:#111;text-decoration:line-through}
 #posbars button.pbu{min-width:24px;padding:2px 5px;margin-right:6px;font-family:var(--mono);color:var(--accent);border-color:var(--accent)}   /* amount / % / R (v0.43.1) */
 #posbars input.rr{width:38px;padding:2px 4px;font-size:11px;font-family:var(--mono);text-align:center;border-radius:4px}
 @media (max-width:760px){ #posbars .pbar{font-size:11px} #posbars input.rr{width:32px} }
@@ -760,6 +761,7 @@ body:not(.is-admin) .admin-only{display:none!important}
         <button class="ghost fsb" id="bCt" title="Chart type: candles, Heikin-Ashi, Renko, range bars...">Candles</button>
         <button class="ghost fsb" id="bPine" title="Pine Editor: write and save your own indicators">Pine</button>
         <button class="ghost fsb" id="bInd" title="Indicators">ƒx</button>
+        <button class="ghost fsb" id="bTradeVis" title="Hide the trades' bars and shaded zones on this chart, to see the candles (H). The SL / TP / entry lines stay">👁</button>
         <button class="ghost fsb" id="bCfg" title="Chart settings: colours and line styles">⚙</button>
         <button class="ghost fsb" id="bPanel" title="Show or hide the trade panel (P)">Panel</button>
         <button class="ghost fsb" id="bFull" title="Maximise the chart in this window (F · Shift+F = full screen)">⛶</button>
@@ -1125,7 +1127,7 @@ const CHART_DEFAULTS = {up:"#22a06b", down:"#e2483d", bg:"", grid:true,
   bidC:"#a3abb8", bidS:0, bidOn:true, askC:"#e2483d", askS:0, askOn:true, lastC:"#e0b341", lastS:2, lastOn:true,
   entryC:"", entryS:2, slC:"#e2483d", slS:0, tpC:"#22a06b", tpS:0, beC:"#4f8cff", beS:1, orderC:"#4f8cff", orderS:2,
   toolC:"#4f8cff", toolS:0, lossZ:"#e2483d", profitZ:"#22a06b", zoneA:20, volOn:true, timerOn:true, hideNoTrade:true, dataCheck:true,
-  btnCorner:"tl", btnX:8, btnY:8, lineC:"#4f8cff", toolGap:30, pnlMain:"amt", pnlSecond:"r", pnlBtn:false};
+  btnCorner:"tl", btnX:8, btnY:8, lineC:"#4f8cff", toolGap:30, pnlMain:"amt", pnlSecond:"r", pnlBtn:false, tradeHide:false};
 function chartCfg(){ return {...CHART_DEFAULTS, ...(prefGet("chart", {}) || {})}; }
 function cfgColor(k){ const c = chartCfg()[k]; return c || cssVar(k === "entryC" ? "--text" : "--bg"); }
 function buildChart(){
@@ -1833,6 +1835,7 @@ function renderCfg(){
     <div class="cr" style="grid-template-columns:1fr 150px"><span>Zone strength</span><input type="range" min="5" max="50" data-k="zoneA" data-num="1" value="${C.zoneA}"></div>
     <div class="cr" style="grid-template-columns:1fr 70px"><span title="Space between the live candle's right edge and the new-trade tool, as LiveTrader's Tool gap">Tool gap after the live candle (px)</span>
       <input type="number" data-k="toolGap" data-num="1" min="0" max="400" value="${C.toolGap}" style="padding:2px 4px"></div>
+    <div class="cr"><span title="Hides each trade's bar on its entry line (and pending orders' bars) and the shaded SL / TP zones with their labels, so the candles show. The SL / TP / entry lines and their price tags stay; the new-trade tool (BUY / SELL) always shows. Also 👁 on the chart's top bar, or H">Hide the trades' bars and zones</span><span></span><span></span><input type="checkbox" data-k="tradeHide" ${C.tradeHide ? "checked" : ""}></div>
     <div class="sec">P&amp;L shown as</div>
     <div class="cr" style="grid-template-columns:1fr 150px"><span title="The open P&amp;L, the SL / TP labels, the new-trade tool, the Trades panel and page, the phone. Every figure stays net of all charges">Main</span><select data-k="pnlMain" id="cfgPnlMain">
       ${PNL_UNITS.map(u => `<option value="${u}" ${pnlUnits()[0] === u ? "selected" : ""}>${PNL_NAMES[u]}</option>`).join("")}</select></div>
@@ -1861,6 +1864,7 @@ function renderCfg(){
     cfg[k] = el.type === "checkbox" ? el.checked : el.dataset.num ? (+el.value || 0) : el.value;
     prefSet("chart", cfg); applyChartCfg();
     if(k === "dataCheck") dataCheck(true);
+    if(k === "tradeHide") tradeVisApply();
     if(k === "pnlBtn"){ P.barKey = ""; posBars();
       const sel = $("#cfgPnlSecond"), note = $("#cfgPnlBtnNote");
       if(sel) sel.disabled = !!cfg.pnlBtn; if(note) note.style.display = cfg.pnlBtn ? "" : "none";
@@ -2730,6 +2734,7 @@ function togglePanel(){
 }
 $("#bFull").onclick = () => setFull(!document.body.classList.contains("chartfs"));
 $("#bPanel").onclick = togglePanel;
+$("#bTradeVis").onclick = e => { e.stopPropagation(); tradeVisToggle(); };
 $("#bPanelX").onclick = togglePanel;
 document.addEventListener("fullscreenchange", () => { if(!document.fullscreenElement && document.body.classList.contains("chartfs")) setFull(false); });
 document.addEventListener("keydown", e => {
@@ -2738,6 +2743,7 @@ document.addEventListener("keydown", e => {
   if(document.querySelector("#drawer.open")) return;                 // (the chart's keys don't reach through the Settings page)
   if(e.key === "f" || e.key === "F"){ e.preventDefault(); setFull(!document.body.classList.contains("chartfs"), e.shiftKey); }
   if(e.key === "p" || e.key === "P"){ e.preventDefault(); togglePanel(); }
+  if((e.key === "h" || e.key === "H") && !e.shiftKey && (typeof PG === "undefined" || PG.page === "chart")){ e.preventDefault(); tradeVisToggle(); }   // hide / show the trades' bars and zones (v0.43.5)
   if((e.key === "u" || e.key === "U") && !e.shiftKey && (typeof PG === "undefined" || PG.page === "chart" || PG.page === "trades")){ e.preventDefault(); pnlCycle(); }   // P&L as amount → % → R (v0.42.0)
   if(e.key === "/" && (typeof PG === "undefined" || PG.page === "chart")){ e.preventDefault(); indOpen(true); }   // TradingView's "/": the indicator search
   if(e.key === "Escape" && document.body.classList.contains("chartfs")) setFull(false);

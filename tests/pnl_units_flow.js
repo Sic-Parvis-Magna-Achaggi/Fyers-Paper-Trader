@@ -137,6 +137,17 @@ let br;
   { const t = await state(); ok(/^SL −₹[\d,]+$/.test(t.slT) && /₹/.test(t.bar) && !/\dR/.test(t.bar), "button on ₹: the amount alone (" + t.slT + " / " + t.bar + ")"); }
   await pg.click("#posbars .pbu"); await pg.waitForTimeout(300); await pg.click("#posbars .pbu"); await pg.waitForTimeout(500);
   ok(await pg.evaluate(() => pnlUnits()[0]) === "r", "...and round to R again");
+  // v0.43.5: 👁 on the chart's top bar / H hides the trades' bars and zones (owner: "difficult to see the candles")
+  { const vis = () => pg.evaluate(() => ({bars: !document.querySelector("#posbars").classList.contains("hide") && !!document.querySelector("#posbars .pbar"),
+      zones: (P.zoneHits || []).length, off: document.querySelector("#bTradeVis").classList.contains("off"),
+      sl: P.posLines.map(l => l.options().title).some(t => /^SL /.test(t)), saved: !!(prefGet("chart", {}) || {}).tradeHide}));
+    let v = await vis(); ok(v.bars && v.zones > 0 && !v.off, "👁 on the chart's top bar; the trade's bar and zone labels are shown at first");
+    await pg.click("#bTradeVis"); await pg.waitForTimeout(500); v = await vis();
+    ok(!v.bars && v.zones === 0 && v.off && v.sl && v.saved, `👁 hides the bar and the zones (button marked, saved); the SL line and its tag stay: ${JSON.stringify(v)}`);
+    await pg.screenshot({ path: SHOT + "units_04c_hidden.png" });
+    await pg.waitForTimeout(1500); v = await vis(); ok(!v.bars && v.zones === 0, "...and stays hidden as prices come in");
+    await pg.mouse.click(400, 300); await pg.keyboard.press("h"); await pg.waitForTimeout(500); v = await vis();
+    ok(v.bars && v.zones > 0 && !v.off && !v.saved, "H shows them again"); }
   await pg.screenshot({ path: SHOT + "units_04b_button.png" });
   ok(await pg.evaluate(async () => { await new Promise(r => setTimeout(r, 900)); return (await api("/api/prefs")).prefs.chart.pnlBtn === true; }), "the switch is saved on the server");
   await pg.click("#bCfg");
@@ -218,6 +229,13 @@ let br;
     await m.tap("#mChips .mpu"); await m.waitForTimeout(400); await m.tap("#mChips .mpu"); await m.waitForTimeout(600);
     ok(await m.evaluate(u => pnlUnits()[0] === u, u0), "phone: three taps: back where it started"); }
   await m.screenshot({ path: SHOT + "units_07b_phone_button.png" });
+  { await m.evaluate(() => document.querySelector("#bTradeVis").scrollIntoView({inline: "center"}));
+    ok(await m.isVisible("#bTradeVis"), "phone: 👁 is on the chart's top bar");
+    await m.tap("#bTradeVis"); await m.waitForTimeout(600);
+    ok(await m.evaluate(() => (P.zoneHits || []).length === 0 && document.querySelector("#bTradeVis").classList.contains("off")), "phone: a tap hides the zones");
+    await m.screenshot({ path: SHOT + "units_07c_phone_hidden.png" });
+    await m.tap("#bTradeVis"); await m.waitForTimeout(600);
+    ok(await m.evaluate(() => (P.zoneHits || []).length > 0), "phone: another tap shows them"); }
   await m.evaluate(() => { prefSet("chart", {...(prefGet("chart", {}) || {}), pnlMain: "pct", pnlSecond: "r", pnlBtn: false}); pnlRefresh(); });   // (button off: the sheet's second unit is checked next)
   await m.waitForTimeout(400);
   await m.evaluate(() => mPosSheet(P.snap.positions[0].id));

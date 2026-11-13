@@ -1,6 +1,6 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 13 Nov 2026, version **0.43.4** (with the unit button on, only its unit is shown; 0.43.3: ✕ moved to the far left of the position bar, the phone's unit button to the right end of the chips; 0.43.2: the unit button on the phone; 0.43.1: a unit button on the position bar, roadmap 22; 0.43.0: strategies that trade by themselves, roadmap 23 a; 0.42.1: roadmap items 23-29; 0.42.0: P&L, SL and TP as an amount, % of the account or R, roadmap 22; 0.41.0: the MT5 day-end close by each symbol's sessions, EA 1.23; 0.40.0: the MT5 day-end close, 8 b4; 0.39.1: each MT5 trade's candles kept for its replay, 8 c1b; 0.39.0: MT5 trades in the journal, 8 c1). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 13 Nov 2026, version **0.43.5** (👁 / H hides the trades' bars and zones; 0.43.4: with the unit button on, only its unit is shown; 0.43.3: ✕ moved to the far left of the position bar, the phone's unit button to the right end of the chips; 0.43.2: the unit button on the phone; 0.43.1: a unit button on the position bar, roadmap 22; 0.43.0: strategies that trade by themselves, roadmap 23 a; 0.42.1: roadmap items 23-29; 0.42.0: P&L, SL and TP as an amount, % of the account or R, roadmap 22; 0.41.0: the MT5 day-end close by each symbol's sessions, EA 1.23; 0.40.0: the MT5 day-end close, 8 b4; 0.39.1: each MT5 trade's candles kept for its replay, 8 c1b; 0.39.0: MT5 trades in the journal, 8 c1). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -165,6 +165,11 @@ Owner's rule: nothing that's clicked often goes next to ✕.
 v0.43.4: `pnlUnits()` returns second "none" while `pnlBtn` is on (owner: amounts only when the button says ₹ / $);
 `pnlSecondSaved()` is the stored Second (Chart settings' select, disabled while the button is on, `#cfgPnlBtnNote`);
 `pnlCycle()` with the button on changes only `pnlMain`. Account figures, the ticket preview and the BE label stay in money.
+v0.43.5: chart pref `tradeHide` (CHART_DEFAULTS false; Chart settings tick box; `#bTradeVis` 👁 in `.charthead` before ⚙;
+key H in index.html's keydown). paper.js: `tradeVisToggle()` (pref + toast) -> `tradeVisApply()` (posBars, drawLines,
+`P.prim.update()`); `tradeVisBtn()` keeps the button's `.off` class in step (called from `posBars()`, which also toggles
+`#posbars.hide`); `drawZones()` skips non-tool zones while hidden (so `P.zoneHits` is empty). `zoneList()` is unchanged, so
+the autoscale still takes in the hidden trade's SL / TP and the price scale doesn't jump.
 
 ## Alerts (v0.38.0, roadmap 21)
 

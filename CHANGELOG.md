@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.43.5 — 13 Nov 2026 — Hide the trade's bar and zones on the chart
+
+Added
+- **👁 on the chart's top bar (or H) hides the trades' bars and shaded zones** (owner, with a screenshot of a gold long:
+  "Give me an option to hide the trade preview - somewhere on the chart. Sometimes, it is difficult to see the candles").
+  Hidden: each trade's bar on its entry line (✕, P&L, BE, BE-T, TRAIL), pending orders' bars, and the green / red zones
+  with their labels. Kept: the SL, TP and entry lines and their tags on the price scale (still draggable), so you can see
+  and move your stop; the new-trade tool (BUY / SELL) always shows. 👁 turns amber while they're hidden; a click or H
+  brings them back. Also a tick box in Chart settings ("Hide the trades' bars and zones"). Saved with the chart, so it
+  stays as you left it on every device. The phone: the same 👁 on the chart's top bar (the trade chips above SELL / BUY
+  stay). The price scale doesn't move when you hide them.
+
+Tests
+- `tests/pnl_units_flow.js` (72): 👁 hides the bar and the zone labels, the button is marked and the choice saved, the SL
+  line and its tag stay, it stays hidden as prices come in, H shows them again; the phone's 👁 hides and shows the zones.
+  Re-run: `mobile_flow`, `live_flow`, `multichart_flow`, `routes_check`.
+
 ## v0.43.4 — 13 Nov 2026 — The unit button shows one unit only
 
 Changed
