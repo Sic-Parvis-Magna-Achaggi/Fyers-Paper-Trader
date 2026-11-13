@@ -129,12 +129,21 @@ let br;
      "another click: % of account (" + (await pg.textContent("#posbars .pbar .pu")) + ")");
   await pg.click("#posbars .pbu"); await pg.waitForTimeout(500);
   ok(await pg.evaluate(() => pnlUnits()[0]) === "r" && (await pg.textContent("#posbars .pbu")).trim() === "R", "and back to R");
+  // v0.43.4 (owner: "Why am I seeing the amount ... when it is clearly R in the button?"): with the button on, only its unit
+  { await pg.waitForTimeout(400); const t = await state(); const all = [t.bar, t.slT, t.tpT, t.zsl, t.ztp, t.panel, t.atsl, t.open];
+    ok(t.units === "r,none" && all.every(x => !/₹/.test(x || "")), "button on R (Second saved as Amount): no amount anywhere: " + all.join(" | "));
+    ok(await pg.evaluate(() => (prefGet("chart", {}) || {}).pnlSecond) === "amt", "...the saved Second (Amount) is kept for when the button is off"); }
+  await pg.click("#posbars .pbu"); await pg.waitForTimeout(500);
+  { const t = await state(); ok(/^SL −₹[\d,]+$/.test(t.slT) && /₹/.test(t.bar) && !/\dR/.test(t.bar), "button on ₹: the amount alone (" + t.slT + " / " + t.bar + ")"); }
+  await pg.click("#posbars .pbu"); await pg.waitForTimeout(300); await pg.click("#posbars .pbu"); await pg.waitForTimeout(500);
+  ok(await pg.evaluate(() => pnlUnits()[0]) === "r", "...and round to R again");
   await pg.screenshot({ path: SHOT + "units_04b_button.png" });
   ok(await pg.evaluate(async () => { await new Promise(r => setTimeout(r, 900)); return (await api("/api/prefs")).prefs.chart.pnlBtn === true; }), "the switch is saved on the server");
   await pg.click("#bCfg");
+  ok(await pg.$eval('#cfgBody select[data-k="pnlSecond"]', e => e.disabled) && await pg.isVisible("#cfgPnlBtnNote"), "Chart settings: Second is greyed out while the button is on, with a note why");
   await pg.click('#cfgBody input[data-k="pnlBtn"]'); await pg.waitForTimeout(500);
   ok(!(await pg.$("#posbars .pbu")), "switched off: the button goes");
-  await pg.click('#cfgBody input[data-k="pnlBtn"]'); await pg.waitForTimeout(500);   // (on again: the phone checks it too)
+  ok(!(await pg.$eval('#cfgBody select[data-k="pnlSecond"]', e => e.disabled)) && (await state()).units === "r,amt", "...and the second unit (Amount) comes back");
   await pg.click("#bCfg");
 
   // ---- a click on a zone's money label cycles too
@@ -187,7 +196,8 @@ let br;
   ok(await pg.evaluate(() => pnlUnits().join()) === "pct,r", "after a reload: % of account · R");
   ok(errs.length === 0, "no script errors" + (errs.length ? ": " + errs.join(" | ") : ""));
 
-  // ---- the phone
+  // ---- the phone (the unit button on again, saved on the server)
+  await pg.evaluate(() => prefSet("chart", {...(prefGet("chart", {}) || {}), pnlBtn: true})); await pg.waitForTimeout(1500);
   const ph = await br.newContext({ ...devices["Pixel 7"] });
   const m = await ph.newPage();
   const merrs = []; m.on("pageerror", e => merrs.push(e.message));
@@ -197,7 +207,7 @@ let br;
   await m.waitForFunction(() => P.snap.positions.length, null, { timeout: 10000 });
   await m.waitForTimeout(1500);
   const chip = await m.evaluate(() => (document.querySelector('#mChips [data-f="n"]') || {}).textContent);
-  ok(/%$/.test(chip || ""), "phone: the position chip in %: " + chip);
+  ok(/%$/.test(chip || "") && !/₹/.test(chip || ""), "phone: the position chip in %, no amount (button on): " + chip);
   ok(await m.isVisible("#mChips .mpu"), "phone: the unit button is shown with the trade chips (the setting is saved on the server; the phone has no position bars)");
   { const g = await m.evaluate(() => { const u = document.querySelector("#mChips .mpu").getBoundingClientRect(), c = [...document.querySelectorAll("#mChips [data-id]")].map(e => e.getBoundingClientRect());
       return {right: c.every(r => r.right < u.left), gap: Math.min(...c.map(r => u.left - r.right)), edge: innerWidth - u.right}; });
@@ -208,7 +218,7 @@ let br;
     await m.tap("#mChips .mpu"); await m.waitForTimeout(400); await m.tap("#mChips .mpu"); await m.waitForTimeout(600);
     ok(await m.evaluate(u => pnlUnits()[0] === u, u0), "phone: three taps: back where it started"); }
   await m.screenshot({ path: SHOT + "units_07b_phone_button.png" });
-  await m.evaluate(() => { prefSet("chart", {...(prefGet("chart", {}) || {}), pnlMain: "pct", pnlSecond: "r"}); pnlRefresh(); });   // (the taps moved the second unit)
+  await m.evaluate(() => { prefSet("chart", {...(prefGet("chart", {}) || {}), pnlMain: "pct", pnlSecond: "r", pnlBtn: false}); pnlRefresh(); });   // (button off: the sheet's second unit is checked next)
   await m.waitForTimeout(400);
   await m.evaluate(() => mPosSheet(P.snap.positions[0].id));
   await m.waitForSelector('#mSheet [data-f="net"]');

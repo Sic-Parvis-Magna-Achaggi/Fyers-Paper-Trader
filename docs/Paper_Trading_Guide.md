@@ -1,4 +1,4 @@
-# Paper and live trading: how it works (v0.43.3)
+# Paper and live trading: how it works (v0.43.4)
 
 Paper trades run **on the server**. Stops, targets, trailing, intraday square-off and the expiry-day exit keep working with the page closed, as long as you've logged in to Fyers that day, so prices are flowing.
 
@@ -632,7 +632,11 @@ Every figure is still net of all charges: only the writing changes.
 **The unit button (v0.43.1):** Chart settings › P&L shown as › **Unit button on the position bar** (off by default) puts a
 small button after each trade's P&L on its bar on the chart (✕ is at the other end of the bar). It shows the main unit
 (₹ / $, % or R); a click switches it. On the phone (no position bars there) it sits at the right end of the row of trade
-chips above SELL / BUY, while a trade is open; a tap switches it.
+chips above SELL / BUY, while a trade is open; a tap switches it. **While the button is on, only its unit is shown,
+everywhere** (v0.43.4): no second unit, so with the button on R you see SL −1.00R, TP +4.42R and the bar −0.06R, and an
+amount only when the button says ₹ / $. Chart settings greys out Second meanwhile; your Second comes back when you switch
+the button off. The account's own figures (balance, room, margin, open risk), the ticket's preview and the BE label's
+charges stay in money: they aren't P&L figures.
 
 **Switching:** Chart settings › **P&L shown as** (Main and Second; Second can be None), **U** on the chart or the Trades page,
 or a click on a P&L figure (the position bar, a zone's label, the panel's P&L, the Open P&L, the Trades page's P&L headers;

@@ -23,7 +23,16 @@ function pnlUnits(){
   const m = PNL_UNITS.includes(C.pnlMain) ? C.pnlMain : "amt";
   let s = ["none", ...PNL_UNITS].includes(C.pnlSecond) ? C.pnlSecond : "r";
   if(s === m) s = "none";
+  // v0.43.4 (owner: "The point is to avoid seeing these amounts ... It should only show when I toggle the button to amount"):
+  // with the unit button on, the button decides: one unit everywhere, no second one. The saved Second comes back when it's off.
+  if(C.pnlBtn) s = "none";
   return [m, s];
+}
+/* the Second unit as saved in Chart settings (pnlUnits() drops it while the unit button is on) */
+function pnlSecondSaved(){
+  const C = typeof chartCfg === "function" ? chartCfg() : {}, m = pnlUnits()[0];
+  const s = ["none", ...PNL_UNITS].includes(C.pnlSecond) ? C.pnlSecond : "r";
+  return s === m ? "none" : s;
 }
 const acctSize = () => { const v = +(P.snap && P.snap.rules && P.snap.rules.size); return v > 0 ? v : null; };
 const sgn = x => x > 0 ? "+" : x < 0 ? "−" : "";
@@ -72,10 +81,13 @@ function openTotalTxt(amt){
 /* cycle the main unit (amount → % → R); the second keeps its unit unless it would be the same as the new main */
 function pnlCycle(){
   const [m, s] = pnlUnits(), nm = PNL_UNITS[(PNL_UNITS.indexOf(m) + 1) % PNL_UNITS.length];
-  const cfg = {...(prefGet("chart", {}) || {}), pnlMain: nm, pnlSecond: s === nm ? m : s};
+  const base = prefGet("chart", {}) || {};
+  // the unit button on (v0.43.4): only the main unit moves; the saved Second stays as set for when the button is off
+  const cfg = base.pnlBtn ? {...base, pnlMain: nm} : {...base, pnlMain: nm, pnlSecond: s === nm ? m : s};
   prefSet("chart", cfg);
   pnlRefresh();
-  toast(`P&L shown as ${PNL_NAMES[nm]}` + (cfg.pnlSecond !== "none" ? ` · ${PNL_NAMES[cfg.pnlSecond]}` : ""));
+  const s2 = pnlUnits()[1];
+  toast(`P&L shown as ${PNL_NAMES[nm]}` + (s2 !== "none" ? ` · ${PNL_NAMES[s2]}` : ""));
 }
 function pnlRefresh(fromCfg){
   if(!P.snap) return;

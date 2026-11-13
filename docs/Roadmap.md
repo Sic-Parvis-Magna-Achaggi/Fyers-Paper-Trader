@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 12 Nov 2026 (v0.43.3: ✕ alone at the left of the position bar; v0.43.2: the unit button on the phone; v0.43.1: a unit button on the position bar, item 22; v0.43.0: strategies, item 23 stage a). This is the one task list for the project.
+Updated 13 Nov 2026 (v0.43.4: with the unit button on, only its unit is shown; v0.43.3: ✕ alone at the left of the position bar; v0.43.2: the unit button on the phone; v0.43.1: a unit button on the position bar, item 22; v0.43.0: strategies, item 23 stage a). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -573,7 +573,9 @@ fallback"):** item 8 is built now, stage by stage. Stage a shipped in **v0.34.0*
       after each trade's P&L shows the main unit and a click switches it. v0.43.2: on the phone it leads the trade chips
       above SELL / BUY (the phone has no position bars). v0.43.3 (owner: "too close to the close trade button"): ✕ moved
       to the far left of the bar, the unit button and BE / BE-T / TRAIL on the right; on the phone the unit button at the
-      right end of the chips.
+      right end of the chips. v0.43.4 (owner, 13 Nov: amounts "play on the mind"; "It should only show when I toggle the
+      button to amount"): with the button on, only its unit is shown everywhere (no second unit); the saved Second
+      returns when the button is off.
     - Claude's calls (the owner can change them): default Amount · R (what the position bar already showed); 1R = the net
       risk at the first stop, so a trailed stop shows the R it locks in ("SL +0.50R"); a pending order's 1R = what its stop
       would lose; the open total in R = the sum of each trade's R (as the journal adds R); a trade with no stop shows the
@@ -710,6 +712,8 @@ marked before relying on it.
 
 ## Done
 
+- [x] **v0.43.4** (13 Nov): with the unit button on, only the button's unit is shown (no second unit, so no amount unless the
+  button says ₹ / $); a click changes only the main unit.
 - [x] **v0.43.3** (12 Nov): ✕ on the position bar moved to the far left, away from R / BE / BE-T / TRAIL (a click meant for R
   closed the trade); the phone's unit button at the right end of the chips.
 - [x] **v0.43.2** (12 Nov): the unit button on the phone (it leads the trade chips; the phone has no position bars).

@@ -1836,9 +1836,10 @@ function renderCfg(){
     <div class="sec">P&amp;L shown as</div>
     <div class="cr" style="grid-template-columns:1fr 150px"><span title="The open P&amp;L, the SL / TP labels, the new-trade tool, the Trades panel and page, the phone. Every figure stays net of all charges">Main</span><select data-k="pnlMain" id="cfgPnlMain">
       ${PNL_UNITS.map(u => `<option value="${u}" ${pnlUnits()[0] === u ? "selected" : ""}>${PNL_NAMES[u]}</option>`).join("")}</select></div>
-    <div class="cr" style="grid-template-columns:1fr 150px"><span title="Shown next to the main one (dimmed on the position bar)">Second</span><select data-k="pnlSecond" id="cfgPnlSecond">
-      ${["none", ...PNL_UNITS].map(u => `<option value="${u}" ${pnlUnits()[1] === u ? "selected" : ""}>${PNL_NAMES[u]}</option>`).join("")}</select></div>
-    <div class="cr"><span title="A button on each trade's bar on the chart (next to its P&amp;L): it shows the main unit and a click switches it: amount → % of account → R">Unit button on the position bar</span><span></span><span></span><input type="checkbox" data-k="pnlBtn" ${C.pnlBtn ? "checked" : ""}></div>
+    <div class="cr" style="grid-template-columns:1fr 150px"><span title="Shown next to the main one (dimmed on the position bar). Not used while the unit button is on">Second</span><select data-k="pnlSecond" id="cfgPnlSecond" ${C.pnlBtn ? "disabled" : ""}>
+      ${["none", ...PNL_UNITS].map(u => `<option value="${u}" ${pnlSecondSaved() === u ? "selected" : ""}>${PNL_NAMES[u]}</option>`).join("")}</select></div>
+    <div class="cr"><span title="A button on each trade's bar on the chart (next to its P&amp;L): it shows the unit and a click switches it: amount → % of account → R. While it's on, only that one unit is shown everywhere (no second one), so an amount shows only when the button says ₹ / $">Unit button on the position bar</span><span></span><span></span><input type="checkbox" data-k="pnlBtn" ${C.pnlBtn ? "checked" : ""}></div>
+    <p class="help" id="cfgPnlBtnNote" style="margin:2px 0 0;${C.pnlBtn ? "" : "display:none"}">With the unit button on, only the button's unit is shown (no second unit): amounts appear only when it says ${esc(typeof CUR === "function" ? CUR() : "₹")}.</p>
     <p class="help" style="margin:2px 0 0">% of account = of the account size (${acctSize() ? rs(acctSize()) : "the account's size"}); R = of the trade's net risk at its first stop. U on the chart, or a click on a P&amp;L / SL / TP figure, switches the main one.</p>
     <div class="sec">Chart</div>
     <div class="cr"><span>Background</span><input type="color" data-k="bg" value="${hex("bg")}"><span class="muted" style="font-size:11px">${C.bg ? "" : "theme"}</span><span></span></div>
@@ -1860,7 +1861,10 @@ function renderCfg(){
     cfg[k] = el.type === "checkbox" ? el.checked : el.dataset.num ? (+el.value || 0) : el.value;
     prefSet("chart", cfg); applyChartCfg();
     if(k === "dataCheck") dataCheck(true);
-    if(k === "pnlBtn"){ P.barKey = ""; posBars(); }
+    if(k === "pnlBtn"){ P.barKey = ""; posBars();
+      const sel = $("#cfgPnlSecond"), note = $("#cfgPnlBtnNote");
+      if(sel) sel.disabled = !!cfg.pnlBtn; if(note) note.style.display = cfg.pnlBtn ? "" : "none";
+      pnlRefresh(true); }                      // v0.43.4: the second unit goes / comes back everywhere
     if(k === "pnlMain" || k === "pnlSecond"){
       if(k === "pnlMain" && cfg.pnlSecond === cfg.pnlMain){ cfg.pnlSecond = "none"; prefSet("chart", cfg); const o = $("#cfgPnlSecond"); if(o) o.value = "none"; }
       pnlRefresh(true); }

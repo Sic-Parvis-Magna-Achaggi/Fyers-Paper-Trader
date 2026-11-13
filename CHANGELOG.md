@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.43.4 — 13 Nov 2026 — The unit button shows one unit only
+
+Changed
+- **With the unit button on, only the button's unit is shown, everywhere** (owner, with a screenshot of an MT5 gold long:
+  the button said R, but the SL / TP labels and the bar still showed −$27.99, +$123.84, −$1.77: "The point is to avoid
+  seeing these amounts as it plays on the mind. It should only show when I toggle the button to amount"). Those amounts
+  were the **Second** unit (Chart settings › P&L shown as › Second: Amount), which v0.43.1 kept next to the button's unit.
+  Now, while Chart settings › Unit button on the position bar is on, there is no second unit: the bar, the SL / TP labels
+  and zones, the new-trade tool, the trades panel and its Open P&L, the Trades page and the phone show R alone when the
+  button says R, % alone on %, and the amount only when it says ₹ / $. Chart settings greys out Second meanwhile, with a
+  note; your saved Second comes back when you switch the button off.
+- A click on the unit button (or U, or a figure) now changes only the main unit while the button is on; before, it also
+  rewrote the saved Second.
+
+Not changed: the account's own figures (balance, equity, day / max room, margin, open risk), the ticket's preview (risk,
+charges, margin) and the BE label's charges stay in ₹ / $: they aren't P&L figures.
+
+Tests
+- `tests/pnl_units_flow.js` (65): button on R with Second saved as Amount: no ₹ on the bar, SL / TP labels, zones, panel,
+  Open P&L; on ₹: the amount alone; the saved Second kept, greyed out in Chart settings with its note, back when the button
+  is switched off; the phone's chip without an amount. Re-run: `mobile_flow`, `rr_lock_flow`, `mt5acct_flow`, `routes_check`.
+
 ## v0.43.3 — 12 Nov 2026 — ✕ away from the other buttons on the position bar
 
 Changed
