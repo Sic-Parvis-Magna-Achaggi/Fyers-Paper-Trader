@@ -49,7 +49,7 @@ function mcCellSet(i, c){
 }
 /* the active chart: what the watchlist, Find, BUY / SELL and the Pine Editor act on */
 function mcActive(i){
-  for(const id of ["#gridPick", "#layPick", "#ctPick", "#cfgPick", "#tfPick", "#indPick", "#dtbFly", "#drLst", "#drMenu", "#dcol"]){ const x = $(id); if(x) x.classList.add("hide"); }   // (a click in a chart's frame never reaches this page's own "click outside" handlers)
+  for(const id of ["#gridPick", "#layPick", "#ctPick", "#szPick", "#cfgPick", "#tfPick", "#indPick", "#dtbFly", "#drLst", "#drMenu", "#dcol"]){ const x = $(id); if(x) x.classList.add("hide"); }   // (a click in a chart's frame never reaches this page's own "click outside" handlers)
   if(i === LAY.cell || i >= mcN()) return;
   LAY.cell = i; mcMark(); mcTicket();
 }
@@ -109,7 +109,7 @@ function mcButton(){
     const p = document.createElement("div"); p.id = "gridPick"; p.className = "hide";
     $("#layPick").after(p);
     b.onclick = e => { e.stopPropagation(); const show = p.classList.contains("hide");
-      for(const id of ["#ctPick", "#cfgPick", "#tfPick", "#indPick", "#layPick"]) { const x = $(id); if(x) x.classList.add("hide"); }
+      for(const id of ["#ctPick", "#szPick", "#cfgPick", "#tfPick", "#indPick", "#layPick"]) { const x = $(id); if(x) x.classList.add("hide"); }
       p.classList.toggle("hide", !show); if(show) mcMenu(); };
     p.addEventListener("click", e => e.stopPropagation());
     document.addEventListener("click", e => { if(document.contains(e.target) && !e.target.closest("#gridPick,#bGrid")) p.classList.add("hide"); }, true);

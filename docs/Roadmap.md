@@ -1,6 +1,6 @@
 # Roadmap: the task list
 
-Updated 13 Nov 2026 (v0.43.6: 👁 first on the phone's chart bar; v0.43.5: 👁 / H hides the trades' bars and zones; v0.43.4: with the unit button on, only its unit is shown; v0.43.3: ✕ alone at the left of the position bar; v0.43.2: the unit button on the phone; v0.43.1: a unit button on the position bar, item 22; v0.43.0: strategies, item 23 stage a). This is the one task list for the project.
+Updated 13 Nov 2026 (v0.44.0: Renko / range / P&F sizes on the chart bar like the timeframes, item 30; size changes no longer hang; menus under their buttons; v0.43.6: 👁 first on the phone's chart bar; v0.43.5: 👁 / H hides the trades' bars and zones; v0.43.4: with the unit button on, only its unit is shown; v0.43.3: ✕ alone at the left of the position bar; v0.43.2: the unit button on the phone; v0.43.1: a unit button on the position bar, item 22; v0.43.0: strategies, item 23 stage a). This is the one task list for the project.
 - New tasks are added here as soon as they're agreed, in the order agreed.
 - When a task ships, it's ticked [x] with its version and moved to **Done** (details in CHANGELOG.md).
 - Half-done tasks stay in **Next** with the finished parts ticked.
@@ -654,6 +654,23 @@ fallback"):** item 8 is built now, stage by stage. Stage a shipped in **v0.34.0*
 29. [ ] **Indian event calendar on the chart** (12 Nov 2026). RBI policy, CPI, expiry days, MCX crude's EIA inventory day,
     holidays as chart markers; an optional guard refusing new orders on a contract from X minutes before its event (like
     the MT5 news guard).
+30. [x] **Renko and range sizes like the timeframes, and size changes without the wait** — shipped in **v0.44.0** (asked 13
+    Nov 2026, with a screenshot of XAUUSD 1m on Range 10: "Like how we have timeframes on the chart, we need to get preset
+    and custom ranges for range bars and renko charts. I also found that it takes a lot of time when changing the ranges and
+    sometimes even hangs. ... the menu for the timeframe appears at the right end of the screen and not under the down
+    arrow"). Built as Claude proposed (the owner can change any of it):
+    - [x] Size buttons next to the chart type on Renko, range bars and P&F: ATR + pinned sizes; ▾ = presets (1-2-2.5-5 steps
+      from ¼ to 16 × the ATR, whole ticks) + your own (points, `20t` ticks, `ATR 20`); right-click / long-press pins; per
+      underlying and per type, on the server. Suggested buttons until a size is used, then they stay put. *(v0.44.0)*
+    - [x] The hang: "Fixed points" with no size typed used 1 tick (0.01 on gold: over a million bars); every tick rebuilt
+      every bar from the whole history; no limit on bars. Now: Fixed starts from the chart's size, only the live candle is
+      re-worked per tick (same bars as a full build), redraws pace themselves, Renko / range keep to the latest 20,000
+      bars. A size change no longer rebuilds the chart. A reload found no fixed size (looked up under the contract, not
+      its underlying, before the contract's details came) and drew 1 tick: fixed. *(v0.44.0)*
+    - [x] The timeframe / chart type / size menus open under their buttons; ▾ names the timeframe or size in use when its
+      button doesn't fit on the bar. *(v0.44.0)*
+    - [ ] To confirm on the real server (owner): XAUUSD 1m on MT5, range 10 → 2 → 1 → ATR from the size buttons: each
+      change quick, no freeze while MT5's ticks come in.
 
 ## Rules that shape live trading and other users (checked 30 Oct 2026)
 
@@ -717,6 +734,9 @@ marked before relying on it.
 
 ## Done
 
+- [x] **v0.44.0** (13 Nov): Renko / range / P&F sizes as buttons on the chart bar like the timeframes (presets, pins, typed
+  sizes), item 30; changing sizes no longer hangs (Fixed used 1 tick; each tick rebuilt every bar; a 20,000-bar cap); a
+  size change doesn't rebuild the chart; the timeframe, chart type and size menus open under their buttons.
 - [x] **v0.43.6** (13 Nov): 👁 first on the phone's chart bar (it was past the screen's edge).
 - [x] **v0.43.5** (13 Nov): 👁 on the chart's top bar (or H, or Chart settings) hides the trades' bars and shaded zones so the
   candles show; the SL / TP / entry lines stay.

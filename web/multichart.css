@@ -11,7 +11,7 @@
 #gridPick .mc-opts button.on{border-color:var(--accent);color:var(--accent)}
 /* the grid (desktop): the page's own chart and its chart-only buttons step aside; each chart has its own */
 body.multi:not(.mob) #chart,body.multi:not(.mob) #dtb,body.multi:not(.mob) #cSym,body.multi:not(.mob) #cLtp,body.multi:not(.mob) #cTimer,
-body.multi:not(.mob) #cMeta,body.multi:not(.mob) #tf,body.multi:not(.mob) #bTf,body.multi:not(.mob) #bCt,body.multi:not(.mob) #bInd,
+body.multi:not(.mob) #cMeta,body.multi:not(.mob) #tf,body.multi:not(.mob) #bTf,body.multi:not(.mob) #bCt,body.multi:not(.mob) #ctSz,body.multi:not(.mob) #bSz,body.multi:not(.mob) #bInd,
 body.multi:not(.mob) #bCfg,body.multi:not(.mob) #bDraw,body.multi:not(.mob) #tkBody{display:none!important}
 body.multi .charthead .spacer{flex:1 1 auto!important}
 #mcGrid{grid-column:1 / -1;grid-row:2;display:grid;gap:3px;background:var(--line);min-height:0;min-width:0;grid-template-columns:1fr;grid-template-rows:1fr}

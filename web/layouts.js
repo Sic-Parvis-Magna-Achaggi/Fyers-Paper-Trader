@@ -260,7 +260,7 @@ function layBuild(){
   p.innerHTML = `<div class="cfgh"><b>Layouts</b><button class="ghost" id="layClose">✕</button></div><div id="layBody"></div>`;
   $("#ctPick").after(p);
   b.onclick = e => { e.stopPropagation(); const show = p.classList.contains("hide");
-    for(const id of ["#ctPick", "#cfgPick", "#tfPick", "#indPick"]) $(id).classList.add("hide");
+    for(const id of ["#ctPick", "#szPick", "#cfgPick", "#tfPick", "#indPick"]) $(id).classList.add("hide");
     p.classList.toggle("hide", !show); if(show){ LAY.edit = null; layRender(); } };
   $("#layClose").onclick = () => p.classList.add("hide");
   p.addEventListener("click", e => e.stopPropagation());

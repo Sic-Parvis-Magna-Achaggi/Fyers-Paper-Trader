@@ -470,7 +470,7 @@ if(window.FTM_REPLAY){
   addEventListener("keydown", e => {
     if(e.target.closest && e.target.closest("input,select,textarea")) return;
     if(e.key === "Escape"){
-      const open = ["#tfPick", "#indPick", "#ctPick", "#cfgPick", "#dtbFly", "#drMenu"].some(id => { const x = $(id); return x && !x.classList.contains("hide"); });
+      const open = ["#tfPick", "#indPick", "#ctPick", "#szPick", "#cfgPick", "#dtbFly", "#drMenu"].some(id => { const x = $(id); return x && !x.classList.contains("hide"); });
       if(!open && !DR.tool && !DR.meas) post({rp: "close"});
       return;
     }

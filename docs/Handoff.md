@@ -1,6 +1,8 @@
 # Handoff: where the project stands (for a new chat)
 
-Updated 13 Nov 2026, version **0.43.6** (👁 first on the phone's chart bar; 0.43.5: 👁 / H hides the trades' bars and zones; 0.43.4: with the unit button on, only its unit is shown; 0.43.3: ✕ moved to the far left of the position bar, the phone's unit button to the right end of the chips; 0.43.2: the unit button on the phone; 0.43.1: a unit button on the position bar, roadmap 22; 0.43.0: strategies that trade by themselves, roadmap 23 a; 0.42.1: roadmap items 23-29; 0.42.0: P&L, SL and TP as an amount, % of the account or R, roadmap 22; 0.41.0: the MT5 day-end close by each symbol's sessions, EA 1.23; 0.40.0: the MT5 day-end close, 8 b4; 0.39.1: each MT5 trade's candles kept for its replay, 8 c1b; 0.39.0: MT5 trades in the journal, 8 c1). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
+Updated 13 Nov 2026, version **0.44.0** (Renko / range / P&F sizes on the chart bar like the timeframes, roadmap 30; size
+changes no longer hang: incremental chart-type builders, a 20,000-bar cap, Fixed starting from the chart's size; the
+timeframe / chart type / size menus under their buttons; 0.43.6: 👁 first on the phone's chart bar; 0.43.5: 👁 / H hides the trades' bars and zones; 0.43.4: with the unit button on, only its unit is shown; 0.43.3: ✕ moved to the far left of the position bar, the phone's unit button to the right end of the chips; 0.43.2: the unit button on the phone; 0.43.1: a unit button on the position bar, roadmap 22; 0.43.0: strategies that trade by themselves, roadmap 23 a; 0.42.1: roadmap items 23-29; 0.42.0: P&L, SL and TP as an amount, % of the account or R, roadmap 22; 0.41.0: the MT5 day-end close by each symbol's sessions, EA 1.23; 0.40.0: the MT5 day-end close, 8 b4; 0.39.1: each MT5 trade's candles kept for its replay, 8 c1b; 0.39.0: MT5 trades in the journal, 8 c1). Read this, `docs/Roadmap.md` (the task list: what's next, with the agreed
 live-mode design, and what's done), `CHANGELOG.md` (what's done) and `docs/Paper_Trading_Guide.md` (how the app behaves).
 
 ## Getting the code
@@ -44,7 +46,8 @@ and roadmap updated too.
   `helper/charges_watch.py`, `helper/symbols.py`, `helper/candles.py`.
 - `helper/feedcheck.py`: the order-flow check (`FC`): records the admin's feed snapshots for chosen contracts
   (`data/feedcheck/`), counts exact / merged trades; hooked in `rt.py` (admin's on_tick, watch_symbols).
-- `web/ctype.js`: chart types (Heikin-Ashi, Renko, range bars, line break, Point & Figure...) as pure functions, tested in Node.
+- `web/ctype.js`: chart types (Heikin-Ashi, Renko, range bars, line break, Point & Figure...) as pure functions, tested in Node
+  (v0.44.0: resumable builders, see "Chart sizes and the chart-type builders").
   In `web/index.html` the chart keeps `RAW` (the real candles, from history and live ticks) and `DISP` (what's shown,
   `CT.transform(RAW)`); `dispSet()` draws all of it, `dispLive()` only what a tick changed. Everything that reads
   the chart's bars (Volume, indicators, Pine via `dispBars()`, the legend) uses `DISP`; prices and trade lines are
@@ -106,6 +109,54 @@ automatic pictures off itself (other suites turn them on).
 `indicator_settings_flow.js`'s "at the start of a contract's history it stops asking" failed once in 2 runs on 1 Nov
 (v0.22.0; passed on re-run, 37/37). Same advice. 11 Nov (v0.37.4): 2 fails in 4 runs (200 daily candles loaded, the
 "No older candles" note not yet up in its 4.5 s window); passed on v0.37.3's code too. Worth widening that window.
+13 Nov (v0.44.0 runs, all confirmed on v0.43.6's code on the same data, so not from this release):
+`indicator_settings_flow.js` crashes at `selectOption("#indSet [data-tf]", "1")` ("option being selected is not enabled": 1m
+is greyed out as lower than the 2m chart; the test expects to pick it and see the refusal message). `mt5_flow.js`'s "the
+header stays on one line at 1500 px" fails on shared data (the top bar's pills). `replay_flow.js`'s "5m: the forming candle
+is built from its minutes so far (5 of them)" fails when the replay lands on a 5-minute boundary (the mock's 5m candle vs
+its own 1m candles); 2 of 4 runs.
+Test kit without Playwright's own Chromium (13 Nov): a `playwright` shim on NODE_PATH that launches `/usr/bin/google-chrome`
+with `--no-sandbox` works for every browser test.
+
+## Chart sizes and the chart-type builders (v0.44.0, roadmap 30)
+
+Asked 13 Nov (screenshot: XAUUSD 1m, Range 10; "preset and custom ranges for range bars and renko ... like timeframes",
+"takes a lot of time when changing the ranges and sometimes even hangs", the timeframe menu at the right end, not under ▾).
+- **`web/ctype.js`:** every non-time-based type (and Heikin-Ashi) is a builder: `CT.builder(type, o)` -> {out, feed(candle),
+  save(), load(state)} (`_ha`, `_renko`, `_range`, `_pf`, `_lb`). `CT.transform` / `CT.renko(...)` etc. = a builder fed every
+  candle, so their output is unchanged (Node users: `helper/pine_node.mjs`, alerts, strategies). A bar in `out` never
+  changes later except the last (range bars, P&F columns: `save()` copies it). `CT.startFor(raw, type, o, max)` /
+  `CT.barsIn`: the first candle so Renko / range keep to `CT.MAX_BARS` (20,000; P&F needs no cap: a column per reversal).
+  Checked: 3,964 random cases old == new, incl. save / load / re-fed live candles (script kept out of the repo: the old
+  functions are gone; `ctype_test.js` still passes).
+- **index.html, the bars:** `dispBuild()` (CT_START from `startFor`; `CTB` = {b, s: saved after the closed candles, n, t0});
+  `dispSet()` draws all; `dispLive()` loads `CTB.s`, feeds candles that closed since into the saved part, then the live
+  candle, and hands old / new to `dispApply(old, nd, from, oldAt)`: first differing bar k; bars k..r-1 still there (same
+  time) changed in place with the library's historical update (`series.update(p, true)`: Renko / range put a candle's
+  volume on the FIRST bar it made, so ticks change an older bar); bars from r that went: `series.pop`; new ones appended;
+  > 40 operations: `dispSet()` (each op costs the library time in proportion to all its bars). `indAfter()` does the same
+  for Volume (`volSet` / `volAt`, no `hist.data()` per tick) and Pine (`pineRun` only when bars went, else `pineTick`).
+  `DISP_BATCH`: the crosshair handler (which the library calls for every update) redraws the legend once per batch.
+  `liveBar` -> `dispLiveSoon()`: a redraw that took `DL.ms` waits up to 3 x that (max 1 s) before the next.
+  Measured on the mock (CRUDEOIL 1m): range 10 ~2 ms a tick; 13-16k bars 10-45 ms (v0.43.6: a full rebuild per tick).
+- **ctSave(changes, rebuild):** rebuilds the chart only when `changes` has `type`, or the series was made for another type
+  (`CT_BUILT`, set in `makeSeries`) or other Renko wicks; anything else = `showRaw()` (as a timeframe change). ctOpts:
+  "fixed" with no size for the contract = the ATR size (was 1 tick: the hang). The menu's mode selects carry `CT_SIZE`
+  into the saved fixed size.
+- **The size bar:** `#ctSz` (`.tf.szb`, flex-shrink 2) + `#bSz` ▾ + `#szPick` after `#bCt` (hidden in the desktop grid by
+  multichart.css; the phone: a sheet, mobile.css). `SZ_TYPES` (mode / map / atr keys per type), `szNow()` ("atr" or points;
+  P&F via `pfFixed`, key `k@tf`), `szPresets()` (1-2-2.5-5 from ATR/4 to 16 ATR, whole ticks), `szFavs()` (pref
+  `ctype.szFav["<type>|<ctKey>"]`, else ATR + nearest ½ / 1 / 2 ATR; `szUse` saves that list on first use), `szPin`,
+  `szUse(v, more)`, `szButtons()` (from `ctLabel()`), `szRender()` / `szNote()` (the cap message), `szParse` ("7.5", "20t",
+  "ATR 20"), `szCustom()`.
+- **`popUnder(pick, btn)`:** `#tfPick`, `#ctPick`, `#szPick` open under their buttons, clamped inside section.chartwrap
+  (not on the phone). **`barFit()`** (rAF; a ResizeObserver on `.charthead`, `tfButtons`, `szButtons`): buttons that don't
+  fit get `.cut` (hidden whole); when the one in use isn't shown, ▾ reads "5m ▾" / "ATR 7 ▾".
+- `histMore()` doesn't load older candles while CT_START > 0 (they'd be cut off again); says so.
+- **`ctKey()`** = the row's `u`, else `cur.u` (v0.44.0: `openSymbol` keeps `u` in `cur`), else the contract. At boot the chart
+  draws from IndexedDB before `/api/symbol` answers; that callback redraws (`CT_SIZE = null; showRaw()`) if the key changed
+  (old prefs without `cur.u`). Before, a fixed Renko / range size was missed on every reload and 1 tick was drawn.
+- **Tests:** `tests/chartsizes_flow.js` (51). Not seen on the real server: MT5's tick rate on XAUUSD with small sizes.
 
 ## Strategies (v0.43.0, roadmap 23 a)
 
@@ -556,6 +607,10 @@ line of "FundingPips' day's starting balance".
   FundingPips (10 Nov): no hedging even in Hedge mode; his 21182752 is Phase 1 of the 2-Step; news: ForexFactory (owner).
 
 ## Next job
+
+**v0.44.0 (13 Nov):** the owner opens XAUUSD 1m on MT5, Range: picks sizes from the new buttons (ATR, 5, 10...), types one
+in ▾ (e.g. 2, 20t), and checks a change is quick and the page doesn't freeze while ticks come in; the timeframe ▾ opens
+under itself. Then back to roadmap 23 (b).
 
 **v0.43.0 (12 Nov), strategies (roadmap 23 a):** the owner writes a `strategy()` script in the Pine Editor, makes a strategy
 on the ⚡ page, runs the tester, then switches it on for a paper account for a day on real prices. Live / MT5 only after

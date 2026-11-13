@@ -179,7 +179,7 @@ button.mplace.live{outline:3px solid var(--down);outline-offset:2px}
 .mtog button.on{background:var(--accent);border-color:var(--accent);color:#fff}
 
 /* popovers become sheets above the tabs */
-body.mob #tfPick,body.mob #indPick,body.mob #cfgPick,body.mob #ctPick{position:fixed!important;left:8px!important;right:8px!important;top:auto!important;
+body.mob #tfPick,body.mob #indPick,body.mob #cfgPick,body.mob #ctPick,body.mob #szPick{position:fixed!important;left:8px!important;right:8px!important;top:auto!important;
   bottom:calc(var(--mn) + var(--mb) + var(--sb) + 8px)!important;width:auto!important;max-height:65vh!important;overflow:auto!important;z-index:60!important}
 body.mob #codeAsk,body.mob .modalwrap{z-index:95}
 /* messages drop in under the top bar (as on a phone), clear of the trade controls */

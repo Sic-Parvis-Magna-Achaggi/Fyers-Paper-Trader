@@ -1,5 +1,59 @@
 # Changelog
 
+## v0.44.0 — 13 Nov 2026 — Renko and range sizes on the chart bar; quicker size changes; menus under their buttons
+
+Added
+- **Box and range sizes as buttons on the chart bar, like the timeframes** (owner: "Like how we have timeframes on the
+  chart, we need to get preset and custom ranges for range bars and renko charts"). On Renko, range bars and Point &
+  Figure, buttons next to the chart type: **ATR** (showing the size it makes, e.g. ATR 7) and your pinned sizes. **▾**
+  lists presets for the chart (1, 2, 2.5, 5, 10, 20... from ¼ to 16 × the ATR, in whole ticks) and takes your own size:
+  points (`7.5`), ticks (`20t`) or `ATR 20`. Right-click / long-press pins or unpins, as on the timeframes. Sizes and pins
+  are saved per underlying, separately for Renko, range bars and P&F, on the server. Until a contract's size is first
+  used, its buttons are ATR plus the round sizes nearest ½, 1 and 2 ATRs; then they stay put. The phone: the same buttons
+  on its chart bar, ▾ as a sheet.
+- **The ▾ of the timeframes and of the sizes names what's in use when its button doesn't fit** on the bar (a narrow
+  window, the trade panel open): **5m ▾**, **ATR 7 ▾**. Buttons that don't fit drop out whole (before, one could show cut
+  in half).
+
+Fixed
+- **Changing the range / box could hang the page** (owner). Three causes, all fixed:
+  1. Picking **Fixed points** in the chart type menu for a contract with no size typed yet drew the bars **one tick**
+     wide: 0.01 on gold, over a million range bars from a week of 1m candles. Fixed now starts from the size on the chart;
+     a saved "fixed" without a size draws the ATR size.
+  2. **Every live price rebuilt every Renko / range / P&F / line-break / Heikin-Ashi bar from the whole history**, and on
+     small sizes (tens of thousands of bars) that took longer than the time between MT5's ticks. Now only the live candle
+     is worked out again (the bars are exactly the same: checked against a full build in 3,964 random cases), and a
+     redraw that takes long sets its own pace (at most one every 3 × its time), so ticks can't queue up.
+  3. **Very small sizes made more bars than a browser can draw.** Renko and range bars now keep to the latest 20,000
+     (the chart then starts at a later candle; ▾ and the chart type menu say from when).
+  4. **On a reload, a fixed size wasn't found**: the chart drew from this browser's saved candles before the contract's
+     details came, so it looked the size up under the contract (CRUDEOIL26NOVFUT) instead of its underlying (CRUDEOIL)
+     and drew one-tick boxes (and stayed so until something else changed). The open contract now keeps its underlying,
+     and the chart redraws if the details change the size.
+- **A size change rebuilt the whole chart** (every pane, every indicator from scratch). Now only the bars and the
+  indicators on them are worked out again, as a timeframe change does.
+- **The timeframe menu opened at the right end of the chart, not under ▾** (owner's screenshot). The timeframe, chart
+  type and size menus now open under their buttons, kept inside the chart.
+- On Renko / range bars, a live candle's volume (booked on the first bar it formed) didn't reach the Volume pane until the
+  next reload; the chart's bars that a tick changed before the last one weren't redrawn either. Both are now updated.
+- The legend was redrawn once for every bar a tick changed (the chart reports each one); now once per tick.
+
+Changed
+- The chart type button says just the type (**Range**, **Renko**, **P&F ×3**); the size is on the size buttons.
+
+Tests
+- `tests/chartsizes_flow.js` (51, new): the size buttons and presets, a size without a chart rebuild, the menu under ▾,
+  pins (right-click on and off, saved, after a reload), typed sizes (points rounded to ticks, ticks, ATR n, unreadable),
+  Renko's own sizes, Fixed keeping the size (the hang), the 20,000-bar cap (exact bars, the note, no scroll-back), live
+  ticks re-feeding only the live candle with every bar equal to a full build (range, Heikin-Ashi, Renko from highs and
+  lows with wicks, line break, P&F), bars a live candle makes and then doesn't, the timeframe and chart type menus under
+  their buttons, a menu near the right edge, the bar when cramped (nothing half shown, ▾ naming what's in use), a reload
+  (sizes, pins, the underlying's key before the contract's details come), the phone.
+- `tests/ctype_test.js` passes unchanged (the chart types are now builders: `CT.builder(type, o)` with `feed`, `save`,
+  `load`; `CT.transform` is a builder fed every candle). Re-run: `charttypes_flow`, `pine_compat_flow`,
+  `navigation_flow`, `legend_flow`, `layouts_flow`, `drawings_flow`, `multichart_flow`, `mobile_flow`, `replay_flow`,
+  `mt5_flow`, `chartalerts_test`, `strategies_test`, `routes_check`.
+
 ## v0.43.6 — 13 Nov 2026 — 👁 in view on the phone
 
 Fixed

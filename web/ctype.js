@@ -66,23 +66,42 @@ const CT = {
     }
   },
 
-  ha(raw){
+  /* Every type that isn't drawn straight from the candles is a builder: feed(candle) one candle at a time (oldest
+     first) into `out`; save() / load(state) mark a point and go back to it. The chart keeps a builder saved after
+     the last closed candle, so a live price only re-feeds the live candle (v0.44.0: Renko / range bars built from the
+     whole history on every tick made the chart hang on small sizes). transform() is a builder fed every candle, so
+     both always give the same bars. A bar already in `out` is never changed later, except the last one where the
+     type keeps growing it (range bars, P&F columns): save() keeps a copy of it. */
+  builder(type, o){
+    o = {...CT.DEFAULTS, ...(o || {})};
+    const mk = {ha: CT._ha, renko: CT._renko, range: CT._range, lb: CT._lb, pf: CT._pf}[type];
+    return mk ? mk(o) : null;
+  },
+  ha(raw){ return CT._run(CT._ha({}), raw); },
+  renko(raw, box, src, wicks){ return CT._run(CT._renko({box, renkoSrc: src, renkoWicks: wicks}), raw); },
+  range(raw, size){ return CT._run(CT._range({range: size}), raw); },
+  pf(raw, box, rev, src){ return CT._run(CT._pf({box, pfRev: rev, pfSrc: src}), raw); },
+  lineBreak(raw, n){ return CT._run(CT._lb({lbLines: n}), raw); },
+  _run(b, raw){ for(const x of raw) b.feed(x); return b.out; },
+
+  _ha(){
     const out = [];
     let po = null, pc = null;
-    for(const b of raw){
-      const c = (b.open + b.high + b.low + b.close) / 4;
-      const op = po == null ? (b.open + b.close) / 2 : (po + pc) / 2;
-      out.push({time: b.time, open: op, high: Math.max(b.high, op, c), low: Math.min(b.low, op, c), close: c, vol: b.vol || 0});
-      po = op; pc = c;
-    }
-    return out;
+    return {out,
+      feed(b){
+        const c = (b.open + b.high + b.low + b.close) / 4;
+        const op = po == null ? (b.open + b.close) / 2 : (po + pc) / 2;
+        out.push({time: b.time, open: op, high: Math.max(b.high, op, c), low: Math.min(b.low, op, c), close: c, vol: b.vol || 0});
+        po = op; pc = c;
+      },
+      save(){ return {n: out.length, po, pc}; },
+      load(s){ out.length = s.n; po = s.po; pc = s.pc; }};
   },
 
-  renko(raw, box, src, wicks){
-    if(!(box > 0)) return [];
-    const out = [];
+  _renko(o){
+    const box = o.box, src = o.renkoSrc, wicks = o.renkoWicks, out = [];
     const r6 = v => +v.toFixed(6);
-    let hi = Math.floor(raw[0].close / box) * box, lo = hi;   // the last brick's top and bottom (zero height at first)
+    let hi = null, lo = null;                     // the last brick's top and bottom (zero height at first)
     let vol = 0, lastT = -Infinity, minP = Infinity, maxP = -Infinity;
     const push = (t, op, cl, up) => {
       const tt = Math.max(t, lastT + 1); lastT = tt;
@@ -90,73 +109,128 @@ const CT = {
       if(wicks){ if(up) b.low = r6(Math.min(b.low, minP)); else b.high = r6(Math.max(b.high, maxP)); }
       out.push(b); vol = 0; minP = Infinity; maxP = -Infinity;
     };
-    for(const b of raw){
-      vol += b.vol || 0;
-      for(const p of src === "hl" ? CT.path(b) : [b.close]){
-        minP = Math.min(minP, p); maxP = Math.max(maxP, p);
-        while(p >= hi + box - 1e-9){ push(b.time, hi, hi + box, true); lo = hi; hi = hi + box; }
-        while(p <= lo - box + 1e-9){ push(b.time, lo, lo - box, false); hi = lo; lo = lo - box; }
-      }
-    }
-    return out;
+    return {out,
+      feed(b){
+        if(!(box > 0)) return;
+        if(hi == null){ hi = Math.floor(b.close / box) * box; lo = hi; }
+        vol += b.vol || 0;
+        for(const p of src === "hl" ? CT.path(b) : [b.close]){
+          minP = Math.min(minP, p); maxP = Math.max(maxP, p);
+          while(p >= hi + box - 1e-9){ push(b.time, hi, hi + box, true); lo = hi; hi = hi + box; }
+          while(p <= lo - box + 1e-9){ push(b.time, lo, lo - box, false); hi = lo; lo = lo - box; }
+        }
+      },
+      save(){ return {n: out.length, hi, lo, vol, lastT, minP, maxP}; },
+      load(s){ out.length = s.n; ({hi, lo, vol, lastT, minP, maxP} = s); }};
   },
 
-  range(raw, size){
-    if(!(size > 0)) return [];
-    const out = [];
+  _range(o){
+    const size = o.range, out = [];
     let cur = null, lastT = -Infinity;
     const open = (t, p) => { const tt = Math.max(t, lastT + 1); lastT = tt; cur = {time: tt, open: p, high: p, low: p, close: p, vol: 0}; out.push(cur); };
-    for(const b of raw){
-      let first = true;
-      for(const p of CT.path(b)){
-        if(!cur) open(b.time, p);
-        if(first){ cur.vol += b.vol || 0; first = false; }
-        // walk to p, closing a bar each time the range is used up
-        for(let guard = 0; guard < 10000; guard++){
-          if(p > cur.high && p - cur.low > size + 1e-9){
-            const top = +(cur.low + size).toFixed(6);
-            cur.high = top; cur.close = top; open(b.time, top);
-          } else if(p < cur.low && cur.high - p > size + 1e-9){
-            const bot = +(cur.high - size).toFixed(6);
-            cur.low = bot; cur.close = bot; open(b.time, bot);
-          } else break;
+    return {out,
+      feed(b){
+        if(!(size > 0)) return;
+        let first = true;
+        for(const p of CT.path(b)){
+          if(!cur) open(b.time, p);
+          if(first){ cur.vol += b.vol || 0; first = false; }
+          // walk to p, closing a bar each time the range is used up
+          for(let guard = 0; guard < 10000; guard++){
+            if(p > cur.high && p - cur.low > size + 1e-9){
+              const top = +(cur.low + size).toFixed(6);
+              cur.high = top; cur.close = top; open(b.time, top);
+            } else if(p < cur.low && cur.high - p > size + 1e-9){
+              const bot = +(cur.high - size).toFixed(6);
+              cur.low = bot; cur.close = bot; open(b.time, bot);
+            } else break;
+          }
+          cur.high = Math.max(cur.high, p); cur.low = Math.min(cur.low, p); cur.close = p;
         }
-        cur.high = Math.max(cur.high, p); cur.low = Math.min(cur.low, p); cur.close = p;
-      }
-    }
-    return out;
+      },
+      save(){ return {n: out.length, cur: cur && {...cur}, lastT}; },
+      load(s){ out.length = s.n; lastT = s.lastT; cur = s.cur ? {...s.cur} : null; if(cur) out[s.n - 1] = cur; }};
   },
 
-  pf(raw, box, rev, src){
-    if(!(box > 0)) return [];
-    rev = Math.max(1, rev | 0);
+  _pf(o){
+    const box = o.box, rev = Math.max(1, (o.pfRev || 3) | 0), src = o.pfSrc, out = [];
     // work in whole boxes (k = level / box) so rounding can't drift
     const up = p => Math.floor(p / box + 1e-9), dn = p => Math.ceil(p / box - 1e-9), L = k => +(k * box).toFixed(6);
-    const out = [];
-    let dir = 0, top = 0, bot = 0, base = up(raw[0].close), cur = null, lastT = -Infinity, vol = 0;
+    let dir = 0, top = 0, bot = 0, base = null, cur = null, lastT = -Infinity, vol = 0;
     const bar = () => ({open: L(dir > 0 ? bot : top), close: L(dir > 0 ? top : bot), high: L(top), low: L(bot), pf: dir});
     const start = t => { const tt = Math.max(t, lastT + 1); lastT = tt; cur = {time: tt, ...bar(), vol}; out.push(cur); vol = 0; };
     const sync = () => { if(cur) Object.assign(cur, bar()); };
-    for(const b of raw){
-      vol += b.vol || 0;
-      // high / low: a rising column looks at the high first (to extend), then the low (to reverse); falling: the other way
-      const ps = src === "hl" ? (dir >= 0 ? [b.high, b.low] : [b.low, b.high]) : [b.close];
-      for(const p of ps){
-        if(dir === 0){
-          if(up(p) >= base + 1){ dir = 1; bot = base; top = up(p); start(b.time); }
-          else if(dn(p) <= base - 1){ dir = -1; top = base; bot = dn(p); start(b.time); }
-        } else if(dir > 0){
-          if(up(p) > top){ top = up(p); sync(); }
-          else if(dn(p) <= top - rev){ dir = -1; top = top - 1; bot = dn(p); start(b.time); }
-        } else {
-          if(dn(p) < bot){ bot = dn(p); sync(); }
-          else if(up(p) >= bot + rev){ dir = 1; bot = bot + 1; top = up(p); start(b.time); }
+    return {out,
+      feed(b){
+        if(!(box > 0)) return;
+        if(base == null) base = up(b.close);
+        vol += b.vol || 0;
+        // high / low: a rising column looks at the high first (to extend), then the low (to reverse); falling: the other way
+        const ps = src === "hl" ? (dir >= 0 ? [b.high, b.low] : [b.low, b.high]) : [b.close];
+        for(const p of ps){
+          if(dir === 0){
+            if(up(p) >= base + 1){ dir = 1; bot = base; top = up(p); start(b.time); }
+            else if(dn(p) <= base - 1){ dir = -1; top = base; bot = dn(p); start(b.time); }
+          } else if(dir > 0){
+            if(up(p) > top){ top = up(p); sync(); }
+            else if(dn(p) <= top - rev){ dir = -1; top = top - 1; bot = dn(p); start(b.time); }
+          } else {
+            if(dn(p) < bot){ bot = dn(p); sync(); }
+            else if(up(p) >= bot + rev){ dir = 1; bot = bot + 1; top = up(p); start(b.time); }
+          }
         }
-      }
-      if(cur && vol){ cur.vol += vol; vol = 0; }
-    }
-    return out;
+        if(cur && vol){ cur.vol += vol; vol = 0; }
+      },
+      save(){ return {n: out.length, cur: cur && {...cur}, dir, top, bot, base, lastT, vol}; },
+      load(s){ out.length = s.n; ({dir, top, bot, base, lastT, vol} = s); cur = s.cur ? {...s.cur} : null; if(cur) out[s.n - 1] = cur; }};
   },
+
+  _lb(o){
+    const n = Math.max(1, (o.lbLines || 3) | 0), out = [];
+    let lastT = -Infinity, vol = 0;
+    return {out,
+      feed(b){
+        vol += b.vol || 0;
+        const c = b.close;
+        if(!out.length){
+          if(c !== b.open){ out.push({time: b.time, open: b.open, close: c, high: Math.max(b.open, c), low: Math.min(b.open, c), vol}); lastT = b.time; vol = 0; }
+          return;
+        }
+        let top = -Infinity, bot = Infinity;
+        for(let i = Math.max(0, out.length - n); i < out.length; i++){ top = Math.max(top, out[i].high); bot = Math.min(bot, out[i].low); }
+        const last = out[out.length - 1], up = last.close >= last.open;
+        let op = null;
+        if(c > top) op = up ? last.close : last.open;          // continuation from the close, reversal from the open
+        else if(c < bot) op = up ? last.open : last.close;
+        if(op == null) return;
+        const tt = Math.max(b.time, lastT + 1); lastT = tt;
+        out.push({time: tt, open: op, close: c, high: Math.max(op, c), low: Math.min(op, c), vol});
+        vol = 0;
+      },
+      save(){ return {n: out.length, lastT, vol}; },
+      load(s){ out.length = s.n; lastT = s.lastT; vol = s.vol; }};
+  },
+
+  /* Renko / range bars: about how many bars a candle makes at this size (the price's path in boxes), and the first
+     candle to build from so the chart keeps to `max` bars - a size far below the candles' moves (0.10 on gold's 1m
+     candles: hundreds of thousands of bars) would otherwise freeze the page. 0 = build from the first candle. */
+  barsIn(b, prev, type, o){
+    const s = o.box || o.range;
+    if(!(s > 0)) return 0;
+    const path = Math.abs(b.open - (prev ? prev.close : b.open)) + (b.close >= b.open ? (b.open - b.low) + (b.high - b.low) + (b.high - b.close)
+      : (b.high - b.open) + (b.high - b.low) + (b.close - b.low));
+    if(type === "renko") return o.renkoSrc === "hl" ? path / s : Math.abs(b.close - (prev ? prev.close : b.close)) / s;
+    if(type === "range") return path / s + 1 / 64;
+    return 1;
+  },
+  startFor(raw, type, o, max){
+    o = {...CT.DEFAULTS, ...(o || {})};
+    if(!["renko", "range"].includes(type) || !raw.length) return 0;   // (P&F: a column per reversal, whatever the box)
+    let n = 0;
+    for(let i = raw.length - 1; i >= 0; i--){ n += CT.barsIn(raw[i], raw[i - 1], type, o); if(n > max) return Math.min(raw.length - 1, i + 1); }
+    return 0;
+  },
+  MAX_BARS: 20000,
 
   /* Point & Figure toolkit (classic rules: Dorsey, du Plessis). cols: P&F bars (pf = 1 X / -1 O); box; rev.
      Works in box numbers (k = price / box). Returns:
@@ -320,29 +394,5 @@ const CT = {
     high_pole: "High pole", low_pole: "Low pole", triangle_bull: "Triangle", triangle_bear: "Triangle", asc_triangle: "Asc. triangle",
     desc_triangle: "Desc. triangle", turtle_bull: "Turtle", turtle_bear: "Turtle", aft_bull: "AFT", aft_bear: "AFT"},
 
-  lineBreak(raw, n){
-    n = Math.max(1, n | 0);
-    const out = [];
-    let lastT = -Infinity, vol = 0;
-    for(const b of raw){
-      vol += b.vol || 0;
-      const c = b.close;
-      if(!out.length){
-        if(c !== b.open){ out.push({time: b.time, open: b.open, close: c, high: Math.max(b.open, c), low: Math.min(b.open, c), vol}); lastT = b.time; vol = 0; }
-        continue;
-      }
-      const lastN = out.slice(-n), last = out[out.length - 1];
-      const top = Math.max(...lastN.map(x => x.high)), bot = Math.min(...lastN.map(x => x.low));
-      const up = last.close >= last.open;
-      let op = null;
-      if(c > top) op = up ? last.close : last.open;          // continuation from the close, reversal from the open
-      else if(c < bot) op = up ? last.open : last.close;
-      if(op == null) continue;
-      const tt = Math.max(b.time, lastT + 1); lastT = tt;
-      out.push({time: tt, open: op, close: c, high: Math.max(op, c), low: Math.min(op, c), vol});
-      vol = 0;
-    }
-    return out;
-  },
 };
 if(typeof module !== "undefined") module.exports = CT;

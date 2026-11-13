@@ -145,6 +145,12 @@ section.chartwrap{display:grid;grid-template-rows:auto minmax(0,1fr) auto;min-wi
 .charthead .tf{flex:0 1 auto;min-width:0;flex-wrap:wrap;height:26px;overflow:hidden;overflow:clip}   /* buttons that don't fit drop out whole; ▾ has them all */
 .charthead .meta{flex:0 100 auto}   /* the bid / ask text gives way first (they're on the price scale anyway) */
 .charthead .fsb,.charthead .tfmore{flex:0 0 auto}
+.charthead .szb{flex:0 2 auto}   /* v0.44.0: Renko / range / P&F sizes, like the timeframes (they drop out whole, before the timeframes; ▾ has them all) */
+.charthead .tf button.cut{visibility:hidden}   /* (a button only partly in view) */
+.tfmore b{font-weight:500;color:var(--text);margin-right:3px}
+#szPick#szPick{width:270px}
+#szPick .h + .grid{margin-top:6px}
+#szNote{margin-top:6px;line-height:1.4}
 .charthead .meta{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .charthead .sym{font-family:var(--mono);font-weight:500}
 .charthead .ltp{font-family:var(--mono);font-size:18px}
@@ -155,15 +161,15 @@ section.chartwrap{display:grid;grid-template-rows:auto minmax(0,1fr) auto;min-wi
 #chart{position:relative;min-height:0;min-width:0;overflow:hidden}
 /* timeframe picker */
 .tfmore{padding:3px 7px;font-size:12px;border-color:transparent;background:transparent;color:var(--muted)}
-#tfPick{position:absolute;right:10px;top:42px;z-index:30;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px;width:250px;box-shadow:0 8px 24px rgba(0,0,0,.35)}
-#tfPick .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:6px}
-#tfPick .grid button{padding:4px 0;font-size:12px;position:relative}
-#tfPick .grid button.on{border-color:var(--accent);color:var(--accent)}
-#tfPick .grid button.fav::after{content:"★";position:absolute;top:-3px;right:2px;font-size:9px;color:var(--warn)}
-#tfPick .h{font-size:11px;color:var(--muted)}
-#tfPick .row2{display:flex;gap:6px;margin-top:8px}
-#tfPick .row2 input{padding:4px 8px;font-size:12px}
-#tfPick .row2 button{padding:4px 10px;font-size:12px;white-space:nowrap}
+#tfPick,#szPick{position:absolute;right:10px;top:42px;z-index:30;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px;width:250px;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+#tfPick .grid,#szPick .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:6px}
+#tfPick .grid button,#szPick .grid button{padding:4px 0;font-size:12px;position:relative}
+#tfPick .grid button.on,#szPick .grid button.on{border-color:var(--accent);color:var(--accent)}
+#tfPick .grid button.fav::after,#szPick .grid button.fav::after{content:"★";position:absolute;top:-3px;right:2px;font-size:9px;color:var(--warn)}
+#tfPick .h,#szPick .h{font-size:11px;color:var(--muted)}
+#tfPick .row2,#szPick .row2{display:flex;gap:6px;margin-top:8px}
+#tfPick .row2 input,#szPick .row2 input{padding:4px 8px;font-size:12px}
+#tfPick .row2 button,#szPick .row2 button{padding:4px 10px;font-size:12px;white-space:nowrap}
 /* candle timer: sits on the price scale just under the current price, like TradingView */
 #ctimer{position:absolute;z-index:8;font-family:var(--mono);font-size:12px;font-weight:600;line-height:18px;text-align:center;
   background:var(--accent);color:#fff;border-radius:3px;pointer-events:none;padding:0 2px;box-shadow:0 1px 4px rgba(0,0,0,.35);white-space:nowrap;overflow:hidden}
@@ -759,6 +765,8 @@ body:not(.is-admin) .admin-only{display:none!important}
         <div class="tf" id="tf"></div>
         <button class="tfmore" id="bTf" title="All timeframes and custom">▾</button>
         <button class="ghost fsb" id="bCt" title="Chart type: candles, Heikin-Ashi, Renko, range bars...">Candles</button>
+        <div class="tf szb hide" id="ctSz"></div>
+        <button class="tfmore hide" id="bSz" title="Box / range sizes: presets and your own">▾</button>
         <button class="ghost fsb" id="bPine" title="Pine Editor: write and save your own indicators">Pine</button>
         <button class="ghost fsb" id="bInd" title="Indicators">ƒx</button>
         <button class="ghost fsb" id="bTradeVis" title="Hide the trades' bars and shaded zones on this chart, to see the candles (H). The SL / TP / entry lines stay">👁</button>
@@ -780,6 +788,13 @@ body:not(.is-admin) .admin-only{display:none!important}
       <div id="ctPick" class="hide">
         <div class="cfgh"><b>Chart type</b><button class="ghost" id="ctClose">✕</button></div>
         <div id="ctBody"></div>
+      </div>
+      <div id="szPick" class="hide">
+        <div class="h" id="szHead"></div>
+        <div class="grid" id="szGrid"></div>
+        <div class="row2"><input id="szCustom" placeholder="e.g. 7.5, 20t (ticks), ATR 14" autocomplete="off"><button id="szAdd">Use</button></div>
+        <div class="err" id="szErr" style="min-height:0"></div>
+        <div class="h" id="szNote"></div>
       </div>
       <div id="cfgPick" class="hide">
         <div class="cfgh"><b>Chart settings</b><button class="ghost" id="cfgClose">✕</button></div>
@@ -1152,7 +1167,8 @@ function buildChart(){
   volSeries = null; INDS = [];
   volLayout();
   indBuild();
-  chart.subscribeCrosshairMove(param => { legendHover = !!(param && param.time != null && param.point); legendFill(legendHover ? param : null); });
+  // (v0.44.0: the chart sends this on every bar a tick changes; while dispApply is changing bars, only once at the end)
+  chart.subscribeCrosshairMove(param => { if(DISP_BATCH){ DISP_BATCH.p = param; return; } legendHover = !!(param && param.time != null && param.point); legendFill(legendHover ? param : null); });
   // scrolled to the left edge by you: load older candles
   chart.timeScale().subscribeVisibleLogicalRangeChange(r => { if(r && r.from < 15 && Date.now() - histUserAt < 1500 && !goBusy) histMore(); pineViewCheck(r); navWatch(r); });
   if(typeof drAttach === "function") drAttach();      // drawings and the measure (draw.js)
@@ -1169,12 +1185,18 @@ let volSeries = null, volCum = null, legendHover = false;
 let RAW = [], DISP = [], CT_SIZE = null;
 function ctCfg(){ return {...CT.DEFAULTS, ...(prefGet("ctype", {}) || {})}; }
 function ctType(){ const t = ctCfg().type; return CT.TYPES.some(x => x[0] === t) ? t : "candles"; }
-function ctKey(){ const r = cur && sym[cur.s]; return (r && r.u) || (cur && cur.s) || ""; }
+/* sizes are saved per underlying (CRUDEOIL, NIFTY...): the contract's row says which; cur.u keeps it for the page's start,
+   when the chart draws from saved candles before the row has come (v0.44.0: until then the key was the contract, its
+   saved size wasn't found and the chart drew 1 tick boxes - the size on reload, and the hang) */
+function ctKey(){ const r = cur && sym[cur.s]; return (r && r.u) || (cur && cur.u) || (cur && cur.s) || ""; }
 function ctOpts(){
   const c = ctCfg(), t = ctType(), k = ctKey(), tick = (cur && cur.tick) || 0.05;
   if(CT_SIZE == null && RAW.length){
-    if(t === "renko") CT_SIZE = CT.size(RAW, c.renkoMode, (c.renkoBox || {})[k], c.renkoAtr, tick);
-    if(t === "range") CT_SIZE = CT.size(RAW, c.rangeMode, (c.rangeSize || {})[k], c.rangeAtr, tick);
+    // (v0.44.0: "Fixed" with no size saved for this contract is the ATR size, as on P&F: it was 1 tick - 0.01 on gold -
+    // over a million range bars from a week of 1m candles, and the page hung)
+    const fx = (m, v) => m === "fixed" && +v > 0 ? "fixed" : "atr";
+    if(t === "renko") CT_SIZE = CT.size(RAW, fx(c.renkoMode, (c.renkoBox || {})[k]), (c.renkoBox || {})[k], c.renkoAtr, tick);
+    if(t === "range") CT_SIZE = CT.size(RAW, fx(c.rangeMode, (c.rangeSize || {})[k]), (c.rangeSize || {})[k], c.rangeAtr, tick);
     if(t === "pf"){ const fx = c.pfMode === "fixed" ? pfFixed(c, k) : null; CT_SIZE = CT.size(RAW, fx ? "fixed" : "atr", fx, c.pfAtr, tick); }   // (no size for this timeframe yet: the ATR box)
   }
   return {...c, box: CT_SIZE, range: CT_SIZE};
@@ -1199,8 +1221,10 @@ function dispTimeAt(t){
   while(lo < hi){ const m = (lo + hi + 1) >> 1; if(DISP[m].time <= t) lo = m; else hi = m - 1; }
   return DISP[lo].time;
 }
+let CT_BUILT = null;                           // the type (and Renko wicks) the chart's series was made for (v0.44.0)
 function makeSeries(C){
   const t = ctType(), base = {priceLineVisible:false, lastValueVisible:false};
+  CT_BUILT = {t, wicks: !!ctCfg().renkoWicks};
   if(t === "line") return chart.addSeries(LightweightCharts.LineSeries, {...base, color:C.lineC, lineWidth:2});
   if(t === "area") return chart.addSeries(LightweightCharts.AreaSeries, {...base, lineColor:C.lineC, lineWidth:2,
     topColor:rgbaHex(C.lineC, 0.35), bottomColor:rgbaHex(C.lineC, 0.02)});
@@ -1399,9 +1423,26 @@ function serOne(i){
   return o;
 }
 function volPoint(b){ return {time:b.time, value:b.vol || 0, color:volColor(b)}; }
-/* RAW -> DISP -> the chart, all of it */
+/* RAW -> DISP -> the chart, all of it.
+   v0.44.0: the types that aren't the candles themselves (Heikin-Ashi, Renko, range, line break, P&F) are built by a
+   CT.builder that is saved after the last closed candle (CTB), so a live price re-feeds only the live candle instead of
+   building the whole history again on every tick (that made small Renko / range sizes hang the page). Renko and range
+   bars keep to the latest CT.MAX_BARS bars: CT_START = the first candle they're built from (0 = all of them). */
+let CTB = null, CT_START = 0, DISP_BATCH = null;
+function ctBuilt(t){ return !["candles", "hollow", "bars", "line", "area"].includes(t); }
+function dispBuild(){
+  const t = ctType(), o = ctOpts();
+  CTB = null; CT_START = 0;
+  if(!ctBuilt(t) || !RAW.length) return CT.transform(RAW, t, o);
+  CT_START = CT.startFor(RAW, t, o, CT.MAX_BARS);
+  const b = CT.builder(t, o), n = RAW.length;
+  for(let i = CT_START; i < n - 1; i++) b.feed(RAW[i]);
+  CTB = {b, s: b.save(), n: n - 1, t0: n > 1 ? RAW[n - 2].time : null};   // saved after the closed candles
+  b.feed(RAW[n - 1]);
+  return b.out;
+}
 function dispSet(){
-  DISP = CT.transform(RAW, ctType(), ctOpts());
+  DISP = dispBuild();
   volData = {}; for(const b of DISP) volData[b.time] = b.vol || 0;
   series.setData(DISP.map((b, i) => serOne(i)));
   if(volSeries) volSeries.setData(DISP.map(volPoint));
@@ -1409,21 +1450,71 @@ function dispSet(){
 /* the live candle changed: update only the bars that changed on the chart (one, or a few new Renko bricks) */
 function dispLive(){
   const t = ctType();
-  let nd;
-  if(t === "candles" || t === "hollow" || t === "bars" || t === "line" || t === "area"){
+  if(!ctBuilt(t)){
     const L = RAW[RAW.length - 1], b = {time:L.time, open:L.open, high:L.high, low:L.low, close:L.close, vol:L.vol || 0};
-    nd = DISP.slice(); if(nd.length && nd[nd.length - 1].time === b.time) nd[nd.length - 1] = b; else nd.push(b);
-  } else nd = CT.transform(RAW, t, ctOpts());
-  const k = DISP.length - 1;
-  if(!DISP.length){ DISP = nd; dispSet(); indData(); return; }
-  if(nd.length < DISP.length || (k > 0 && nd[k - 1].time !== DISP[k - 1].time)){ DISP = nd; dispSet(); indData(); return; }
+    const nd = DISP.slice(); if(nd.length && nd[nd.length - 1].time === b.time) nd[nd.length - 1] = b; else nd.push(b);
+    return dispApply(DISP, nd, Math.max(0, DISP.length - 1));
+  }
+  const n = RAW.length;
+  // the saved point must still be the same history (a reload or older candles go through dispSet)
+  if(!DISP.length || !CTB || n - 1 < CTB.n || (CTB.n > 0 && (!RAW[CTB.n - 1] || RAW[CTB.n - 1].time !== CTB.t0)) || CTB.n < CT_START){ dispSet(); indData(); return; }
+  const b = CTB.b, from = Math.max(0, CTB.s.n - 1);          // bars before `from` never change
+  const old = DISP.slice(from).map(x => ({...x}));           // (the builder works in DISP itself)
+  b.load(CTB.s);
+  if(CTB.n < n - 1){                                         // candles that closed since: into the saved part
+    for(let i = Math.max(CTB.n, CT_START); i < n - 1; i++) b.feed(RAW[i]);
+    CTB.s = b.save(); CTB.n = n - 1; CTB.t0 = RAW[n - 2].time;
+  }
+  b.feed(RAW[n - 1]);
+  DISP = b.out;
+  dispApply(old, DISP, from, from);
+}
+/* the chart, Volume and the indicators from bar `from` on. old: the bars that were on the chart (old[0] is bar `oldAt`);
+   nd: the bars now (DISP). A bar that's still there at the same time is changed in place (the chart's "historical"
+   update: Renko / range bars put a candle's volume on the first bar it made, so a tick changes an older bar); bars that
+   went (a range bar the live candle made, then didn't) are taken off; new ones are added. Each of those costs the chart
+   time in proportion to all its bars, so when there are many at once it's drawn whole. */
+function dispApply(old, nd, from, oldAt = 0){
+  const o = i => old[i - oldAt], oldLen = old.length + oldAt;
+  const same = (x, y) => x.time === y.time && x.open === y.open && x.high === y.high && x.low === y.low && x.close === y.close && (x.vol || 0) === (y.vol || 0);
+  let k = from;                                              // the first bar that differs
+  while(k < nd.length && k < oldLen && same(o(k), nd[k])) k++;
   DISP = nd;
-  for(let i = Math.max(0, k); i < DISP.length; i++){
-    const b = DISP[i];
-    volData[b.time] = b.vol || 0;
-    series.update(serOne(i));
-    if(volSeries) volSeries.update(volPoint(b));
-    if(INDS.length) indTick(b);
+  if(k >= nd.length && k >= oldLen) return;
+  let r = k;                                                 // bars k..r-1: still there (same time), changed
+  while(r < oldLen && r < nd.length && o(r).time === nd[r].time) r++;
+  const gone = oldLen - r;                                   // bars from r on that went
+  if((r - k) + gone + (nd.length - r) > 40){ dispSet(); indAfter(0, gone, true); return; }
+  const lastEx = gone ? r - 1 : oldLen - 1;                  // the chart's last bar once those are off
+  DISP_BATCH = {p: undefined};
+  try{
+    if(gone){ series.pop(gone); if(volSeries) volSeries.pop(gone); }
+    for(let i = k; i < nd.length; i++){
+      const b = nd[i], hist = i < r && i < lastEx;
+      volData[b.time] = b.vol || 0;
+      series.update(serOne(i), hist);
+      if(volSeries) volSeries.update(volPoint(b), hist);
+    }
+    if(INDS.length) indAfter(k, gone, false, r, lastEx);
+  }catch(e){ DISP_BATCH = null; dispSet(); indData(); return; }
+  const p = DISP_BATCH.p; DISP_BATCH = null;
+  if(p !== undefined){ legendHover = !!(p && p.time != null && p.point); legendFill(legendHover ? p : null); }
+}
+/* the indicators after dispApply: bars from k on changed (r, lastEx as there), `gone` bars went; whole = the chart was
+   drawn whole. Volume follows bar for bar (or whole); Pine scripts run again in full only when bars went (bars that are
+   still there, changed, are the live part their next run takes in). */
+function indAfter(k, gone, whole, r, lastEx){
+  for(const x of INDS){
+    if(x.cfg.type === "pftools"){ pfToolsCalc(x); continue; }
+    if(x.cfg.type === "pine"){ if(!x.cfg.hidden){ if(gone) pineRun(x); else pineTick(x); } continue; }
+    if(x.cfg.type === "volume"){
+      if(whole){ volSet(x); continue; }
+      const n = Math.max(1, +x.cfg.maLen || 20);
+      try{
+        if(gone){ x.hist.pop(gone); if(x.ma){ const m = r + gone - Math.max(r, n - 1); if(m > 0) x.ma.pop(m); } }
+        for(let i = k; i < DISP.length; i++) volAt(x, i, i < r && i < lastEx);
+      }catch(e){ volSet(x); }
+    }
   }
 }
 /* volume under the candles, in the candle pane (Chart settings tick box) */
@@ -1640,25 +1731,34 @@ function indData(skipPine){
   for(const r of INDS){
     if(r.cfg.type === "pine"){ if(!skipPine) pineRun(r); continue; }
     if(r.cfg.type === "pftools"){ pfToolsCalc(r); continue; }
-    if(r.cfg.type === "volume"){
-      const v = bars.map(b => ({time:b.time, value:volData[b.time] || 0, color:volColorR(r, b)}));
-      r.hist.setData(v);
-      if(r.ma){ const n = Math.max(1, +r.cfg.maLen || 20), out = []; let sum = 0;
-        for(let i = 0; i < v.length; i++){ sum += v[i].value; if(i >= n) sum -= v[i - n].value; if(i >= n - 1) out.push({time:v[i].time, value:sum / n}); }
-        r.ma.setData(out); }
-    }
+    if(r.cfg.type === "volume") volSet(r);
   }
+}
+function volSet(r){
+  const v = DISP.map(b => ({time:b.time, value:volData[b.time] || 0, color:volColorR(r, b)}));
+  r.hist.setData(v);
+  if(r.ma){ const n = Math.max(1, +r.cfg.maLen || 20), out = []; let sum = 0;
+    for(let i = 0; i < v.length; i++){ sum += v[i].value; if(i >= n) sum -= v[i - n].value; if(i >= n - 1) out.push({time:v[i].time, value:sum / n}); }
+    r.ma.setData(out); }
 }
 function indTick(bar){
   for(const r of INDS){
     if(r.cfg.type === "pftools"){ pfToolsCalc(r); continue; }
     if(r.cfg.type === "pine"){ pineTick(r, bar); continue; }
-    if(r.cfg.type === "volume"){
-      r.hist.update({time:bar.time, value:volData[bar.time] || 0, color:volColorR(r, bar)});
-      if(r.ma){ const n = Math.max(1, +r.cfg.maLen || 20), d = r.hist.data(); if(d.length >= n){
-        let sum = 0; for(let i = d.length - n; i < d.length; i++) sum += d[i].value; r.ma.update({time:bar.time, value:sum / n}); } }
-    }
+    if(r.cfg.type === "volume") volTick(r, bar);
   }
+}
+/* Volume on one bar and its average, from DISP (v0.44.0: not the series' whole data each tick, which grew with the bars);
+   hist: a bar before the last one, changed in place */
+function volTick(r, bar){ let i = DISP.length - 1; while(i >= 0 && DISP[i].time !== bar.time) i--; if(i >= 0) volAt(r, i, false); }
+function volAt(r, i, hist){
+  const bar = DISP[i];
+  r.hist.update({time:bar.time, value:volData[bar.time] || 0, color:volColorR(r, bar)}, hist);
+  if(!r.ma) return;
+  const n = Math.max(1, +r.cfg.maLen || 20);
+  if(i < n - 1) return;
+  let sum = 0; for(let j = i - n + 1; j <= i; j++) sum += volData[DISP[j].time] || 0;
+  r.ma.update({time:bar.time, value:sum / n}, hist);
 }
 function indSaveHeights(){
   if(!chart || !INDS.length) return;
@@ -1879,13 +1979,23 @@ function renderCfg(){
 function ctLabel(){
   const b = $("#bCt"); if(!b) return;
   const t = ctType(), short = {candles:"Candles", hollow:"Hollow", bars:"Bars", line:"Line", area:"Area", ha:"Heikin-Ashi", renko:"Renko", range:"Range", lb:"Line break", pf:"P&F"}[t];
-  b.textContent = short + ((t === "renko" || t === "range") && CT_SIZE ? " " + fmt(CT_SIZE, cur && cur.tick) : t === "lb" ? " " + (ctCfg().lbLines || 3)
-    : t === "pf" && CT_SIZE ? ` ${fmt(CT_SIZE, cur && cur.tick)} × ${ctCfg().pfRev || 3}` : "");
+  // (v0.44.0: Renko / range / P&F sizes are on their own buttons next to it, szButtons)
+  b.textContent = short + (t === "lb" ? " " + (ctCfg().lbLines || 3) : t === "pf" ? ` ×${ctCfg().pfRev || 3}` : "");
+  b.title = "Chart type: candles, Heikin-Ashi, Renko, range bars..." + (SZ_TYPES[t] && CT_SIZE ? ` · now ${fmt(CT_SIZE, cur && cur.tick)} a ${SZ_TYPES[t].word}` : "");
   b.classList.toggle("on", t !== "candles");
+  szButtons();
 }
-function ctSave(changes, rebuild = true){
+/* v0.44.0: only a chart type picked (or Renko's wicks: another kind of series) rebuilds the chart; a size or another
+   setting only builds the bars again (showRaw), as a timeframe change does, so the chart's panes, drawings and lines
+   stay and nothing is done twice */
+function ctSave(changes, rebuild){
+  const was = ctCfg(), wasSize = CT_SIZE;
   prefSet("ctype", {...(prefGet("ctype", {}) || {}), ...changes});
+  const now = ctCfg();
+  if(rebuild == null) rebuild = "type" in changes || !CT_BUILT || CT_BUILT.t !== ctType() || (ctType() === "renko" && CT_BUILT.wicks !== !!now.renkoWicks);
+  const changed = JSON.stringify(now) !== JSON.stringify(was);
   if(rebuild){ buildChart(); if(RAW.length) showRaw(); else loadHistory(); }
+  else if(changed && series && RAW.length){ showRaw(); if(CT_SIZE !== wasSize) szNote(); }
   renderCt(); ctLabel();
 }
 function renderCt(){
@@ -1909,21 +2019,23 @@ function renderCt(){
     <div class="cr"><span>Built from</span><select id="ctPS"><option value="close" ${c.pfSrc !== "hl" ? "selected" : ""}>Closes</option><option value="hl" ${c.pfSrc === "hl" ? "selected" : ""}>Highs and lows</option></select></div>
     <div class="cr"><span>Indicators read</span><select id="ctPI"><option value="mid" ${c.pfInd !== "last" ? "selected" : ""}>Column middle</option><option value="last" ${c.pfInd === "last" ? "selected" : ""}>Last box</option></select></div>`;
   if(t === "lb") h += `<div class="sec">Line break</div><div class="cr"><span>Lines to break</span><input id="ctLN" class="mono" inputmode="numeric" value="${c.lbLines}"></div>`;
-  if(t === "renko" || t === "range" || t === "pf") h += `<p class="help" style="margin:6px 0 0">Now ${fmt(CT_SIZE, tick)} points ${t === "pf" ? "a box" : ""} on this chart${({renko: c.renkoMode, range: c.rangeMode, pf: c.pfMode})[t] === "fixed" ? "" : " (ATR of the candles loaded, fixed until you reload)"}. Built from the timeframe's candles: pick 1m for the finest ${{renko: "bricks", range: "bars", pf: "columns"}[t]}. The candle timer is off: these bars don't follow the clock.</p>`;
+  if(t === "renko" || t === "range" || t === "pf") h += `<p class="help" style="margin:6px 0 0">Now ${fmt(CT_SIZE, tick)} points ${t === "pf" ? "a box" : ""} on this chart${szNow() !== "atr" ? "" : " (ATR of the candles loaded, fixed until you reload)"}. Quicker: the size buttons next to the chart type on the chart bar, and their ▾ for presets and your own. Built from the timeframe's candles: pick 1m for the finest ${{renko: "bricks", range: "bars", pf: "columns"}[t]}. The candle timer is off: these bars don't follow the clock.${CT_START > 0 ? ` <span style="color:var(--warn)">This size makes more than ${CT.MAX_BARS.toLocaleString("en-IN")} bars from the candles loaded: the chart shows the latest ${CT.MAX_BARS.toLocaleString("en-IN")}.</span>` : ""}</p>`;
   h += `<p class="help" style="margin:8px 0 0">Volume, indicators and your Pine scripts run on the bars the chart shows${t === "ha" ? " (Heikin-Ashi values)" : t === "renko" ? " (one value per brick)" : t === "pf" ? ` (one value per column; <code>close</code> = the column's ${c.pfInd === "last" ? "last box" : "middle"})` : ""}, as on TradingView. Bid, ask, last and your trade lines are always real prices.</p>`;
   $("#ctBody").innerHTML = h;
   $("#ctBody").querySelectorAll("[data-ct]").forEach(b => b.onclick = () => ctSave({type: b.dataset.ct}));
   const on = (id, fn) => { const el = $(id); if(el) el.onchange = () => fn(el); };
   const pos = v => { const n = parseFloat(String(v).replace(/,/g, "")); return n > 0 ? n : null; };
-  on("#ctRM", el => ctSave({renkoMode: el.value}));
-  on("#ctGM", el => ctSave({rangeMode: el.value}));
+  // Fixed with no size for this contract yet: the size on the chart now becomes it (v0.44.0: it was 1 tick)
+  const keep = (map, key) => el => el.value === "fixed" && !((c[map] || {})[key] > 0) && CT_SIZE ? {[map]: {...(c[map] || {}), [key]: CT_SIZE}} : {};
+  on("#ctRM", el => ctSave({renkoMode: el.value, ...keep("renkoBox", k)(el)}));
+  on("#ctGM", el => ctSave({rangeMode: el.value, ...keep("rangeSize", k)(el)}));
   on("#ctRA", el => { const n = pos(el.value); if(n) ctSave({renkoAtr: Math.round(n)}); });
   on("#ctGA", el => { const n = pos(el.value); if(n) ctSave({rangeAtr: Math.round(n)}); });
   on("#ctRB", el => { const n = pos(el.value); if(n) ctSave({renkoBox: {...(c.renkoBox || {}), [k]: n}}); });
   on("#ctGB", el => { const n = pos(el.value); if(n) ctSave({rangeSize: {...(c.rangeSize || {}), [k]: n}}); });
   on("#ctRS", el => ctSave({renkoSrc: el.value}));
   on("#ctRW", el => ctSave({renkoWicks: el.checked}));
-  on("#ctPM", el => ctSave({pfMode: el.value}));
+  on("#ctPM", el => ctSave({pfMode: el.value, ...(el.value === "fixed" && pfFixed(c, k) == null && CT_SIZE ? {pfBox: {...(c.pfBox || {}), [k + "@" + tf]: CT_SIZE}} : {})}));
   on("#ctPA", el => { const n = pos(el.value); if(n) ctSave({pfAtr: Math.round(n)}); });
   on("#ctPB", el => { const n = pos(el.value); if(n) ctSave({pfBox: {...(c.pfBox || {}), [k + "@" + tf]: n}}); });   // (for this timeframe)
   on("#ctPR", el => { const n = pos(el.value); if(n) ctSave({pfRev: Math.max(1, Math.min(10, Math.round(n)))}); });
@@ -1931,7 +2043,172 @@ function renderCt(){
   on("#ctPI", el => ctSave({pfInd: el.value}));
   on("#ctLN", el => { const n = pos(el.value); if(n) ctSave({lbLines: Math.max(1, Math.min(10, Math.round(n)))}); });
 }
-$("#bCt").onclick = e => { e.stopPropagation(); renderCt(); $("#ctPick").classList.toggle("hide"); $("#cfgPick").classList.add("hide"); $("#tfPick").classList.add("hide"); $("#indPick").classList.add("hide"); };
+/* v0.44.0 (owner, 13 Nov: "like how we have timeframes on the chart, we need preset and custom ranges for range bars
+   and renko"): Renko box / range / P&F box sizes as buttons next to the chart type, ▾ for presets and your own. Sizes
+   are in points, so they're per contract (its underlying, as the menu's Fixed points): ★ pins, saved in the ctype prefs
+   (szFav["range|<contract>"]); a contract with none pinned shows ATR + the presets nearest ½, 1 and 2 ATR (kept from the
+   first time one of its sizes is used, so they don't move as the ATR does). Presets: the
+   1-2-2.5-5 steps from ¼ to 16 x the ATR of the candles loaded, in whole ticks. */
+const SZ_TYPES = {renko: {mode: "renkoMode", map: "renkoBox", atr: "renkoAtr", word: "box", name: "Renko box"},
+  range: {mode: "rangeMode", map: "rangeSize", atr: "rangeAtr", word: "range", name: "Range"},
+  pf: {mode: "pfMode", map: "pfBox", atr: "pfAtr", word: "box", name: "P&F box"}};
+function szSpec(){ const t = ctType(); return SZ_TYPES[t] ? {t, ...SZ_TYPES[t]} : null; }
+function szTick(){ return (cur && cur.tick) || 0.05; }
+function szNow(){                              // the size in use: "atr" or points
+  const sp = szSpec(); if(!sp) return null;
+  const c = ctCfg(), k = ctKey();
+  if(c[sp.mode] !== "fixed") return "atr";
+  const v = sp.t === "pf" ? pfFixed(c, k) : (c[sp.map] || {})[k];
+  return +v > 0 ? CT.roundTick(+v, szTick()) : "atr";
+}
+function szEq(a, b){ return a === b || (typeof a === "number" && typeof b === "number" && Math.abs(a - b) < 1e-9); }
+function szLabel(v){ return v === "atr" ? "ATR" : String(+(+v).toFixed(8)); }
+function szAtr(){ const sp = szSpec(); return sp && RAW.length ? CT.atr(RAW, ctCfg()[sp.atr] || 14) : 0; }
+function szPresets(){
+  const a = szAtr(), tick = szTick(), out = [];
+  if(!(a > 0)) return out;
+  const lo = a / 4, hi = a * 16;
+  for(let e = Math.floor(Math.log10(lo)) - 1; e <= Math.ceil(Math.log10(hi)); e++) for(const m of [1, 2, 2.5, 5]){
+    const v = +(m * Math.pow(10, e)).toPrecision(8);
+    if(v < lo || v > hi || v < tick - 1e-12 || Math.abs(CT.roundTick(v, tick) - v) > 1e-9) continue;   // whole ticks only
+    out.push(v);
+  }
+  if(!out.length) out.push(CT.roundTick(Math.max(a, tick), tick));
+  return out;
+}
+function szFavKey(){ const sp = szSpec(); return sp ? sp.t + "|" + ctKey() : ""; }
+function szFavs(){                             // the pinned sizes ("atr" first), or the suggested ones
+  const saved = (ctCfg().szFav || {})[szFavKey()];
+  if(Array.isArray(saved)) return szSort(saved);
+  const P = szPresets(), a = szAtr(), near = x => P.reduce((b, v) => b == null || Math.abs(Math.log(v / x)) < Math.abs(Math.log(b / x)) ? v : b, null);
+  const out = ["atr"]; if(a > 0) for(const f of [0.5, 1, 2]){ const v = near(a * f); if(v != null && !out.some(x => szEq(x, v))) out.push(v); }
+  return out;
+}
+function szSort(list){ return [...list].sort((a, b) => a === "atr" ? -1 : b === "atr" ? 1 : a - b); }
+function szPin(v){
+  const key = szFavKey(); if(!key) return;
+  let f = szFavs(); f = f.some(x => szEq(x, v)) ? f.filter(x => !szEq(x, v)) : szSort([...f, v]);
+  const c = prefGet("ctype", {}) || {};
+  prefSet("ctype", {...c, szFav: {...(c.szFav || {}), [key]: f}});
+  szButtons(); szRender();
+}
+function szUse(v, more){
+  const sp = szSpec(); if(!sp) return;
+  // the suggested buttons follow the ATR until a size is used: then they stay as they are (a button doesn't move away)
+  const fk = szFavKey(), c0 = prefGet("ctype", {}) || {};
+  if(!Array.isArray((c0.szFav || {})[fk])) prefSet("ctype", {...c0, szFav: {...(c0.szFav || {}), [fk]: szFavs()}});
+  if(v === "atr") return ctSave({[sp.mode]: "atr", ...(more || {})});
+  const c = ctCfg(), key = sp.t === "pf" ? ctKey() + "@" + tf : ctKey();
+  ctSave({[sp.mode]: "fixed", [sp.map]: {...(c[sp.map] || {}), [key]: v}, ...(more || {})});
+}
+function szButtons(){
+  const box = $("#ctSz"), more = $("#bSz"); if(!box) return;
+  const sp = szSpec();
+  box.classList.toggle("hide", !sp); more.classList.toggle("hide", !sp);
+  if(!sp){ if(box.innerHTML) box.innerHTML = ""; $("#szPick").classList.add("hide"); return; }
+  const now = szNow(), favs = szFavs(), list = favs.some(v => szEq(v, now)) ? favs : szSort([...favs, now]);
+  const tick = szTick(), c = ctCfg();
+  const html = list.map(v => `<button data-sz="${v}" class="${szEq(v, now) ? "on" : ""}" title="${v === "atr"
+    ? `ATR ${c[sp.atr] || 14} of the candles loaded${szEq(v, now) && CT_SIZE ? `: ${esc(fmt(CT_SIZE, tick))} now` : ""}` : `${esc(fmt(v, tick))} points a ${sp.word}`} · right-click or long-press to pin or unpin">${
+    v === "atr" && szEq(v, now) && CT_SIZE ? "ATR " + szLabel(CT_SIZE) : szLabel(v)}</button>`).join("");
+  if(box.dataset.h === html) return barFit();
+  box.dataset.h = html; box.innerHTML = html;
+  box.querySelectorAll("[data-sz]").forEach(b => { const v = b.dataset.sz === "atr" ? "atr" : +b.dataset.sz; szWire(b, v, () => szUse(v)); });
+  barFit();
+}
+/* v0.44.0: buttons that don't fit on the chart bar drop out whole (none half shown), and when the one in use has dropped
+   out (or isn't pinned), its ▾ says which it is: "5m ▾", "ATR 7 ▾" - as TradingView's toolbar */
+function barFit(){
+  cancelAnimationFrame(barFit.f);
+  barFit.f = requestAnimationFrame(() => {
+    for(const [box, more, label] of [[$("#tf"), $("#bTf"), () => tfLabel(tf)], [$("#ctSz"), $("#bSz"), () => { const v = szNow(); return v === "atr" ? "ATR" + (CT_SIZE ? " " + szLabel(CT_SIZE) : "") : szLabel(v); }]]){
+      if(!box || !more) continue;
+      for(let pass = 0; pass < 3; pass++){           // (the ▾'s own label takes room from the buttons: check again)
+        const R = box.getBoundingClientRect();
+        let onShown = false;
+        for(const b of box.querySelectorAll("button")){
+          const r = b.getBoundingClientRect(), fits = r.top - R.top < 4 && r.right <= R.right + 1 && r.width > 0;
+          b.classList.toggle("cut", !fits);
+          if(fits && b.classList.contains("on")) onShown = true;
+        }
+        const want = box.classList.contains("hide") || onShown ? "▾" : `<b>${esc(label())}</b>▾`;
+        if(more.innerHTML === want) break;
+        more.innerHTML = want;
+      }
+    }
+  });
+}
+if(typeof ResizeObserver !== "undefined") new ResizeObserver(() => barFit()).observe(document.querySelector(".charthead"));
+function szWire(b, v, use){                    // click: use it · right-click / long-press: pin or unpin (as the timeframes)
+  b.onclick = use;
+  b.oncontextmenu = e => { e.preventDefault(); szPin(v); };
+  let lp; b.ontouchstart = () => { lp = setTimeout(() => { lp = "done"; szPin(v); }, 550); };
+  b.ontouchend = e => { if(lp === "done"){ e.preventDefault(); } clearTimeout(lp); lp = null; };
+}
+function szRender(){
+  const sp = szSpec(), g = $("#szGrid"); if(!sp || !g) return;
+  const now = szNow(), favs = szFavs(), tick = szTick();
+  const all = szSort([...new Set(["atr", ...szPresets(), ...favs.filter(v => v !== "atr"), ...(now === "atr" ? [] : [now])].map(String))].map(v => v === "atr" ? v : +v))
+    .filter((v, i, a) => a.findIndex(x => szEq(x, v)) === i);
+  $("#szHead").textContent = `${sp.name} · ★ = on the bar (right-click or long-press to pin)`;
+  g.innerHTML = "";
+  for(const v of all){
+    const b = document.createElement("button");
+    b.textContent = szLabel(v); b.dataset.sz = v;
+    b.className = (szEq(v, now) ? "on " : "") + (favs.some(x => szEq(x, v)) ? "fav" : "");
+    b.title = v === "atr" ? `ATR ${ctCfg()[sp.atr] || 14}: ${fmt(szAtr() || 0, tick)} on these candles` : `${fmt(v, tick)} points`;
+    szWire(b, v, () => { $("#szPick").classList.add("hide"); szUse(v); });
+    g.append(b);
+  }
+  szNote();
+}
+/* the note under the picker: the size now, and when the bars keep to the latest CT.MAX_BARS */
+function szNote(){
+  const el = $("#szNote"), sp = szSpec(); if(!el || !sp) return;
+  const tick = szTick();
+  let h = CT_SIZE ? `Now ${fmt(CT_SIZE, tick)} points a ${sp.word}, built from the ${esc(tfLabel(tf))} candles.` : "";
+  if(CT_START > 0 && RAW[CT_START]){
+    const d = new Date((RAW[CT_START].time) * 1000).toLocaleString("en-IN", {timeZone: "UTC", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false});
+    h += ` <span style="color:var(--warn)">This size makes too many bars to draw them all: the chart starts at ${esc(d)} (the latest ${CT.MAX_BARS.toLocaleString("en-IN")}). A bigger size, or a longer timeframe, shows more history.</span>`;
+  }
+  el.innerHTML = h;
+}
+/* a size typed in: points ("7.5"), ticks ("20t") or ATR ("ATR", "ATR 20") */
+function szParse(txt){
+  const s = String(txt || "").trim().toLowerCase().replace(/,/g, ""), tick = szTick();
+  let m;
+  if((m = /^atr\s*(\d+)?$/.exec(s))) return {atr: true, n: m[1] ? Math.max(1, Math.min(500, +m[1])) : null};
+  if((m = /^(\d*\.?\d+)\s*(t|ticks?)$/.exec(s))) return +m[1] > 0 ? {v: CT.roundTick(+m[1] * tick, tick)} : null;
+  if((m = /^(\d*\.?\d+)\s*(p|pts?|points?)?$/.exec(s))) return +m[1] > 0 ? {v: Math.max(tick, CT.roundTick(+m[1], tick)), typed: +m[1]} : null;
+  return null;
+}
+function szCustom(){
+  const sp = szSpec(), inp = $("#szCustom"), p = szParse(inp.value); if(!sp) return;
+  if(!p){ $("#szErr").textContent = "A number of points (7.5), ticks (20t) or ATR (ATR 14)"; return; }
+  $("#szErr").textContent = "";
+  const v = p.atr ? "atr" : p.v;
+  if(!szFavs().some(x => szEq(x, v))) szPin(v);
+  inp.value = ""; $("#szPick").classList.add("hide");
+  szUse(v, p.atr && p.n ? {[sp.atr]: p.n} : null);
+  if(p.typed && !szEq(p.typed, p.v)) toast(`${p.typed} isn't a whole number of ticks (${fmt(szTick(), szTick())}): using ${fmt(p.v, szTick())}`);
+}
+/* v0.44.0 (owner, 13 Nov: the timeframe menu opened at the right end, not under ▾): a menu opens under its button,
+   kept inside the chart's area. The phone: a sheet above the tabs (mobile.css), so nothing here. */
+function popUnder(pick, btn){
+  if(!pick || !btn || pick.classList.contains("hide") || document.body.classList.contains("mob")) return;
+  const wrap = pick.offsetParent; if(!wrap) return;
+  const W = wrap.getBoundingClientRect(), B = btn.getBoundingClientRect(), w = pick.offsetWidth;
+  pick.style.right = "auto";
+  pick.style.left = Math.round(Math.max(6, Math.min(B.left - W.left, W.width - w - 6))) + "px";
+  pick.style.top = Math.round(B.bottom - W.top + 4) + "px";
+}
+$("#bSz").onclick = e => { e.stopPropagation(); const p = $("#szPick"); for(const id of ["#tfPick", "#ctPick", "#cfgPick", "#indPick"]) $(id).classList.add("hide");
+  p.classList.toggle("hide"); $("#szErr").textContent = ""; if(!p.classList.contains("hide")){ szRender(); popUnder(p, $("#bSz")); } };
+$("#szAdd").onclick = szCustom;
+$("#szCustom").onkeydown = e => { if(e.key === "Enter") szCustom(); if(e.key === "Escape") $("#szPick").classList.add("hide"); };
+$("#szPick").addEventListener("click", e => e.stopPropagation());
+document.addEventListener("click", e => { if(!e.target.closest("#szPick,#bSz")) $("#szPick").classList.add("hide"); });
+$("#bCt").onclick = e => { e.stopPropagation(); renderCt(); $("#ctPick").classList.toggle("hide"); $("#cfgPick").classList.add("hide"); $("#tfPick").classList.add("hide"); $("#indPick").classList.add("hide"); $("#szPick").classList.add("hide"); popUnder($("#ctPick"), $("#bCt")); };
 $("#ctClose").onclick = () => $("#ctPick").classList.add("hide");
 document.addEventListener("click", e => { if(!e.target.closest("#ctPick,#bCt")) $("#ctPick").classList.add("hide"); });
 $("#bCfg").onclick = e => { e.stopPropagation(); renderCfg(); $("#cfgPick").classList.toggle("hide"); $("#tfPick").classList.add("hide"); $("#indPick").classList.add("hide"); };
@@ -1947,7 +2224,7 @@ function tfButtons(){
     b.onclick = () => setTf(k);
     $("#tf").append(b);
   }
-  renderTfPick();
+  renderTfPick(); barFit();
 }
 function renderTfPick(){
   const g = $("#tfGrid"); g.innerHTML = "";
@@ -1965,7 +2242,8 @@ function renderTfPick(){
   }
 }
 function tfOrder(k){ const t = parseTf(k); return !t ? 1e9 : t.min || ({D: 1440, W: 10080, M: 43200}[t.u] * t.n); }
-$("#bTf").onclick = e => { e.stopPropagation(); $("#tfPick").classList.toggle("hide"); $("#tfErr").textContent = ""; };
+$("#bTf").onclick = e => { e.stopPropagation(); $("#tfPick").classList.toggle("hide"); $("#tfErr").textContent = "";
+  for(const id of ["#ctPick", "#szPick", "#cfgPick", "#indPick"]) $(id).classList.add("hide"); popUnder($("#tfPick"), $("#bTf")); };
 document.addEventListener("click", e => { if(!e.target.closest("#tfPick,#bTf")) $("#tfPick").classList.add("hide"); });
 function useCustomTf(){
   const t = parseTf($("#tfCustom").value);
@@ -1977,7 +2255,7 @@ $("#tfAdd").onclick = useCustomTf;
 $("#tfCustom").onkeydown = e => { if(e.key === "Enter") useCustomTf(); };
 async function openSymbol(row){
   sym[row.s] = row;
-  cur = {s:row.s, d:row.d, tick:row.tick, lot:row.lot, mult:row.mult, sess:row.sess};
+  cur = {s:row.s, d:row.d, tick:row.tick, lot:row.lot, mult:row.mult, sess:row.sess, u:row.u};
   prefSet("cur", cur);
   $("#cSym").textContent = symLabel(row.s);
   $("#cLtp").textContent = last[row.s] ? fmt(last[row.s].ltp, row.tick) : "";
@@ -2221,6 +2499,8 @@ function histPill(text, ms){
 }
 async function histMore(){
   if(!cur || !curPlan || !HROWS.length || !chartFeedOk()) return;
+  // Renko / range bars that already keep to the latest CT.MAX_BARS: older candles wouldn't show (v0.44.0)
+  if(CT_START > 0){ histPill(`The chart keeps to the latest ${CT.MAX_BARS.toLocaleString("en-IN")} bars at this size: a bigger size shows more history`, 4000); return; }
   const plan = curPlan, key = cur.s + "|" + plan.res, h = HX[key] || (HX[key] = {days: histDays(plan), miss: 0});
   if(h.busy || h.end) return;
   h.busy = true;
@@ -2352,6 +2632,16 @@ function histWatch(){
     if(ev === "pointermove" && !e.buttons) return; user(); }, {passive: true});
 }
 let curPlan = null, histRetry = 0, volData = {};   // volData: volume per bar on the chart (DISP)
+/* v0.44.0: the bars on the chart follow the ticks, but a redraw that takes long (thousands of small Renko / range bars:
+   the chart library's own work grows with its bars) sets the pace - at most one every 3 x its time, so fast ticks (MT5)
+   can't queue up and freeze the page. The candles themselves (RAW) take every tick at once. */
+const DL = {at: 0, ms: 0, t: null};
+function dispLiveSoon(){
+  const gap = Math.min(1000, 3 * DL.ms), wait = gap - (Date.now() - DL.at);
+  if(wait <= 0 || DL.ms < 8){ clearTimeout(DL.t); DL.t = null; dispLiveNow(); return; }
+  if(!DL.t) DL.t = setTimeout(() => { DL.t = null; dispLiveNow(); if(!legendHover) legendFill(null); }, wait);
+}
+function dispLiveNow(){ if(!series || !RAW.length) return; const a = performance.now(); dispLive(); DL.ms = performance.now() - a; DL.at = Date.now(); }
 function liveBar(t){
   if(!series || !t.ltp || !curPlan) return;
   const tt = Number(t.t) || Math.floor(Date.now()/1000), ts = tt + IST;
@@ -2369,7 +2659,7 @@ function liveBar(t){
   if(t.vol != null){ if(volCum != null && t.vol >= volCum) dv = t.vol - volCum; volCum = t.vol; }
   if(!lastBar || b > lastBar.time){ lastBar = {time:b, open:t.ltp, high:t.ltp, low:t.ltp, close:t.ltp, vol:dv}; RAW.push(lastBar); }
   else { lastBar.high = Math.max(lastBar.high, t.ltp); lastBar.low = Math.min(lastBar.low, t.ltp); lastBar.close = t.ltp; lastBar.vol = (lastBar.vol || 0) + dv; }
-  dispLive();
+  dispLiveSoon();
   if(!legendHover) legendFill(null);
   $("#chartMsg").classList.add("hide");
 }
@@ -2819,7 +3109,12 @@ async function boot(){
   await paperInit();
   pagesStart();                                // #trades, #history ... in the address opens that page
   if(cur){ $("#cSym").textContent = symLabel(cur.s); loadHistory();
-    api("/api/symbol?s=" + encodeURIComponent(cur.s)).then(j => { if(j.ok){ sym[j.row.s] = j.row; paperOnSymbol(j.row); } }); }
+    api("/api/symbol?s=" + encodeURIComponent(cur.s)).then(j => { if(j.ok){
+      const k0 = ctKey(); sym[j.row.s] = j.row; paperOnSymbol(j.row);
+      if(cur && cur.s === j.row.s && j.row.u && cur.u !== j.row.u){ cur = {...cur, u: j.row.u}; prefSet("cur", cur); }
+      // the chart drew before the row came: a size saved for the underlying applies now (v0.44.0)
+      if(ctKey() !== k0 && SZ_TYPES[ctType()] && RAW.length){ CT_SIZE = null; showRaw(); }
+    } }); }
   connectWS();
 }
 clock(); setInterval(clock, 1000);

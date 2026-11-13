@@ -652,9 +652,12 @@ The open total in R is the sum of each trade's R; a trade without a stop has no 
 
 ## Timeframes and full screen
 
-- The bar above the chart shows your pinned timeframes. **▾** lists them all: 1m–45m, 1h–4h, 1D, 1W, 1M.
+- The bar above the chart shows your pinned timeframes. **▾** lists them all: 1m–45m, 1h–4h, 1D, 1W, 1M. The list opens
+  right under ▾.
   - Type any other, such as `7m`, `90m`, `2h` or `3D`, and press Use.
   - Right-click one (or long-press on a phone) to pin or unpin it.
+  - When the bar has no room for the timeframe in use (a narrow window, the trade panel open), **▾** shows it, e.g.
+    **5m ▾**. A button that doesn't fit drops out whole, never half shown.
 - Timeframes Fyers doesn't serve directly are built from smaller candles, starting at the session open (09:00 for MCX).
 - **Go to a date: the calendar button** at the chart's bottom left (or **Alt+G**, as on TradingView). Pick a date (and a time, on intraday charts; Indian time) and press Go to or Enter: older candles load first if the chart doesn't reach that far back, and the chart centres on that candle (or the one just before, if the market was shut), marked by the crosshair. A date before Fyers' first candle for the contract goes to the oldest one and says so. **Latest** in the same box, or **»** (bottom right, shown whenever the latest candle is off screen), brings you back to now, keeping your zoom.
 - Daily, weekly and monthly charts show dates only on the time axis.
@@ -732,16 +735,42 @@ Separate from the trade manager: no orders, just a drawing. Click on a bar: the 
 
 ## Chart types
 
-The button after the timeframes (it shows the current type, e.g. **Candles**, **Renko 11**) picks how the chart draws the candles. Your choice is saved on the server, so every device opens the same way.
+The button after the timeframes (it shows the current type, e.g. **Candles**, **Renko**) picks how the chart draws the candles. Your choice is saved on the server, so every device opens the same way.
 
 | Type | What it shows |
 | --- | --- |
 | Candles, Hollow candles, Bars (OHLC), Line, Area | The real candles, drawn differently. Hollow: a candle that closed up is hollow, coloured by its close against the previous close. Line / area colour: Chart settings (⚙). |
 | Heikin-Ashi | Smoothed candles at the same times: close = (open + high + low + close) / 4, open = the middle of the previous Heikin-Ashi candle. |
 | Renko | Bricks of one size. A new brick when price moves a box past the last one; a reversal needs two boxes. Box: ATR (default 14, worked out from the candles loaded, then fixed until you reload) or fixed points, saved per underlying (one for CRUDEOIL, another for NIFTY). Built from the closes, or from each candle's high and low; wicks optional. |
-| Range bars | Each bar spans the same range (high − low); a new bar starts when price goes beyond it. Range: ATR or fixed points. |
+| Range bars | Each bar spans the same range (high − low); a new bar starts when price goes beyond it. Range: ATR or fixed points, saved per underlying. |
 | Line break | A new line when the close passes the highs (or lows) of the last 3 lines (settable). |
-| Point & Figure | Columns of X (rising) and O (falling), one mark per box. A new column needs a reversal of 3 boxes (settable) from the column's extreme and starts one box back from it. Box: ATR or fixed points, **per underlying and timeframe** (5 for GOLDPETAL on 2m doesn't follow you to 1D); built from the closes, or from highs and lows. The button shows box × reversal, e.g. **P&F 11 × 3**. Zoomed out, the X's and O's get flatter to fit; zoomed far out, X columns are solid bars and O columns hollow ones. |
+| Point & Figure | Columns of X (rising) and O (falling), one mark per box. A new column needs a reversal of 3 boxes (settable) from the column's extreme and starts one box back from it. Box: ATR or fixed points, **per underlying and timeframe** (5 for GOLDPETAL on 2m doesn't follow you to 1D); built from the closes, or from highs and lows. The button shows the reversal, e.g. **P&F ×3**; the box is on the size buttons next to it. Zoomed out, the X's and O's get flatter to fit; zoomed far out, X columns are solid bars and O columns hollow ones. |
+
+### Box and range sizes on the chart bar (v0.44.0)
+
+On Renko, range bars and Point & Figure, buttons next to the chart type pick the size, like the timeframe buttons:
+
+- **ATR** (the ATR of the candles loaded; the button shows what it makes, e.g. **ATR 7**) and your pinned sizes in
+  points. A click redraws the bars at that size. Sizes are saved per underlying (CRUDEOIL's don't follow you to NIFTY;
+  P&F's per underlying and timeframe, as before), and Renko, range bars and P&F each have their own.
+- **▾** (opens right under itself) lists presets for this chart: round sizes (1, 2, 2.5, 5, 10, 20...) from a quarter of
+  the ATR to 16 times it, in whole ticks, with your pins marked ★. Right-click one (long-press on a phone) to pin or
+  unpin it on the bar.
+- **Your own size:** type it in ▾'s box and press Enter or Use: points (`7.5`), ticks (`20t`), or `ATR` / `ATR 20` (the
+  ATR with that length). A size that isn't a whole number of ticks is rounded to one (`7.5` on a 1-point tick: 8), and a
+  message says so. A typed size is pinned.
+- Until you use one, a contract shows ATR plus the round sizes nearest half, one and two ATRs; from the first one you
+  use, the buttons stay put (they don't move as the ATR changes).
+- When the bar has no room, ▾ shows the size in use (e.g. **ATR 7 ▾** or **10 ▾**).
+- **Very small sizes:** Renko and range bars keep to the latest **20,000 bars**. A size far below the candles' moves (a
+  1-point range on gold's 1m candles) would make hundreds of thousands; the chart then starts at a later candle, and ▾
+  and the chart type menu say from when. Scrolling back doesn't load older candles at that size. A bigger size or a
+  longer timeframe shows more history.
+- **Fixed points** in the chart type menu starts from the size on the chart (before v0.44.0, picking Fixed with no
+  size typed yet used one tick, 0.01 on gold: over a million bars, and the page froze; a reload could do the same, as
+  the saved size was looked up before the contract's details had come).
+- A new size only rebuilds the bars, not the whole chart (as a timeframe change), and live prices only re-work the
+  live candle, so changing sizes and small sizes stay quick.
 
 - **Renko, range bars, line break and Point & Figure** are built from the timeframe's candles: pick **1m** for the finest bricks. They don't follow the clock, so the candle timer is off and the time axis shows when each brick formed.
 - **Point & Figure opens readable:** columns get wider (12 to 40 px) until the X's and O's are as big as they can be (up to 14 px) for the price range on screen, with little empty space on the right. Zoom as usual from there.
